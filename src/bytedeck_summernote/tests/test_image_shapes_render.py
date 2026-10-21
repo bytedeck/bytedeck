@@ -6,14 +6,19 @@ moved the focus to the menu's button, and Summernote forgets the image it had se
 editor loses the focus, so the menu keeps the image it opened for: before that, a shape chosen
 after typing in the editor did nothing.
 
+An image added to the editor starts out Responsive (#2906), whether it was inserted by its URL or
+uploaded.
+
 The announcement form is rendered by the app itself, through the test client, and opened in
 headless Chromium with the app's own static files, scripts included, so the editor runs with the
-real SUMMERNOTE_CONFIG and plugins. Every other request is refused. The tests skip cleanly unless
+real SUMMERNOTE_CONFIG and plugins. An image upload is answered as the upload view answers one, with
+the uploaded file's URL, and every other request is refused. The tests skip cleanly unless
 Playwright and a Chromium build are both available, like the other render tests (e.g.
 quest_manager/tests/test_flag_submission_render.py).
 """
 
 import glob
+import json
 import os
 from unittest import skipUnless
 from urllib.parse import urlparse
@@ -38,6 +43,9 @@ PAGE_ORIGIN = "http://deck.test"
 
 #: The menu's items, top to bottom.
 LABELS = ["Responsive", "Rounded", "Circle", "Thumbnail", "None"]
+
+#: The URL the upload view hands back for an uploaded image.
+UPLOADED_URL = "/static/img/icon.png"
 
 
 def _find_chromium():
@@ -94,6 +102,8 @@ class ImageShapesRenderTest(ByteDeckTenantTestCase):
         path = urlparse(request.url).path
         if path == "/page/":
             route.fulfill(status=200, content_type="text/html; charset=utf-8", body=self.html)
+        elif path == reverse('bytedeck_summernote-upload_attachment') and request.method == 'POST':
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"files": [{"url": UPLOADED_URL}]}))
         elif path.startswith(settings.STATIC_URL) and finders.find(path[len(settings.STATIC_URL):]):
             route.fulfill(path=finders.find(path[len(settings.STATIC_URL):]))
         else:
@@ -183,4 +193,44 @@ class ImageShapesRenderTest(ByteDeckTenantTestCase):
 
         self.page.locator('.note-editable p').first.click()
         self._choose("Responsive")
+        self.assertEqual(self._image_classes(), ["img-responsive"])
+
+    def _open_insert_image_dialog(self):
+        """Open the toolbar's Insert Image dialog over the editor, and wait for it to be shown.
+
+        The dialog clears its fields once it has finished opening, and puts the focus in its URL
+        field then, so that is what is waited for.
+        """
+        self.page.locator('.note-editable').click()
+        self.page.locator('.note-toolbar button[aria-label="Picture"]').click()
+        self.page.wait_for_function("() => document.activeElement.classList.contains('note-image-url')")
+
+    def _inserted_image(self):
+        """Wait for the image the editor inserts, and return it.
+
+        Returns:
+            playwright.sync_api.Locator: the editor's image.
+        """
+        image = self.page.locator('.note-editable img')
+        image.wait_for()
+        return image
+
+    def test_image_shapes__an_image_inserted_by_its_url_starts_responsive(self):
+        """An image inserted through the Insert Image dialog's URL is Responsive, and keeps the
+        width Summernote gives a new image."""
+        self._open_insert_image_dialog()
+        self.page.locator('.note-image-url').fill('/static/img/banner.png')
+        self.page.locator('.note-image-btn').click()
+
+        image = self._inserted_image()
+        self.assertEqual(self._image_classes(), ["img-responsive"])
+        self.assertRegex(image.evaluate("img => img.style.width"), r"^\d+px$")
+
+    def test_image_shapes__an_uploaded_image_starts_responsive(self):
+        """An image uploaded through the Insert Image dialog is Responsive too."""
+        self._open_insert_image_dialog()
+        self.page.locator('.note-image-input').set_input_files(finders.find('img/banner.png'))
+
+        image = self._inserted_image()
+        self.assertEqual(image.get_attribute('src'), UPLOADED_URL)
         self.assertEqual(self._image_classes(), ["img-responsive"])

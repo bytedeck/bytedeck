@@ -123,7 +123,7 @@ class TestByteDeckSummernoteMenus(SimpleTestCase):
 
     def test_summernote_settings__carry_the_pop_up_menus(self):
         """Every editor widget hands Summernote the configured menus, with the buttons our plugins add: Image Shapes
-        over an image, and Table Headers and Table Styles over a table (#268)."""
+        and Change Image (#2907) over an image, and Table Headers and Table Styles over a table (#268)."""
         widget_classes = (
             ByteDeckSummernoteSafeWidget,
             ByteDeckSummernoteSafeInplaceWidget,
@@ -133,7 +133,7 @@ class TestByteDeckSummernoteMenus(SimpleTestCase):
         for widget_class in widget_classes:
             with self.subTest(widget=widget_class.__name__):
                 popover = widget_class().summernote_settings()['popover']
-                self.assertIn(['custom', ['imageShapes']], popover['image'])
+                self.assertIn(['custom', ['imageShapes', 'imageSource']], popover['image'])
                 self.assertIn(['custom', ['tableHeaders', 'tableStyles']], popover['table'])
 
     def test_config__names_only_buttons_that_exist(self):
@@ -156,13 +156,13 @@ class TestByteDeckSummernoteImageSizeCheck(ByteDeckTenantTestCase):
     """The editor refuses an image too large to upload before sending it (#783)."""
 
     def test_widget_inplace__checks_an_images_size_before_uploading_it(self):
-        """The image dialog's file input carries the editor's own limit, for the page's size
-        check to hold a chosen image to, and an image dropped or pasted into the editor is
-        checked against the same limit before it is uploaded."""
+        """The image dialogs' file inputs (Insert Image's and Change Image's, #2907) carry the
+        editor's own limit, for the page's size check to hold a chosen image to, and an image
+        dropped or pasted into the editor is checked against the same limit before it is uploaded."""
         widget = ByteDeckSummernoteAdvancedInplaceWidget()
 
         html = widget.render("foobar", "lorem ipsum", attrs={"id": "id_foobar"})
 
         limit = get_config()["attachment_filesize_limit"]
-        self.assertIn(f".note-image-input').attr('data-max-size', {limit});", html)
+        self.assertIn(f".note-image-input, .note-image-source-file').attr('data-max-size', {limit});", html)
         self.assertIn(f"Array.prototype.slice.call(files), {limit}, 0);", html)

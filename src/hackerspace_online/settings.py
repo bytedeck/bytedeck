@@ -954,7 +954,7 @@ SUMMERNOTE_CONFIG = {
         # buttons carry Summernote 0.8.20's names, and "custom" holds the buttons our plugins add.
         'popover': {
             'image': [
-                ['custom', ['imageShapes']],
+                ['custom', ['imageShapes', 'imageSource']],
                 ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
                 ['float', ['floatLeft', 'floatRight', 'floatNone']],
                 ['remove', ['removeMedia']]
@@ -1022,6 +1022,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-source.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
@@ -1056,6 +1057,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-source.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
