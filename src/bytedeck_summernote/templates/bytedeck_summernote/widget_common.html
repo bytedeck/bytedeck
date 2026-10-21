@@ -51,8 +51,8 @@ Changes because: fix django-summernote/issues/465 issue, make it possible to use
 
 Changes because: bytedeck/issues/2907, the editor's image upload is a function of its own that
 resolves with the uploaded images' URLs, so onImageUpload inserts them and the Edit Image dialog
-(js/summernote-image-source.js, which gets it as the uploadImages option) puts one in place of
-the image it changes.
+(the image-source plugin, in static/bytedeck_summernote/plugins/image-source/, which gets it as the
+uploadImages option) puts one in place of the image it changes.
 {% endcomment %}
          /**
           * Upload image files as attachments, the way the editor uploads an image added to it.
@@ -131,8 +131,8 @@ Changes because: bytedeck/issues/2907, the Edit Image dialog uploads with the ed
 {% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
 
 Changes because: bytedeck/issues/783, the image dialogs' file inputs (Insert Image's, and Edit
-Image's from js/summernote-image-source.js, bytedeck/issues/2907) carry the editor's own limit on
-an image, so js/upload-size-check.js refuses one over it as soon as it is chosen.
+Image's from the image-source plugin, bytedeck/issues/2907) carry the editor's own limit on an
+image, so js/upload-size-check.js refuses one over it as soon as it is chosen.
 {% endcomment %}
                          $nEditor.find('.note-image-input, .note-image-source-file').attr('data-max-size', {{ config.attachment_filesize_limit }});
 {% comment %} End changes {% endcomment %}
@@ -195,8 +195,8 @@ Widgets that set no aria-label are untouched.
 {% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
 
 Changes because: bytedeck/issues/2902, the editing area's content is read from the editing area
-itself, not through summernote('code'). js/summernote-keep-caret.js keeps the focus in the editing
-area while the toolbar is pressed, so pressing the code view button blurs the editing area only
+itself, not through summernote('code'). The keep-caret plugin keeps the focus in the editing area
+while the toolbar is pressed, so pressing the code view button blurs the editing area only
 once the code view, opening, takes the focus: summernote then counts the code view as open, but
 has not built its CodeMirror yet. summernote('code') saves the code view's CodeMirror into its
 textarea first, and the one it holds at that moment is the one from the last time the code view
@@ -215,7 +215,7 @@ focus, so its own HTML is the content.
 {% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
 
 Changes because: bytedeck/issues/2907, the upload is uploadImages() above, which the Edit Image
-dialog (js/summernote-image-source.js) uses too.
+dialog (the image-source plugin) uses too.
 {% endcomment %}
                          uploadImages(files).done(function (urls) {
                              $.each(urls, function (index, url) {

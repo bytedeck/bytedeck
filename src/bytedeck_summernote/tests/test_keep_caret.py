@@ -32,7 +32,7 @@ try:
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-KEEP_CARET_JS = os.path.join(settings.STATIC_URL, 'js/summernote-keep-caret.js')
+KEEP_CARET_JS = os.path.join(settings.STATIC_URL, 'bytedeck_summernote/plugins/keep-caret/summernote-keep-caret.js')
 
 # Enough paragraphs that the editor has to scroll, so a command landing at the top is unmistakable.
 PARAGRAPH_COUNT = 20
@@ -60,7 +60,8 @@ def _asset(static_url):
     """Absolute path on disk of a static file, named the way SUMMERNOTE_CONFIG names one.
 
     Args:
-        static_url (str): a STATIC_URL-prefixed path, e.g. ``/static/js/summernote-keep-caret.js``.
+        static_url (str): a STATIC_URL-prefixed path, e.g.
+            ``/static/bytedeck_summernote/plugins/keep-caret/summernote-keep-caret.js``.
 
     Returns:
         str: the absolute path the static finders resolve it to.
