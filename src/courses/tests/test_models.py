@@ -1226,7 +1226,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         same number, and make the mark page's arithmetic, which shows the share right above it,
         fail to add up."""
         other = self._register(self.student, baker.make(Course))
-        self._approved(self.student, 120, course=self.course)
+        self._approved(self.student, 120, registration=self.course_student)
         self.student.profile.xp_invalidate_cache()
 
         # every point was put against the first course, so the other one averages none of it
@@ -1239,11 +1239,11 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         the share over rather than having it worked out again (issue #2459)."""
         self.assertEqual(self.course_student.xp_per_day_ave(xp=50), 5)
 
-    def _approved(self, student, xp, course=None, max_xp=-1):
-        """Give a student an approved, XP-granting submission, optionally assigned to a course."""
+    def _approved(self, student, xp, registration=None, max_xp=-1):
+        """Give a student an approved, XP-granting submission, optionally assigned to one of their registrations."""
         quest = baker.make(Quest, xp=xp, max_xp=max_xp)
         return baker.make(
-            QuestSubmission, user=student, quest=quest, course=course,
+            QuestSubmission, user=student, quest=quest, registration=registration,
             semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
         )
 
@@ -1321,11 +1321,29 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         art = baker.make(Course, title='Art')
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
-        self._approved(student, xp=40, course=maths)
+        self._approved(student, xp=40, registration=maths_registration)
         student.profile.xp_invalidate_cache()
 
         self.assertEqual(maths_registration.xp(), 40)
         self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__keeps_the_work_with_a_registration_whose_course_changes(self):
+        """Work counts toward the registration it was handed in against, so a teacher changing
+        that registration's course (moving a student from Digital Art 12 to Game Design 12, say)
+        takes the work with it, rather than leaving it on the old course and sharing it out
+        between all of the student's courses (issue #2875)."""
+        student = baker.make(User)
+        art_registration = self._register(student, baker.make(Course, title='Digital Art 12'))
+        maths_registration = self._register(student, baker.make(Course, title='Maths'))
+        self._approved(student, xp=40, registration=art_registration)
+        BadgeAssertion.objects.create_assertion(student, baker.make(Badge, xp=20), registration=art_registration)
+
+        art_registration.course = baker.make(Course, title='Game Design 12')
+        art_registration.save()
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(art_registration.xp(), 60)
+        self.assertEqual(maths_registration.xp(), 0)
 
     def test_xp__mixes_assigned_and_shared_work(self):
         """Assigned and unassigned work add up: the student's own choices land where they said,
@@ -1335,7 +1353,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         art = baker.make(Course, title='Art')
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
-        self._approved(student, xp=40, course=maths)
+        self._approved(student, xp=40, registration=maths_registration)
         self._approved(student, xp=10)  # unassigned, so shared
         student.profile.xp_invalidate_cache()
 
@@ -1365,9 +1383,9 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
         quest = baker.make(Quest, xp=30, max_xp=40)
-        for course in (maths, art):
+        for registration in (maths_registration, art_registration):
             baker.make(
-                QuestSubmission, user=student, quest=quest, course=course,
+                QuestSubmission, user=student, quest=quest, registration=registration,
                 semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
             )
         student.profile.xp_invalidate_cache()
@@ -1388,7 +1406,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
         BadgeAssertion.objects.create_assertion(
-            student, baker.make(Badge, xp=20), course=maths,
+            student, baker.make(Badge, xp=20), registration=maths_registration,
         )
         student.profile.xp_invalidate_cache()
 
@@ -1408,9 +1426,8 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(second.xp(), 10)
 
     def test_xp__still_shares_unassigned_work_when_a_registration_has_no_course(self):
-        """A registration with no course holds no course id, and unassigned XP is filed under no
-        course either. The two must not be confused: work the student never assigned is still
-        theirs to share out, not something already counted toward a course of theirs."""
+        """A registration with no course still takes its share of the work the student never
+        assigned, the same as any other registration of theirs."""
         student = baker.make(User)
         maths = baker.make(Course, title='Maths')
         maths_registration = self._register(student, maths)
@@ -1438,13 +1455,13 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
         self.assertEqual(old.xp(), student.profile.xp_cached)
 
-    def _approved_yesterday(self, student, xp, course=None):
+    def _approved_yesterday(self, student, xp, registration=None):
         """Give a student an approved submission dated yesterday.
 
         The date filter is on time_approved, which baker would otherwise fill with a random
         datetime that may not be behind us.
         """
-        submission = self._approved(student, xp=xp, course=course)
+        submission = self._approved(student, xp=xp, registration=registration)
         submission.time_approved = timezone.localtime() - timedelta(days=1)
         submission.save()
         return submission
@@ -1456,7 +1473,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         student = baker.make(User)
         maths = baker.make(Course, title='Maths')
         registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
-        self._approved_yesterday(student, xp=40, course=maths)
+        self._approved_yesterday(student, xp=40, registration=registrations[0])
         today = timezone.localtime()
 
         series = CourseStudent.objects.xp_across_series(
@@ -1499,7 +1516,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         maths = baker.make(Course, title='Maths')
         registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
         assertion = baker.make(
-            BadgeAssertion, user=student, badge=baker.make(Badge, xp=20), course=maths,
+            BadgeAssertion, user=student, badge=baker.make(Badge, xp=20), registration=registrations[0],
             semester=SiteConfig.get().active_semester,
         )
         today = timezone.localtime()
@@ -1522,9 +1539,9 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         # a repeatable quest taken past its cap and split across two courses, which is the case
         # where a date's per-course figures are fractions rather than whole submissions
         quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
-        for course in (maths, None):
+        for registration in (registrations[0], None):
             submission = baker.make(
-                QuestSubmission, user=student, quest=quest, course=course,
+                QuestSubmission, user=student, quest=quest, registration=registration,
                 semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
             )
             submission.time_approved = timezone.localtime() - timedelta(days=1)
@@ -1604,7 +1621,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
         dropped_registration = self._register(student, dropped)
-        self._approved(student, xp=30, course=dropped)
+        self._approved(student, xp=30, registration=dropped_registration)
         student.profile.xp_invalidate_cache()
 
         dropped_registration.delete()
@@ -1613,15 +1630,20 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(art_registration.xp(), 15)
         self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
 
-    def test_xp__shares_out_work_assigned_to_a_course_the_student_never_had(self):
-        """Same for a course that was never theirs: whatever put it there, the XP is the
-        student's and has to keep counting somewhere."""
+    def test_xp__shares_out_work_assigned_to_a_registration_that_is_not_one_of_theirs_now(self):
+        """Same for a registration the split is not dividing between, such as one from a
+        semester that is over: whatever put the work there, the XP is the student's and has to
+        keep counting somewhere."""
         student = baker.make(User)
         maths = baker.make(Course, title='Maths')
         art = baker.make(Course, title='Art')
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
-        self._approved(student, xp=20, course=baker.make(Course, title='Someone else’s course'))
+        old = baker.make(
+            CourseStudent, user=student, course=baker.make(Course, title='Last term’s course'), block=baker.make(Block),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self._approved(student, xp=20, registration=old)
         student.profile.xp_invalidate_cache()
 
         self.assertEqual(maths_registration.xp(), 10)
@@ -1638,7 +1660,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         art = baker.make(Course, title='Art', xp_for_100_percent=100)
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
-        self._approved(student, xp=40, course=maths)
+        self._approved(student, xp=40, registration=maths_registration)
         student.profile.xp_invalidate_cache()
 
         # 40 XP halfway through a semester projects to 80, out of the course's 100
@@ -1672,7 +1694,7 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         art = baker.make(Course, title='Art')
         maths_registration = self._register(student, maths)
         art_registration = self._register(student, art)
-        self._approved(student, xp=60, course=maths)
+        self._approved(student, xp=60, registration=maths_registration)
         student.profile.xp_invalidate_cache()
 
         CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
@@ -1751,9 +1773,9 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         art = baker.make(Course, title='Art')
         registrations = [self._register(student, maths), self._register(student, art)]
         quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
-        for course in (maths, art):
+        for registration in registrations:
             baker.make(
-                QuestSubmission, user=student, quest=quest, course=course,
+                QuestSubmission, user=student, quest=quest, registration=registration,
                 semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
             )
         student.profile.xp_invalidate_cache()

@@ -23,18 +23,18 @@ from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, Prereq
 from tags.models import TagsModelMixin
 
 
-#: What a set of submissions is worth: `total`, the XP altogether, and `by_course`, a course
-#: id to XP map with None collecting everything left unassigned (issue #2440).
-CappedXP = namedtuple('CappedXP', ['total', 'by_course'])
+#: What a set of submissions is worth: `total`, the XP altogether, and `by_registration`, a
+#: course registration id to XP map with None collecting everything left unassigned (issue #2440).
+CappedXP = namedtuple('CappedXP', ['total', 'by_registration'])
 
 
-def split_capped_xp_by_course(rows):
-    """Divide per-(quest, course) XP sums into a per-course total, capping each quest first.
+def split_capped_xp_by_registration(rows):
+    """Divide per-(quest, registration) XP sums into a per-registration total, capping each quest first.
 
     A quest's `max_xp` caps what it can ever be worth, however many times it was repeated, so
     the cap applies to the quest as a whole before the total is split up: a student who spread
     one repeatable quest's submissions across two courses must not earn more from it than a
-    student who put them all in one. Each course therefore receives the capped total in
+    student who put them all in one. Each registration therefore receives the capped total in
     proportion to what it was assigned uncapped.
 
     The rule lives here rather than inside the query that usually feeds it, because it is
@@ -42,37 +42,38 @@ def split_capped_xp_by_course(rows):
     implementation of it is easier to keep honest than two.
 
     Args:
-        rows: an iterable of (quest_id, max_xp, course_id, xp_sum) tuples, one per pairing of
-            a quest with a course the student put it against. max_xp of -1 means uncapped,
-            and None means the quest has since been deleted, which is worth nothing.
+        rows: an iterable of (quest_id, max_xp, registration_id, xp_sum) tuples, one per
+            pairing of a quest with a course registration the student put it against. max_xp of
+            -1 means uncapped, and None means the quest has since been deleted, which is worth
+            nothing.
 
     Returns:
-        CappedXP: the capped XP by course, and what it comes to altogether. The total is added
-        up a whole quest at a time rather than from the per-course shares, so it stays the
+        CappedXP: the capped XP by registration, and what it comes to altogether. The total is
+        added up a whole quest at a time rather than from the per-registration shares, so it stays the
         exact number calculate_xp_to_date() reports instead of a sum of fractions.
     """
     rows = list(rows)
 
     # what each quest earned in total, to apply its cap before dividing it up
     quest_totals = {}
-    for quest_id, _max_xp, _course_id, xp_sum in rows:
+    for quest_id, _max_xp, _registration_id, xp_sum in rows:
         quest_totals[quest_id] = quest_totals.get(quest_id, 0) + xp_sum
 
     capped_totals = {}
-    for quest_id, max_xp, _course_id, _xp_sum in rows:
+    for quest_id, max_xp, _registration_id, _xp_sum in rows:
         if max_xp == -1:  # no limit
             capped_totals[quest_id] = quest_totals[quest_id]
         else:
             # max_xp is None when the quest was deleted
             capped_totals[quest_id] = min(quest_totals[quest_id], max_xp or 0)
 
-    xp_by_course = {}
-    for quest_id, _max_xp, course_id, xp_sum in rows:
+    xp_by_registration = {}
+    for quest_id, _max_xp, registration_id, xp_sum in rows:
         total = quest_totals[quest_id]
         share = capped_totals[quest_id] * xp_sum / total if total else 0
-        xp_by_course[course_id] = xp_by_course.get(course_id, 0) + share
+        xp_by_registration[registration_id] = xp_by_registration.get(registration_id, 0) + share
 
-    return CappedXP(total=sum(capped_totals.values()), by_course=xp_by_course)
+    return CappedXP(total=sum(capped_totals.values()), by_registration=xp_by_registration)
 
 
 class CategoryManager(models.Manager):
@@ -1421,44 +1422,44 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
-    def xp_by_course(self, user):
-        """How much of this student's quest XP they assigned to each of their courses.
+    def xp_by_registration(self, user):
+        """How much of this student's quest XP they assigned to each of their course registrations.
 
         A quest's `max_xp` caps what it can ever be worth, however many times it was repeated,
         so the cap has to be applied to the quest as a whole before the total is split up: a
         student who spread one repeatable quest's submissions across two courses must not earn
-        more from it than a student who put them all in one. Each course therefore receives the
-        capped total in proportion to what it was assigned uncapped.
+        more from it than a student who put them all in one. Each registration therefore
+        receives the capped total in proportion to what it was assigned uncapped.
 
         Args:
             user: the student whose XP is being divided.
 
         Returns:
-            dict: course id to XP, with None collecting everything left unassigned. Only the
+            dict: registration id to XP, with None collecting everything left unassigned. Only the
             student's own semester counts, and only quests that grant XP.
         """
         submissions = self.all_approved(user).grant_xp().annotate(
             xp_earned=Greatest('quest__xp', 'xp_requested'),
         )
-        per_quest_course = submissions.order_by().values(
-            'quest', 'quest__max_xp', 'course',
+        per_quest_registration = submissions.order_by().values(
+            'quest', 'quest__max_xp', 'registration',
         ).annotate(xp_sum=Sum('xp_earned'))
 
-        return split_capped_xp_by_course(
-            (row['quest'], row['quest__max_xp'], row['course'], row['xp_sum'])
-            for row in per_quest_course
-        ).by_course
+        return split_capped_xp_by_registration(
+            (row['quest'], row['quest__max_xp'], row['registration'], row['xp_sum'])
+            for row in per_quest_registration
+        ).by_registration
 
-    def xp_by_course_series(self, user, dates):
-        """How much of this student's quest XP counted toward each course, at each of `dates`.
+    def xp_by_registration_series(self, user, dates):
+        """How much of this student's quest XP counted toward each registration, at each of `dates`.
 
-        What xp_by_course() answers for one date, answered for a whole series off a single
+        What xp_by_registration() answers for one date, answered for a whole series off a single
         query (issue #2459). Charting a course's progress asks it once per class day, and
         asking the database that many times over is the cost this removes.
 
         It cannot be done as a running total, because a quest's cap applies to what it had
         earned *by that date*: a repeatable quest over its cap is worth its cap on every date
-        after it crossed, not the sum of its submissions. So the per-quest-and-course sums are
+        after it crossed, not the sum of its submissions. So the per-quest-and-registration sums are
         accumulated in date order and the capping rule re-applied at each point.
 
         Args:
@@ -1477,24 +1478,24 @@ class QuestSubmissionManager(models.Manager):
         ).annotate(
             xp_earned=Greatest('quest__xp', 'xp_requested'),
         ).order_by('time_approved').values(
-            'quest', 'quest__max_xp', 'course', 'xp_earned', 'time_approved',
+            'quest', 'quest__max_xp', 'registration', 'xp_earned', 'time_approved',
         )
 
         # one pass over the submissions and one over the dates, walking both forward together
         pending = list(submissions)
         position = 0
-        running = {}  # (quest, course) -> the quest's max_xp and the XP so far
+        running = {}  # (quest, registration) -> the quest's max_xp and the XP so far
         series = []
         for date in dates:
             while position < len(pending) and pending[position]['time_approved'] <= date:
                 row = pending[position]
-                key = (row['quest'], row['course'])
+                key = (row['quest'], row['registration'])
                 max_xp, xp_sum = running.get(key, (row['quest__max_xp'], 0))
                 running[key] = (max_xp, xp_sum + row['xp_earned'])
                 position += 1
-            series.append(split_capped_xp_by_course(
-                (quest_id, max_xp, course_id, xp_sum)
-                for (quest_id, course_id), (max_xp, xp_sum) in running.items()
+            series.append(split_capped_xp_by_registration(
+                (quest_id, max_xp, registration_id, xp_sum)
+                for (quest_id, registration_id), (max_xp, xp_sum) in running.items()
             ))
 
         return series
@@ -1580,13 +1581,15 @@ class QuestSubmission(models.Model):
     # blank=True as well as null=True: a submission started while no semester is open belongs
     # to none, and full_clean() (create_submission calls it) rejects an unset non-blank field
     semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True, blank=True)
-    # Which of the student's courses this work counts toward (issue #2440). Null means it was
-    # never assigned: work handed in before this existed, or while the deck had the setting
-    # off, or by a student with only one course to count it toward. Unassigned XP is shared
-    # evenly across their courses, which is what every submission used to do.
-    course = models.ForeignKey(
-        'courses.Course', on_delete=models.SET_NULL, null=True, blank=True,
-        help_text="The course this submission's XP counts toward.",
+    # Which of the student's course registrations this work counts toward (issue #2440). Null
+    # means it was never assigned: work handed in before this existed, or while the deck had the
+    # setting off, or by a student with only one course to count it toward. Unassigned XP is
+    # shared evenly across their courses, which is what every submission used to do. It names
+    # the registration rather than its course, so a registration whose course a teacher changes
+    # keeps the work that counted toward it (issue #2875).
+    registration = models.ForeignKey(
+        'courses.CourseStudent', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="The course registration this submission's XP counts toward.",
     )
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",

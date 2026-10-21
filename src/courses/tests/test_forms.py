@@ -196,21 +196,21 @@ class XPCourseChoiceMixinTest(ByteDeckTenantTestCase):
                 semester=SiteConfig.get().active_semester,
             )
 
-    def test_course_field__is_asked_the_same_way_on_every_form_that_carries_it(self):
+    def test_registration_field__is_asked_the_same_way_on_every_form_that_carries_it(self):
         """A student handing in a quest and a teacher granting a badge see the same question."""
         for form in (SubmissionQuickReplyFormStudent(student=self.student), BadgeAssertionForm(student=self.student)):
             with self.subTest(form=type(form).__name__):
-                self.assertEqual(form.fields['course'].label, 'Which course should this XP be awarded to?')
+                self.assertEqual(form.fields['registration'].label, 'Which course should this XP be awarded to?')
                 # the label asks the whole question, so nothing repeats it underneath
-                self.assertEqual(form.fields['course'].help_text, '')
-                self.assertIsInstance(form.fields['course'].widget, Select2Widget)
+                self.assertEqual(form.fields['registration'].help_text, '')
+                self.assertIsInstance(form.fields['registration'].widget, Select2Widget)
 
-    def test_course_field__hands_its_choices_to_the_dropdown(self):
+    def test_registration_field__hands_its_choices_to_the_dropdown(self):
         """The widget is swapped in after the field is built, so the courses and the "split
         evenly" choice have to reach it: a select2 with no choices would render empty."""
         form = SubmissionQuickReplyFormStudent(student=self.student)
 
         self.assertCountEqual(
-            [str(label) for value, label in form.fields['course'].widget.choices],
+            [str(label) for value, label in form.fields['registration'].widget.choices],
             ['Split evenly between my courses', str(self.maths), str(self.art)],
         )

@@ -55,20 +55,20 @@ class BadgeAssertionForm(XPCourseChoiceMixin, forms.ModelForm):
         )
 
     def clean(self):
-        """Refuse a course that is not one of the student being granted the badge.
+        """Refuse a course registration that is not one of the student being granted the badge.
 
         The course choices are built for the student named in the URL, while the student who
         actually receives the badge comes from this form's own user field, so a posted pair
-        that does not match would attach a course the recipient is not registered in.
+        that does not match would attach the badge to someone else's registration.
 
         Returns:
-            dict: the cleaned data, with a 'course' error when the two do not match.
+            dict: the cleaned data, with a 'registration' error when the two do not match.
         """
         cleaned_data = super().clean()
-        course = cleaned_data.get('course')
+        registration = cleaned_data.get('registration')
         user = cleaned_data.get('user')
-        if course and user and not CourseStudent.objects.current_courses(user).filter(course=course).exists():
-            self.add_error('course', f'{user} is not registered in {course}.')
+        if registration and user and not CourseStudent.objects.current_courses(user).filter(pk=registration.pk).exists():
+            self.add_error('registration', f'{user} is not registered in {registration.course}.')
         return cleaned_data
 
 

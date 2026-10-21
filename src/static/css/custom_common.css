@@ -833,6 +833,16 @@ h3.comment-heading {
     overflow-x: auto;
 }
 
+/* The editor's Insert Math button (summernote-math.js) keeps each formula's LaTeX source in a
+   span beside it, so the formula can be opened and edited again. The plugin hides that span
+   with an inline display: none, but the HTML sanitizer doesn't allow "display", so a comment
+   or a submission has lost that style by the time it's shown, and the source would sit next
+   to the formula it draws (#2874). Hiding it here covers what's already saved too, on every
+   page and inside the editor. */
+.note-math .note-latex {
+    display: none;
+}
+
 /***********ACCORDIAN COMMENTS *******************************/
 
 /* lists within list-groups */
@@ -898,26 +908,44 @@ h3 > img#banner {
     background-color: transparent;
 }
 
-.list-group-item.left-side, .list-group-item.right-side {
-  margin: 0;
-  float: left;
-  border-bottom: none;
+/* A sidebar row with a "more" menu, the ⋮ at its right end, such as Quests and Badges for a
+   teacher. The row is a single list-group-item, so it takes the list's colours as a whole,
+   the current page's included, and its link and its ⋮ fill it between them: the ⋮ is part of
+   the row rather than a button of its own beside it (#1133). The row's text colour, and its
+   highlight when pointed at, are the ones its neighbouring links have, in custom.css and
+   custom_slate.css. */
+.list-group-item.sidebar-menu-row {
+    display: flex;
+    padding: 0;
 }
 
-.list-group-item.left-side {
-  border-top-right-radius: 0px ;
-  width: 80%;
+/* The sidebar's list is also a Bootstrap .nav, which paints the links of an open menu's row
+   (".nav .open > a") and would grey the row out while its menu is showing. These rules come
+   later and are as specific, so the row keeps its own colours. */
+.sidebar-menu .sidebar-menu-row > a,
+.sidebar-menu .sidebar-menu-row > a:hover,
+.sidebar-menu .sidebar-menu-row > a:focus {
+    color: inherit;
+    background-color: transparent;
+    border-color: transparent;
+    text-decoration: none;
 }
 
-.list-group-item.right-side {
-  width: 20%;
-  border-top-right-radius: 4px;
-  border-top-left-radius: 0px;
-  border-bottom-right-radius: 0px;
-  border-bottom-left-radius: 0px;
-  border-left: none;
-  padding-left:0px;
-  padding-right: 0px;
+.sidebar-menu-row-link {
+    flex: 1;
+    padding: 10px 15px;
+}
+
+.sidebar-menu-row-toggle {
+    width: 20%;
+    padding: 10px 0;
+    text-align: center;
+}
+
+/* The focus ring stays for someone moving through the page by keyboard, but doesn't ring the
+   ⋮ after a click, when Bootstrap focuses it as the menu opens. */
+.sidebar-menu-row-toggle:focus:not(:focus-visible) {
+    outline: none;
 }
 
 
@@ -1434,4 +1462,13 @@ table[data-toggle="table"].bt-reveal {
     height: 6px;
     max-width: 320px;
     margin: 4px 0 0;
+}
+
+/* The Unflag button's icon (#824): a flag struck through by a red "no" sign, the sign drawn twice
+   the flag's size and the pair scaled down to sit in a button beside single icons. */
+.fa-stack.unflag-icon {
+    font-size: 0.63em;
+}
+.fa-stack.unflag-icon .fa-ban {
+    color: tomato;
 }
