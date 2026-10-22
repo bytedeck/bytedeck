@@ -275,8 +275,11 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self._write(f'<img src="{OLD_URL}">')
         self._open_dialog()
         self.page.locator('.note-image-source-file').set_input_files(finders.find('img/icon.png'))
-        while not self.held_uploads:
+        for _ in range(100):
+            if self.held_uploads:
+                break
             self.page.wait_for_timeout(50)
+        self.assertTrue(self.held_uploads, "The upload never reached the test's server.")
 
         self.page.locator('.modal:has(.note-image-source-url) .close').click()
         self.page.wait_for_function("() => !$('.modal:has(.note-image-source-url)').is(':visible')")

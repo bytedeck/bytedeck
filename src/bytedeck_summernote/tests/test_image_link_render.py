@@ -206,6 +206,19 @@ class ImageLinkRenderTest(ByteDeckTenantTestCase):
         self.assertEqual(link.get_attribute('href'), 'https://new.example.com/')
         self.assertIsNone(link.get_attribute('target'))
 
+    def test_image_link__script_links_are_not_made(self):
+        """A javascript: or data: URL doesn't link the image, so neither the content nor the image's
+        menu holds a link that runs script."""
+        for url in ('javascript:alert(1)', 'DATA:text/html,<script>alert(1)</script>'):
+            with self.subTest(url=url):
+                self._write(IMAGE)
+                self._select_image()
+                self._menu_button('Link').click()
+                self._wait_for_link_dialog().fill(url)
+                self.page.locator('.note-link-btn').click()
+
+                self.assertEqual(self.page.locator('.note-editable a').count(), 0)
+
     def test_image_link__unlink_takes_the_image_out_of_its_link(self):
         """Unlink in the image's menu takes the image out of its link and keeps the image."""
         self._write(f'<a href="https://example.com/">{IMAGE}</a>')
