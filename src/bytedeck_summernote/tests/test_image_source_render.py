@@ -236,6 +236,21 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
 
         self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
 
+    def test_image_source__enter_with_no_url_changes_nothing(self):
+        """With the URL emptied, or only spaces, the button is off, and Enter in either field
+        leaves the image's picture as it was."""
+        for url in ('', '   '):
+            with self.subTest(url=url):
+                self._write(f'<img src="{OLD_URL}">')
+                self._open_dialog().fill(url)
+                self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
+
+                self.page.locator('.note-image-source-alt').press('Enter')
+
+                self.assertEqual(self._image('src'), OLD_URL)
+                self.page.keyboard.press('Escape')
+                self.page.wait_for_function("() => !$('.modal:has(.note-image-source-url)').is(':visible')")
+
     def test_image_source__uploads_a_new_picture(self):
         """A file chosen in the dialog is uploaded through the editor's own upload, and the image
         shows the uploaded picture, keeping the rest of itself."""
