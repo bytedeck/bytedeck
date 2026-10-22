@@ -1,10 +1,12 @@
-"""Tests for the editor's Change Image button, which changes the picture an image shows (#2907).
+"""Tests for the editor's Edit image button, which changes the picture an image shows (#2907) and
+its description (#2911).
 
 The button sits in the menu over a clicked image (js/summernote-image-source.js). Its dialog shows
 the image's URL to edit, or takes a new file, which goes up through the editor's own image upload
-(uploadImages in bytedeck_summernote/widget_common.html). Only the image's src changes, so its size,
-float, shapes and other attributes stay. A height left by dragging the image's corner goes, so a new
-picture of a different shape keeps its proportions.
+(uploadImages in bytedeck_summernote/widget_common.html), and shows its description (alt text) to
+edit. Only the image's src and alt change, so its size, float, shapes and other attributes stay. A
+height left by dragging the image's corner goes with a new picture, so a picture of a different
+shape keeps its proportions.
 
 The announcement form is rendered by the app itself, through the test client, and opened in
 headless Chromium with the app's own static files, scripts included, so the editor runs with the
@@ -47,7 +49,7 @@ IMAGE_SOURCE_JS = os.path.join(settings.STATIC_URL, 'js/summernote-image-source.
 
 
 class ImageSourceConfigTest(SimpleTestCase):
-    """The Change Image button is in the image's menu in both kinds of editor."""
+    """The Edit image button is in the image's menu in both kinds of editor."""
 
     def test_summernote_config__loads_the_image_source_plugin(self):
         """Both the iframe widget and the inplace widget load the plugin."""
@@ -55,7 +57,7 @@ class ImageSourceConfigTest(SimpleTestCase):
         self.assertIn(IMAGE_SOURCE_JS, settings.SUMMERNOTE_CONFIG['js_for_inplace'])
         self.assertIsNotNone(finders.find('js/summernote-image-source.js'))
 
-    def test_summernote_config__image_menu_has_the_change_image_button(self):
+    def test_summernote_config__image_menu_has_the_edit_image_button(self):
         """The image's menu shows the button, beside Image Shapes."""
         groups = dict(settings.SUMMERNOTE_CONFIG['summernote']['popover']['image'])
         self.assertEqual(groups['custom'], ['imageShapes', 'imageSource'])
@@ -80,7 +82,7 @@ _CHROMIUM = _find_chromium() if HAS_PLAYWRIGHT else None
 
 @skipUnless(HAS_PLAYWRIGHT and _CHROMIUM, "Playwright and a Chromium build are required")
 class ImageSourceRenderTest(ByteDeckTenantTestCase):
-    """The Change Image button changes the picture an image shows, and nothing else about it."""
+    """The Edit image button changes the picture an image shows and its description, and nothing else about it."""
 
     def setUp(self):
         """Render the announcement form as a teacher sees it, and open it in a headless browser.
@@ -97,6 +99,8 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self.upload_path = reverse('bytedeck_summernote-upload_attachment')
         self.upload_reply = (200, {"files": [{"url": NEW_URL}]})
         self.uploads = 0
+        # a list here holds the uploads unanswered, for a test to answer when it chooses
+        self.held_uploads = None
 
         playwright = sync_playwright().start()
         self.addCleanup(playwright.stop)
@@ -122,6 +126,9 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
             route.fulfill(status=200, content_type="text/html; charset=utf-8", body=self.html)
         elif path == self.upload_path and request.method == 'POST':
             self.uploads += 1
+            if self.held_uploads is not None:
+                self.held_uploads.append(route)
+                return
             status, body = self.upload_reply
             route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
         elif path.startswith(settings.STATIC_URL) and finders.find(path[len(settings.STATIC_URL):]):
@@ -160,7 +167,7 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         return image.get_attribute(name)
 
     def _open_dialog(self):
-        """Click the image and press Change Image in its menu, then wait for the dialog to be shown.
+        """Click the image and press Edit image in its menu, then wait for the dialog to be shown.
 
         A click on the last paragraph first closes an image menu left open by an earlier click.
         The dialog fills its URL field and puts the focus there once it has finished opening, so
@@ -171,12 +178,12 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         """
         self.page.locator('.note-editable p').last.click()
         self.page.locator('.note-editable img').click()
-        self.page.locator('.note-image-popover button[aria-label="Change image"]').click()
+        self.page.locator('.note-image-popover button[aria-label="Edit image"]').click()
         self.page.wait_for_function("() => document.activeElement.classList.contains('note-image-source-url')")
         return self.page.locator('.note-image-source-url')
 
     def _dialog_is_open(self):
-        """Whether the Change Image dialog is showing."""
+        """Whether the Edit Image dialog is showing."""
         return self.page.locator('.modal:has(.note-image-source-url)').is_visible()
 
     def test_image_source__dialog_shows_the_images_url(self):
@@ -222,12 +229,27 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self.assertEqual(self._image('style.height'), '')
 
     def test_image_source__an_empty_url_cannot_be_set(self):
-        """With the URL field emptied, the Change Image button is disabled."""
+        """With the URL field emptied, the Save button is disabled."""
         self._write(f'<img src="{OLD_URL}">')
 
         self._open_dialog().fill('')
 
         self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
+
+    def test_image_source__enter_with_no_url_changes_nothing(self):
+        """With the URL emptied, or only spaces, the button is off, and Enter in either field
+        leaves the image's picture as it was."""
+        for url in ('', '   '):
+            with self.subTest(url=url):
+                self._write(f'<img src="{OLD_URL}">')
+                self._open_dialog().fill(url)
+                self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
+
+                self.page.locator('.note-image-source-alt').press('Enter')
+
+                self.assertEqual(self._image('src'), OLD_URL)
+                self.page.keyboard.press('Escape')
+                self.page.wait_for_function("() => !$('.modal:has(.note-image-source-url)').is(':visible')")
 
     def test_image_source__uploads_a_new_picture(self):
         """A file chosen in the dialog is uploaded through the editor's own upload, and the image
@@ -260,6 +282,29 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self.assertTrue(self._dialog_is_open())
         self.assertEqual(self.page.locator('.note-image-source-file').input_value(), '')
 
+    def test_image_source__an_upload_given_up_on_changes_nothing(self):
+        """An upload still going when the dialog is closed was given up on: when it finishes, the
+        image keeps its picture, and the dialog opened again since stays open."""
+        self.held_uploads = []
+        self._write(f'<img src="{OLD_URL}">')
+        self._open_dialog()
+        self.page.locator('.note-image-source-file').set_input_files(finders.find('img/icon.png'))
+        for _ in range(100):
+            if self.held_uploads:
+                break
+            self.page.wait_for_timeout(50)
+        self.assertTrue(self.held_uploads, "The upload never reached the test's server.")
+
+        self.page.locator('.modal:has(.note-image-source-url) .close').click()
+        self.page.wait_for_function("() => !$('.modal:has(.note-image-source-url)').is(':visible')")
+        self._open_dialog()
+        status, body = self.upload_reply
+        self.held_uploads[0].fulfill(status=status, content_type="application/json", body=json.dumps(body))
+        self.page.wait_for_timeout(500)
+
+        self.assertEqual(self._image('src'), OLD_URL)
+        self.assertTrue(self._dialog_is_open())
+
     def test_image_source__undo_brings_the_old_picture_back(self):
         """Changing the picture is one step the editor can undo."""
         self._write(f'<img src="{OLD_URL}">')
@@ -269,3 +314,47 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self.page.evaluate("() => $('#id_content').summernote('undo')")
 
         self.assertEqual(self._image('src'), OLD_URL)
+
+    def test_image_source__dialog_shows_the_images_description(self):
+        """The dialog shows the description (alt text) the image has now."""
+        self._write(f'<img src="{OLD_URL}" alt="A map of the quests">')
+
+        self._open_dialog()
+
+        self.assertEqual(self.page.locator('.note-image-source-alt').input_value(), 'A map of the quests')
+
+    def test_image_source__sets_the_description_and_keeps_the_picture(self):
+        """A description typed in the dialog becomes the image's alt text, and with the URL left as
+        it was, the picture and a dragged height stay."""
+        self._write(f'<img src="{OLD_URL}" style="width: 200px; height: 50px;">')
+
+        self._open_dialog()
+        self.page.locator('.note-image-source-alt').fill('  A map of the quests  ')
+        self.page.locator('.note-image-source-btn').click()
+
+        self.assertEqual(self._image('alt'), 'A map of the quests')
+        self.assertEqual(self._image('src'), OLD_URL)
+        self.assertEqual(self._image('style.height'), '50px')
+        self.assertIn('alt="A map of the quests"', self.page.locator('#id_content').input_value())
+
+    def test_image_source__an_emptied_description_leaves_no_alt(self):
+        """Emptying the description takes the image's alt off, rather than leaving alt="", which
+        would tell a screen reader to skip the image as decoration."""
+        self._write(f'<img src="{OLD_URL}" alt="A map of the quests">')
+
+        self._open_dialog()
+        self.page.locator('.note-image-source-alt').fill('')
+        self.page.keyboard.press('Enter')
+
+        self.assertIsNone(self._image('alt'))
+
+    def test_image_source__an_uploaded_picture_gets_the_description(self):
+        """A description typed before choosing a file is given to the uploaded picture."""
+        self._write(f'<img src="{OLD_URL}">')
+
+        self._open_dialog()
+        self.page.locator('.note-image-source-alt').fill('The new map')
+        self.page.locator('.note-image-source-file').set_input_files(finders.find('img/icon.png'))
+
+        self.page.wait_for_function(f"() => $('.note-editable img').attr('src') === '{NEW_URL}'")
+        self.assertEqual(self._image('alt'), 'The new map')

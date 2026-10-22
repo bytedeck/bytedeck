@@ -123,7 +123,8 @@ class TestByteDeckSummernoteMenus(SimpleTestCase):
 
     def test_summernote_settings__carry_the_pop_up_menus(self):
         """Every editor widget hands Summernote the configured menus, with the buttons our plugins add: Image Shapes
-        and Change Image (#2907) over an image, and Table Headers and Table Styles over a table (#268)."""
+        and Edit image (#2907), Link and Unlink (#2909), and the alignments (#2910) over an image, and Table Headers and
+        Table Styles over a table (#268)."""
         widget_classes = (
             ByteDeckSummernoteSafeWidget,
             ByteDeckSummernoteSafeInplaceWidget,
@@ -134,6 +135,8 @@ class TestByteDeckSummernoteMenus(SimpleTestCase):
             with self.subTest(widget=widget_class.__name__):
                 popover = widget_class().summernote_settings()['popover']
                 self.assertIn(['custom', ['imageShapes', 'imageSource']], popover['image'])
+                self.assertIn(['imagelink', ['imageLink', 'imageUnlink']], popover['image'])
+                self.assertIn(['imagealign', ['imageAlignLeft', 'imageAlignCenter', 'imageAlignRight']], popover['image'])
                 self.assertIn(['custom', ['tableHeaders', 'tableStyles']], popover['table'])
 
     def test_config__names_only_buttons_that_exist(self):
@@ -156,7 +159,7 @@ class TestByteDeckSummernoteImageSizeCheck(ByteDeckTenantTestCase):
     """The editor refuses an image too large to upload before sending it (#783)."""
 
     def test_widget_inplace__checks_an_images_size_before_uploading_it(self):
-        """The image dialogs' file inputs (Insert Image's and Change Image's, #2907) carry the
+        """The image dialogs' file inputs (Insert Image's and Edit Image's, #2907) carry the
         editor's own limit, for the page's size check to hold a chosen image to, and an image
         dropped or pasted into the editor is checked against the same limit before it is uploaded."""
         widget = ByteDeckSummernoteAdvancedInplaceWidget()
