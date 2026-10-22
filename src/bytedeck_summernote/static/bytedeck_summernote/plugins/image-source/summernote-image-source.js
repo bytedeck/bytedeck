@@ -145,12 +145,17 @@
                         });
                     });
                     $url.on('input paste propertychange', function () {
-                        ui.toggleBtn($button, $url.val());
+                        ui.toggleBtn($button, $.trim($url.val()));
                     }).val($img.attr('src')).trigger('focus').trigger('select');
-                    ui.toggleBtn($button, $url.val());
+                    ui.toggleBtn($button, $.trim($url.val()));
                     $alt.val($img.attr('alt') || '');
                     $button.on('click', function (event) {
                         event.preventDefault();
+                        // Enter reaches here even while the button is disabled, and an image
+                        // with no picture is never what was meant
+                        if (!$.trim($url.val())) {
+                            return;
+                        }
                         self.change($img, $url.val(), $alt.val());
                         ui.hideDialog(self.$dialog);
                     });
