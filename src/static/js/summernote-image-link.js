@@ -179,6 +179,11 @@
                 } else if (info.checkProtocol && !/^([A-Za-z][A-Za-z0-9+-.]*:|#|\/)/.test(url)) {
                     url = options.defaultProtocol + url;
                 }
+                // A link that runs script or opens a document written into it isn't made. Browsers
+                // ignore spaces and control characters in a scheme, so they don't count here either.
+                if (/^(javascript|data|vbscript):/i.test(url.replace(/[\u0000-\u0020]/g, ''))) {
+                    return;
+                }
                 context.invoke('editor.beforeCommand');
                 var $a = self.anchorOf($img);
                 if (!$a.length) {
