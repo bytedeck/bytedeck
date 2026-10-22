@@ -4,7 +4,8 @@ The float buttons in the image's menu let text wrap around an image. The paragra
 can't move a Responsive image, which Bootstrap's img-responsive makes a block, so
 js/summernote-image-align.js adds Align left, Align center and Align right to the image's menu,
 as classes on the image: Bootstrap's center-block, and img-align-right from css/custom_common.css.
-An image is either aligned or floated, never both.
+An image is either aligned or floated, never both. On a phone, a floated image stops floating
+and sits on a line of its own, as a floated figure does (#2918).
 
 The announcement form is rendered by the app itself, through the test client, and opened in
 headless Chromium with the app's own static files, scripts and stylesheets included, so the
@@ -251,3 +252,37 @@ class ImageAlignRenderTest(ByteDeckTenantTestCase):
         image = self._image()
         self.assertEqual(sorted(image['classes']), ['img-responsive', 'note-float-left'])
         self.assertEqual(image['float'], 'left')
+
+    def _float_layout(self):
+        """Where a floated image and the text after it sit, once the image has loaded.
+
+        Returns:
+            dict: `float`, the image's float as the page's stylesheets leave it, and `beside`,
+            whether the text's first line starts beside the image rather than below it.
+        """
+        self.page.wait_for_function("() => document.querySelector('.note-editable img').complete")
+        return self.page.evaluate("""() => {
+            const img = document.querySelector('.note-editable img').getBoundingClientRect();
+            const words = document.getElementById('words').getClientRects()[0];
+            return {float: getComputedStyle(document.querySelector('.note-editable img')).float,
+                    beside: words.top < img.bottom - 1};
+        }""")
+
+    def test_image_float__phones_put_a_floated_image_on_its_own_line(self):
+        """On a phone, a floated image stops floating and the text goes below it, rather than into
+        a column too narrow to read beside it; on a wider screen it floats with the text beside it
+        (#2918). Bootstrap's pull-left and pull-right, which older content has, are treated the same."""
+        words = 'The quest map shows every campaign as a column. ' * 6
+        for classes, side in (('note-float-right', 'right'), ('note-float-left', 'left'),
+                              ('pull-right', 'right'), ('pull-left', 'left')):
+            image = f'<img class="img-responsive {classes}" src="/static/img/banner.png" style="width: 150px; float: {side};">'
+            for width, floats in ((1000, True), (390, False)):
+                with self.subTest(classes=classes, width=width):
+                    self.page.set_viewport_size({'width': width, 'height': 900})
+                    self.page.evaluate("html => $('#id_content').summernote('code', html)",
+                                       f'<p>{image}<span id="words">{words}</span></p>')
+
+                    layout = self._float_layout()
+
+                    self.assertEqual(layout['float'], side if floats else 'none')
+                    self.assertEqual(layout['beside'], floats)
