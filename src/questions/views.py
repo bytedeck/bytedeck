@@ -7,6 +7,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
@@ -338,8 +339,15 @@ def ajax_mark_answer(request, pk):
     if not answer.awaiting_mark:
         raise Http404("That answer can't be marked now.")
 
-    answer.marked_wrong = request.POST.get("wrong") == "true"
-    answer.full_clean()
-    # only the mark: the student's answer itself is not this request's to write
-    answer.save(update_fields=["marked_wrong", "datetime_last_edit"])
-    return JsonResponse({"marked_wrong": answer.marked_wrong})
+    wrong = request.POST.get("wrong") == "true"
+    # Written in one statement, and only while the answer is still unmarked. A teacher can return
+    # or approve the quest between the check above and this write (another tab, another teacher),
+    # and that sets the marks from `marked_wrong` as it then stood: a later write here would leave
+    # the X saying one thing and the mark the student sees another. Only the mark is written, too:
+    # the student's answer itself is not this request's to touch.
+    updated = QuestionSubmission.objects.filter(pk=answer.pk, is_correct__isnull=True).update(
+        marked_wrong=wrong, datetime_last_edit=timezone.now(),
+    )
+    if not updated:
+        raise Http404("That answer can't be marked now.")
+    return JsonResponse({"marked_wrong": wrong})

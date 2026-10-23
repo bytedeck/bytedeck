@@ -5,6 +5,8 @@ Returning or approving the quest turns the marks into a check or an X the studen
 return only the questions marked wrong come back for the student to answer again.
 """
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -290,6 +292,31 @@ class AnswerMarkingTest(QuestionSubmissionFlowTestBase):
         earlier.refresh_from_db()
         self.assertIsNone(earlier.is_correct)
         self.assertEqual(finalize_answer_marks(self.submission), 0, "marks already set stay as they are")
+
+    def test_finalize_answer_marks__not_for_a_submission_back_with_the_student(self):
+        """A returned submission has no hand-in under review: approving it from there leaves its
+        latest answers as they are, even ones never marked."""
+        self.hand_in()
+        self.submission.mark_returned()  # a return that set no marks
+
+        self.assertEqual(finalize_answer_marks(self.submission), 0)
+        self.assertIsNone(self.answer(self.short_question).is_correct)
+
+    def test_mark__refused_once_the_marks_are_set_meanwhile(self):
+        """A mark that arrives after a return or approval has set the marks (from another tab, or
+        another teacher) changes nothing and says so, rather than leaving the X out of step with
+        the mark the student sees."""
+        self.hand_in()
+        answer = self.answer(self.short_question)
+        finalize_answer_marks(self.submission)  # the marks are set between the check and the write
+
+        with patch.object(QuestionSubmission, "awaiting_mark", new=property(lambda answer: True)):
+            response = self.mark(answer)
+
+        self.assertEqual(response.status_code, 404)
+        answer.refresh_from_db()
+        self.assertFalse(answer.marked_wrong)
+        self.assertIs(answer.is_correct, True)
 
     def test_finalize_answer_marks__nothing_handed_in(self):
         """A submission with no published answers has nothing to mark."""

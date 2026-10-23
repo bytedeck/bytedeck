@@ -1,4 +1,4 @@
-from django.db.models import Max
+from django.db.models import Case, Max, Value, When
 
 from .models import QuestionSubmission, QuestionType
 
@@ -236,20 +236,25 @@ def finalize_answer_marks(quest_submission):
     back for the student to answer again (`questions_to_answer`). Answers already marked are
     left as they are, so an earlier hand-in keeps the marks it came back with.
 
+    Only a submission handed in and awaiting review is marked. One returned and not yet handed
+    in again has no hand-in under review: its latest one was judged when it came back, so
+    approving it from there leaves those answers as they are.
+
     Args:
         quest_submission: the QuestSubmission being returned or approved.
 
     Returns:
         int: how many answers were marked.
     """
+    if not quest_submission.is_completed:
+        return 0
     latest_comment_id = QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=False,
     ).aggregate(Max("comment_id"))["comment_id__max"]
     if latest_comment_id is None:
         return 0
-    unmarked = QuestionSubmission.objects.filter(
+    # One statement, so an X saved while this runs lands either before it, and counts, or after
+    # it, and is refused (ajax_mark_answer writes only while an answer is unmarked).
+    return QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment_id=latest_comment_id, is_correct__isnull=True,
-    )
-    wrong = unmarked.filter(marked_wrong=True).update(is_correct=False)
-    right = unmarked.filter(marked_wrong=False).update(is_correct=True)
-    return wrong + right
+    ).update(is_correct=Case(When(marked_wrong=True, then=Value(False)), default=Value(True)))
