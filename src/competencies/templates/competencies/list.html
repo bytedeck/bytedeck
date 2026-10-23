@@ -38,9 +38,10 @@
         >
             <thead>
                 <tr>
+                    <th data-sortable='true' data-field='course' class="col-sm-2">Course</th>
+                    <th data-sortable='true' data-field='category' class="col-sm-2">Category</th>
                     <th data-sortable='true' data-field='name' class="col-sm-5">Competency</th>
-                    <th data-sortable='true' data-field='category' class="col-sm-3">Category</th>
-                    <th data-sortable='true' data-field='source_id' class="col-sm-3">Source ID</th>
+                    <th data-sortable='true' data-field='source_id' class="col-sm-2">ID</th>
                     <th data-sortable='true' data-field='active' class="col-sm-1">Active</th>
                 </tr>
             </thead>
@@ -48,8 +49,9 @@
             <tbody>
                 {% for competency in object_list %}
                     <tr>
-                        <td>{{ competency.name }}</td>
+                        <td>{{ competency.course }}</td>
                         <td>{{ competency.category }}</td>
+                        <td>{{ competency.name }}</td>
                         <td><small>{{ competency.source_id|default_if_none:"" }}</small></td>
                         <td>
                             {% if competency.active %}

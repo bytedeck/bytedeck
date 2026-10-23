@@ -87,11 +87,22 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assertContains(response, f'href="{reverse("competencies:list")}"', count=3)
 
     def test_list_view__shows_competencies(self):
-        """ The list view renders the deck's competencies for staff """
+        """ The list view renders the deck's competencies for staff, with their courses """
         self.client.force_login(self.staff)
-        baker.make(Competency, name='Think critically')
+        baker.make(Competency, name='Think critically', course='ADST 9')
         response = self.assert200('competencies:list')
         self.assertContains(response, 'Think critically')
+        self.assertContains(response, ">Course</th>")
+        self.assertContains(response, "<td>ADST 9</td>")
+
+    def test_import_form__bundled_sets_listed_by_name(self):
+        """ The bundled sets are offered alphabetically by name, so a course's grades sit together """
+        self.client.force_login(self.staff)
+        response = self.assert200('competencies:import')
+
+        labels = [label for key, label in response.context['form'].fields['bundled_set'].choices if key]
+        self.assertEqual(labels, sorted(labels, key=str.lower))
+        self.assertIn('BC Media Design 11 Curricular Competencies', labels)
 
     def test_import_flow__bundled_set(self):
         """ The full UI loop: pick a bundled set, preview it, import everything """
@@ -226,7 +237,7 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/csv')
         content = response.content.decode()
-        self.assertTrue(content.startswith('name,category,description,source_id'))
+        self.assertTrue(content.startswith('course,category,name,description,source_id'))
         self.assertIn('Exportable', content)
 
     def test_export__unknown_format_404s(self):

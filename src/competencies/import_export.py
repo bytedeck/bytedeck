@@ -11,6 +11,7 @@ that can be moved between decks (or curated in this repo as bundled curriculum d
         "subject": "Mathematics",
         "grade": "8",
         "source_url": "https://curriculum.gov.bc.ca/curriculum/mathematics/8/core",
+        "course": "Mathematics 8",
         "entries": [
             {
                 "source_id": "bc:math:8:reasoning-1",
@@ -21,16 +22,18 @@ that can be moved between decks (or curated in this repo as bundled curriculum d
         ]
     }
 
-Set metadata other than ``entries`` is informational. Each entry requires a ``name``;
-``source_id``, ``description``, and ``category`` are optional. Every field is text (a JSON
-string), and ``source_url``, when given, must be an http(s) URL. ``source_id`` is a stable
+Set metadata other than ``entries`` and ``course`` is informational. ``course`` is the course
+(or framework, e.g. "Core") the competencies come from, which pickers show before the category;
+an entry may give its own ``course``, and one that doesn't takes the set's. Each entry requires a
+``name``; ``course``, ``source_id``, ``description``, and ``category`` are optional. Every field is
+text (a JSON string), and ``source_url``, when given, must be an http(s) URL. ``source_id`` is a stable
 identifier into the source taxonomy (convention for BC: ``bc:{subject}:{grade}:{slug}``)
 and is the key used to de-duplicate re-imports and, later, to match competencies
 across decks in the Library.
 
 CSV is supported as a lower-friction alternative for teacher-authored sets. The
-required header row is ``name,category,description,source_id`` (column order doesn't
-matter; only ``name`` is required to have a value). Exports produce the same layout,
+required header row is ``course,category,name,description,source_id`` (column order doesn't
+matter, and only ``name`` is required). Exports produce the same layout,
 so export -> import round-trips work in both formats.
 
 Bundled curriculum datasets live in this app's ``data/`` directory, one JSON file
@@ -52,14 +55,14 @@ from .models import Competency
 FORMAT_NAME = 'bytedeck-competency-set'
 FORMAT_VERSION = 1
 
-CSV_FIELDS = ['name', 'category', 'description', 'source_id']
+CSV_FIELDS = ['course', 'category', 'name', 'description', 'source_id']
 
 # The source_url is rendered as a link in the import preview, so anything that a browser would
 # run rather than navigate to (javascript:, data:, ...) is refused.
 SOURCE_URL_SCHEMES = ('http', 'https')
 
 # The Competency fields with a max_length, checked before anything is saved.
-LENGTH_LIMITED_FIELDS = ('name', 'category', 'source_id')
+LENGTH_LIMITED_FIELDS = ('course', 'name', 'category', 'source_id')
 
 DATA_DIR = Path(__file__).resolve().parent / 'data'
 
@@ -106,6 +109,8 @@ def validate_competency_set(data):
     if not isinstance(entries, list) or not entries:
         raise ValidationError("The competency set has no entries.")
 
+    set_course = _text(data.get('course'), "The set's course")
+
     normalized_entries = []
     for i, entry in enumerate(entries, start=1):
         if not isinstance(entry, dict):
@@ -114,6 +119,7 @@ def validate_competency_set(data):
         normalized = {field: _text(entry.get(field), f"Entry {i}: {field}") for field in CSV_FIELDS}
         if not normalized['name']:
             raise ValidationError(f"Entry {i} is missing a name.")
+        normalized['course'] = normalized['course'] or set_course
 
         for field in LENGTH_LIMITED_FIELDS:
             max_length = Competency._meta.get_field(field).max_length
@@ -139,6 +145,7 @@ def validate_competency_set(data):
         'format': FORMAT_NAME,
         'version': version,
         **metadata,
+        'course': set_course,
         'entries': normalized_entries,
     }
 
@@ -364,6 +371,10 @@ def import_competency_set(competency_set, selected_indexes=None):
                 existing.name = entry['name']
                 existing.description = entry['description']
                 existing.category = entry['category']
+                # like the source_id, a course is only ever filled in: an entry without one (a CSV
+                # with no course column) leaves the course a teacher or another set gave it
+                if entry['course']:
+                    existing.course = entry['course']
                 if entry['source_id']:
                     existing.source_id = entry['source_id']
                 existing.full_clean()
@@ -371,6 +382,7 @@ def import_competency_set(competency_set, selected_indexes=None):
                 updated += 1
             else:
                 competency = Competency(
+                    course=entry['course'],
                     name=entry['name'],
                     description=entry['description'],
                     category=entry['category'],
@@ -398,8 +410,10 @@ def export_competency_set(queryset=None, name=''):
         'subject': '',
         'grade': '',
         'source_url': '',
+        'course': '',
         'entries': [
             {
+                'course': competency.course,
                 'source_id': competency.source_id or '',
                 'name': competency.name,
                 'description': competency.description,
