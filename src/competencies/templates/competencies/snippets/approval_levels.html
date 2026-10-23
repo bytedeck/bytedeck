@@ -1,0 +1,28 @@
+{% comment %}
+  A submission's competency levels on its approval form (the competency_approval_levels tag):
+  one segmented control per competency the quest gives evidence of, pre-selected to the link's
+  default level, so approving with the defaults takes no extra clicks. Approving records the
+  selected levels; returning or commenting records nothing. approval-levels.js shows the nudge
+  when a competency is set to the lowest level.
+{% endcomment %}
+{% if rows %}
+<div class="competency-approval-levels">
+  <p class="competency-approval-levels-heading"><strong>Competencies</strong> <small class="text-muted">(recorded when you approve)</small></p>
+  {% for row in rows %}
+  <div class="competency-approval-row">
+    <span class="competency-approval-name">{{ row.competency.name }}</span>
+    <div class="btn-group btn-group-xs" data-toggle="buttons" role="group" aria-label="{{ row.competency.name }}: proficiency level">
+      {% for level, label, selected in row.levels %}
+      <label class="btn btn-default competency-level competency-level-{{ level }}{% if selected %} active{% endif %}">
+        <input type="radio" name="{{ row.field_name }}" value="{{ level }}" autocomplete="off"{% if selected %} checked{% endif %}>{{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  <p class="help-block text-warning competency-lowest-nudge hidden" role="status">
+    <i class="fa fa-exclamation-triangle fa-fw"></i>
+    {{ lowest_label }} usually means the quest isn't complete yet: return it for revision instead? You can still approve it.
+  </p>
+</div>
+{% endif %}

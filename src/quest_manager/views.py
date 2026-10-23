@@ -21,6 +21,7 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
     Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Q, Subquery, Sum, Value, When,
+    prefetch_related_objects,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -37,6 +38,7 @@ from badges.models import BadgeAssertion
 from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
+from competencies.assessments import record_approval_assessments
 from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
@@ -1480,7 +1482,11 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "</span>"
             )
             blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
-            self.submission.mark_approved()
+            # The competency levels on the form (each pre-selected to its default) are recorded
+            # with the approval, in one transaction so neither is saved without the other.
+            with transaction.atomic():
+                self.submission.mark_approved()
+                record_approval_assessments(self.submission, assessed_by=self.request.user, data=self.request.POST)
         elif "comment_button" in self.request.POST:
             note_verb = "commented on"
             icon = (
@@ -2131,12 +2137,17 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     # The award list costs a prerequisite count per badge, so it is fetched once for the page
     # and handed to every row; fetched per row, a page of 30 submissions costs 750 queries.
     award_choices = SubmissionQuickReplyForm.build_award_choices()
+    competencies_enabled = SiteConfig.get().enable_competencies
     for tab in tab_list:
         for submission in tab["submissions"]:
             submission.quick_reply_form = SubmissionQuickReplyForm(
                 award_choices=award_choices,
                 auto_id=f"id_quick_reply_{submission.id}_%s",
             )
+        # Each row's approve buttons show its quest's competency levels, so the quests' links are
+        # fetched for the whole page at once rather than once per row.
+        if competencies_enabled:
+            prefetch_related_objects(list(tab["submissions"]), "quest__quest_competencies")
 
     # Where that button's two halves go, on the tabs that list one teacher's groups by default:
     # (their own groups, every group). A quest's own past approvals are every teacher's, so it
@@ -2610,7 +2621,11 @@ def complete(request, submission_id):
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
-            submission.mark_approved()
+            # No teacher approves this quest, so its competency evidence is recorded at each
+            # link's default level with no assessor (system-assessed).
+            with transaction.atomic():
+                submission.mark_approved()
+                record_approval_assessments(submission)
 
             # mark_approved() just set do_not_grant_xp to False (its transfer arg defaults to
             # False), so this is always true on the auto-approve path; the skip-notify branch
