@@ -1475,6 +1475,15 @@ table[data-toggle="table"].bt-reveal {
     max-height: 40px;
 }
 
+/* A table opened in a bootstrap-table's detail row (the preview under a quest or a submission on
+   the quest tabs: a submission's answers, a quest's questions) reads from the top of each cell,
+   as a Bootstrap table does anywhere else. bootstrap-table centres its own cells vertically,
+   and its selector reaches the cells of every table nested inside them too (#2927). */
+.bootstrap-table .fixed-table-container .table .table td,
+.bootstrap-table .fixed-table-container .table .table th {
+    vertical-align: top;
+}
+
 /* The label over each answer and solution in a submission's question answers
    (questions/snippets/comment_answers.html). On a wide screen the header row names the
    columns, so the labels are for a narrow one, where the columns stack (#2927). */
