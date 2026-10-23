@@ -53,6 +53,8 @@
     </form>
 
     <h3>{{ quest.name }}</h3>
-    {% include 'quest_manager/quest_detail_content.html' %}
+    {% with dont_show_competencies=True %}
+      {% include 'quest_manager/quest_detail_content.html' %}
+    {% endwith %}
   {% endif %}
 {% endblock %}

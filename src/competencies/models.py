@@ -69,6 +69,17 @@ class Competency(models.Model):
         return self.name
 
 
+class QuestCompetencyManager(models.Manager):
+    """ Default manager for QuestCompetency, so related managers such as quest.quest_competencies
+    use it too. A link is nearly always shown by its competency's name, and the default ordering
+    joins the competency anyway, so it is loaded in the same query.
+    """
+
+    def get_queryset(self):
+        """ Returns the links with their competencies selected in the same query. """
+        return super().get_queryset().select_related('competency')
+
+
 class QuestCompetency(models.Model):
     """ Through-table linking a Quest to a Competency, carrying the default proficiency level
     that approving a submission of this quest generally demonstrates.
@@ -87,6 +98,8 @@ class QuestCompetency(models.Model):
         help_text="The proficiency level that completing this quest generally demonstrates. "
                   "Teachers can adjust the level for individual students when approving submissions."
     )
+
+    objects = QuestCompetencyManager()
 
     class Meta:
         constraints = [

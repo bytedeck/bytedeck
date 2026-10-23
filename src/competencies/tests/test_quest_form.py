@@ -1,3 +1,6 @@
+from unittest import mock
+
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from crispy_forms.utils import render_crispy_form
@@ -153,17 +156,31 @@ class QuestCompetenciesFormTest(ByteDeckTenantTestCase):
         )
 
     def test_save__unchanged_link_is_not_rewritten(self):
-        """ A kept link whose level didn't change is left as it is (same row) """
+        """ A kept link whose level didn't change is not saved again """
         enable_competencies()
         quest = baker.make(Quest)
         link = QuestCompetency.objects.create(quest=quest, competency=self.thinking, default_level=ProficiencyLevel.DEVELOPING)
 
         form = QuestForm(data=self.data([self.thinking], thinking=ProficiencyLevel.DEVELOPING), instance=quest)
         self.assertTrue(form.is_valid(), form.errors)
-        form.save()
+        with mock.patch.object(QuestCompetency, 'save') as save:
+            form.save()
 
+        save.assert_not_called()
         self.assertEqual(list(QuestCompetency.objects.filter(quest=quest).values_list('pk', 'default_level')),
                          [(link.pk, ProficiencyLevel.DEVELOPING)])
+
+    def test_save__link_failure_rolls_back_the_quest(self):
+        """ The quest and its links save together: if a link fails to save, the quest isn't saved either """
+        enable_competencies()
+        form = QuestForm(data=self.data([self.thinking]))
+        self.assertTrue(form.is_valid(), form.errors)
+
+        with mock.patch.object(QuestCompetency, 'full_clean', side_effect=ValidationError("bad link")):
+            with self.assertRaises(ValidationError):
+                form.save()
+
+        self.assertFalse(Quest.objects.filter(name="Test Quest").exists())
 
     def test_save__commit_false_leaves_the_links_to_the_caller(self):
         """ With commit=False nothing is saved; the caller saves the quest, then save_competencies() """

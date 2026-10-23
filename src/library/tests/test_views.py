@@ -400,6 +400,21 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assert200URL(url)
         self.assertContains(response, self.local_quest.name)
 
+    def test_ExportQuestView__hides_competencies(self):
+        """The export confirmation page lists no competencies, since an export doesn't carry the
+        quest's competency links to the Library (#1915)."""
+        self.config.enable_competencies = True
+        self.config.full_clean()
+        self.config.save()
+        QuestCompetency.objects.create(quest=self.local_quest, competency=baker.make(Competency, name="Unshared Competency"))
+        self.client.force_login(self.config.deck_owner)
+
+        response = self.client.get(reverse('library:export_quest', args=[self.local_quest.import_id]))
+
+        self.assertContains(response, self.local_quest.name)
+        self.assertNotContains(response, "competency-chip")
+        self.assertNotContains(response, "Unshared Competency")
+
     def test_require_export_permission__allowed_non_owner_and_staff_permission_enabled(self):
         """
         Test that a non-owner can export a quest when staff export is enabled.
@@ -3349,10 +3364,9 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
         )
 
-    def test_ImportQuestView__shows_the_library_quests_own_competencies(self):
-        """The quest import preview shows the Library quest's competencies read from the Library,
-        not the ones linked to this deck's quest at the same id, which a lazily-evaluated
-        `quest.quest_competencies` would find once the schema switches back."""
+    def test_ImportQuestView__hides_competencies(self):
+        """The quest import preview lists no competencies: neither the Library quest's, which an
+        import doesn't bring along (#1915), nor those linked to this deck's quest at the same id."""
         config = SiteConfig.get()
         config.enable_competencies = True
         config.full_clean()
@@ -3368,7 +3382,8 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Library Competency")
+        self.assertNotContains(response, "competency-chip")
+        self.assertNotContains(response, "Library Competency")
         self.assertNotContains(response, "Local-only Competency")
 
     def test_ImportQuestView__shows_the_library_quests_own_prereqs(self):

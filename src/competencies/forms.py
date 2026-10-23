@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 
 from crispy_forms.layout import HTML
@@ -142,7 +143,7 @@ class QuestCompetenciesFormMixin:
             required=False,
             initial=list(links),
             widget=QuestCompetenciesSelect2Widget(attrs={'data-theme': 'bootstrap'}),
-            help_text="The competencies completing this quest gives students evidence of. "
+            help_text="The competencies that students show evidence of by completing this quest. "
                       "Set the default proficiency level for each below; teachers can adjust it per student when approving.",
         )
 
@@ -178,7 +179,8 @@ class QuestCompetenciesFormMixin:
         return {'rows': rows, 'any_selected': any(row[2] for row in rows)}
 
     def save(self, commit=True):
-        """ Save the quest and, when committing, its competency links (see save_competencies).
+        """ Save the quest and, when committing, its competency links (see save_competencies), in
+        one transaction so a failure saving the links doesn't leave the quest saved without them.
 
         Args:
             commit (bool): passed through to ``ModelForm.save``; with commit=False the caller
@@ -187,8 +189,10 @@ class QuestCompetenciesFormMixin:
         Returns:
             Quest: the saved (or unsaved, with commit=False) quest.
         """
-        quest = super().save(commit=commit)
-        if commit:
+        if not commit:
+            return super().save(commit=False)
+        with transaction.atomic():
+            quest = super().save()
             self.save_competencies(quest)
         return quest
 
