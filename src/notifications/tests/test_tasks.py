@@ -303,6 +303,65 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertIn(str(notifications[0]), html_content)  # Links to notifications
         self.assertIn(str(notifications[1]), html_content)  # Links to notifications
 
+    def test_generate_notification_email__greets_the_recipient_by_name_and_username(self):
+        """The greeting names the account as well as the person (#1554): someone with an account
+        on more than one deck, or a teacher with a test student account, can't tell from "Hello
+        Test Stu" which of their accounts the notifications are for. With no name on the account,
+        the username is the whole greeting."""
+        named = User.objects.create_user('test.stu', email="test.stu@email.com", first_name="Test", last_name="Stu")
+        baker.make('courses.CourseStudent', user=named, semester=self.sem)
+        for user in (named, self.test_student1):
+            baker.make(
+                Notification, recipient=user,
+                sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+            )
+
+        named_email = generate_notification_email(named, "https://test.com")
+        unnamed_email = generate_notification_email(self.test_student1, "https://test.com")
+
+        self.assertIn("Hello Test Stu (test.stu),", named_email.alternatives[0][0])
+        self.assertIn("Hello Test Stu (test.stu),", named_email.body)
+        self.assertIn("Hello test_student,", unnamed_email.alternatives[0][0])
+
+    def test_generate_notification_email__signs_off_with_the_deck(self):
+        """The email signs off with the deck's email signature, or its name when it has none,
+        which says which deck it's from in the email itself (#1554), as the announcement
+        email does."""
+        baker.make(
+            Notification, recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        config = SiteConfig.get()
+        config.site_name = "Testing Deck"
+        config.save()
+
+        email = generate_notification_email(self.test_student1, "https://test.com")
+        self.assertIn("Testing Deck", email.alternatives[0][0])
+
+        config.outgoing_email_signature = "Mr. T, Digital Art"
+        config.save()
+
+        email = generate_notification_email(self.test_student1, "https://test.com")
+        self.assertIn("Mr. T, Digital Art", email.alternatives[0][0])
+        self.assertIn("Mr. T, Digital Art", email.body)
+
+    def test_generate_notification_email__plain_text_lists_the_notifications(self):
+        """The plain-text version, which a mail client shows when it doesn't show HTML, says
+        what the HTML version says, links included (#1554), rather than Python's listing of
+        the notification objects."""
+        notification = baker.make(
+            Notification, recipient=self.test_student1, verb="commented on", target_url="/announcements/1/",
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        email = generate_notification_email(self.test_student1, "https://test.com")
+
+        self.assertNotIn("QuerySet", email.body)
+        self.assertIn("Unread notifications:", email.body)
+        self.assertIn("commented on", email.body)
+        self.assertIn(f"/notifications/read/{notification.id}/", email.body)
+        self.assertIn("https://test.com/profiles/edit/own/", email.body)  # where to stop the emails
+
     @override_settings(DEFAULT_FROM_EMAIL="noreply@bytedeck.com")
     def test_generate_notification_email__from_names_the_deck(self):
         """The From header shows the deck's domain as the sender name while keeping the

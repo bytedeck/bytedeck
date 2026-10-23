@@ -1,0 +1,17 @@
+{% load comment_tags question_tags %}
+{% comment %}
+  A stored file a browser would run a script from (HTML, SVG, XML, MHTML), offered as a download
+  and never linked at its storage URL: a browser navigating there runs whatever script the file
+  carries, in the session of whoever opened it (#2559). An SVG is shown as well, through an
+  <img>, where browsers run no script at all, so a picture can still be looked at.
+
+  Expects `file` (a file field's value) and `download_url` (a view that serves it with
+  Content-Disposition: attachment). Pass `thumb=True` in a narrow space, such as a table cell.
+{% endcomment %}
+{% if file|is_displayable_svg %}
+  <img class="{% if thumb %}question-media-thumb{% else %}question-media{% endif %}" src="{{ file.url }}" alt="{{ file|filename|striptags }}">
+  <br>
+{% endif %}
+<a href="{{ download_url }}">
+  <i class="fa fa-fw fa-download"></i>{% if thumb %}{{ file|filename|truncatechars:20 }}{% else %}{{ file|filename }}{% endif %}</a>
+<small class="text-muted">(downloads)</small>

@@ -52,6 +52,21 @@ SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE = {
 }
 
 
+def is_script_capable_file(file):
+    """Whether a stored file is one a browser would run a script from, judged by its name.
+
+    Args:
+        file: a file field's value (a ``FieldFile``), or None/empty when there is no file.
+
+    Returns:
+        bool: True for a stored HTML, SVG, XML or MHTML file; False for anything else,
+        including no file at all.
+    """
+    if not file:
+        return False
+    return os.path.splitext(file.name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS
+
+
 class Question(models.Model):
     """A single additional submission field a teacher attaches to a Quest.
 
@@ -208,6 +223,22 @@ class Question(models.Model):
 
         return SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE.get(self.allowed_file_type, NO_SCRIPT_CAPABLE_TYPES)
 
+    @property
+    def solution_file_is_script_capable(self):
+        """Whether this question's solution file is one a browser would run a script from.
+
+        A solution file can be of any type, so a teacher can show the marker an example in the
+        format the students answer in (#2924). Such a file is handed over as a download, never
+        linked at its storage URL, for the reason an answer's is (#2559). A quest imported from
+        the Shared Library brings its solution file with it, so the teacher who uploaded it
+        need not be on this deck at all.
+
+        Returns:
+            bool: True for a stored HTML, SVG, XML or MHTML file; False for anything else,
+            including a question with no solution file.
+        """
+        return is_script_capable_file(self.solution_file)
+
 
 class QuestionSubmission(models.Model):
     """A student's answer to a single Question, as part of one quest submission cycle.
@@ -291,6 +322,4 @@ class QuestionSubmission(models.Model):
             bool: True for a stored HTML, SVG, XML or MHTML file; False for anything else,
             including an answer with no file.
         """
-        if not self.response_file:
-            return False
-        return os.path.splitext(self.response_file.name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS
+        return is_script_capable_file(self.response_file)

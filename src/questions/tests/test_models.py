@@ -248,6 +248,17 @@ class QuestionModelTest(ByteDeckTenantTestCase):
         self.assertTrue(question.solution_file.file.name.endswith(".mp4"))
         self.assertEqual(question.solution_file.read(), b"file_content")
 
+    def test_solution_file_is_script_capable__judged_by_the_stored_name(self):
+        """A stored HTML, SVG, XML or MHTML solution is script-capable, whatever its case, and
+        anything else, or no solution file at all, is not (#2924)."""
+        for name in ("index.html", "logo.SVG", "data.xml", "page.mhtml"):
+            with self.subTest(name=name):
+                self.assertTrue(Question(solution_file=f"quest/question/solution/{name}").solution_file_is_script_capable)
+        for name in ("photo.png", "clip.mp4", "notes.pdf"):
+            with self.subTest(name=name):
+                self.assertFalse(Question(solution_file=f"quest/question/solution/{name}").solution_file_is_script_capable)
+        self.assertFalse(Question().solution_file_is_script_capable)
+
     def test_quest_delete__cascades_to_questions(self):
         """Deleting a quest deletes its questions."""
         new_quest = baker.make(Quest, name="Quest about to be deleted")
