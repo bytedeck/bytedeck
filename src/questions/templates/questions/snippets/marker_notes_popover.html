@@ -1,14 +1,18 @@
+{% load comment_tags %}
 {% comment %}
   A question's marker notes, behind an info button that opens them in a popover (#2923).
   Expects `question`.
 
-  The notes are rich text a teacher wrote in the advanced editor, and only staff are shown
-  them, so they appear as written, images, links and formatting included, as a quest's own
-  instructions do. They wait in a <template> beside the button: the browser neither shows a
+  The notes are rich text a teacher wrote in the advanced editor, so they appear as written,
+  images, links, tables and formatting included, less anything that could run a script, which
+  the comment sanitizer removes. A quest imported from the Shared Library brings notes written
+  on another deck, and those must not run in the session of the staff reading them here.
+  Sanitized as they are shown rather than as they are saved, so notes stored before this are
+  covered too. They wait in a <template> beside the button: the browser neither shows a
   template's content nor loads its images until the popover is opened. The popover itself is
   set up once for the whole site, in javascript.html.
 {% endcomment %}
 <button type="button" class="btn btn-link marker-notes-popover" title="Marker Notes" aria-label="Marker notes">
   <i class="fa fa-fw fa-lg fa-info-circle"></i>
 </button>
-<template class="marker-notes-content">{{ question.marker_notes|safe }}</template>
+<template class="marker-notes-content">{{ question.marker_notes|sanitize_comment_html|safe }}</template>

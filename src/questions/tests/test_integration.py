@@ -1185,6 +1185,23 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "selector: '.marker-notes-popover'")
         self.assertContains(response, "sanitize: false")
 
+    def test_quest_detail__marker_notes_drop_what_could_run_a_script(self):
+        """Marker notes keep their formatting but lose script and event handlers on the way to
+        the page: a quest imported from the Shared Library brings notes written on another
+        deck, which must not run in the session of the staff reading them (#2923)."""
+        self.short_question.marker_notes = (
+            '<p><b>Check</b> it <img src="/media/x.png" onerror="alert(1)"></p><script>alert(2)</script>')
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        notes = re.search(r'<template class="marker-notes-content">(.*?)</template>', response.content.decode(), re.S).group(1)
+        self.assertIn('<b>Check</b>', notes)
+        self.assertIn('<img src="/media/x.png">', notes)
+        self.assertNotIn("onerror", notes)
+        self.assertNotIn("<script>", notes)
+
     def test_quest_detail__questions_panel_follows_quest_details(self):
         """Staff see the Submission Questions panel right after Quest Details, ahead of the
         Submission Instructions and Instructor Notes (#2922)."""

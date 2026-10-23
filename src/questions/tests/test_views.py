@@ -894,3 +894,16 @@ class SolutionFileDownloadViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, f'<img class="question-media-thumb" src="{question.solution_file.url}"')
         self.assertContains(response, reverse("questions:solution_file_download", args=[question.pk]))
         self.assertNotContains(response, f'href="{question.solution_file.url}"')
+
+    def test_question_table__a_library_preview_names_a_script_capable_solution_without_a_link(self):
+        """A Library preview shows a question from another schema, where its id names some other
+        question, so a script-capable solution is named there without a download link, and
+        without a link to where it is stored (#2924)."""
+        question = self.question()
+
+        html = render_to_string(
+            "questions/snippets/question_table.html", {"questions": [question], "dont_edit_questions": True})
+
+        self.assertIn(os.path.basename(question.solution_file.name), html)
+        self.assertNotIn(reverse("questions:solution_file_download", args=[question.pk]), html)
+        self.assertNotIn(question.solution_file.url, html)
