@@ -3,7 +3,8 @@
 <!DOCTYPE html>
 <html>
 <body>
-  <p>Hello {{user.get_full_name}},</p>
+  {# the username says which account this is for, to someone with accounts on several decks (#1554) #}
+  <p>Hello {% if user.get_full_name %}{{ user.get_full_name }} ({{ user.username }}){% else %}{{ user.username }}{% endif %},</p>
 
   {% if user.is_staff %}
   <p>Quest submissions awaiting your approval:</p>
