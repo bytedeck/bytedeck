@@ -77,6 +77,22 @@ class QuestCompetenciesFormTest(ByteDeckTenantTestCase):
         self.assertEqual(form.fields[competency_level_field_name(self.thinking.pk)].initial, ProficiencyLevel.PROFICIENT)
         self.assertNotIn(competency_level_field_name(self.retired.pk), form.fields)
 
+    def test_add_competency_fields__options_name_the_course_and_category(self):
+        """ The chips field's options read "Course: Category: Name", so like-worded competencies
+        from different courses can be told apart; the level table names the course and category too """
+        enable_competencies()
+        self.thinking.course = 'Core'
+        self.thinking.full_clean()
+        self.thinking.save()
+
+        form = QuestForm(data=self.data([self.thinking]))
+        field = form.fields[COMPETENCIES_FIELD]
+        rendered = render_crispy_form(form)
+
+        self.assertEqual(field.label_from_instance(self.thinking), 'Core: Thinking: Critical Thinking')
+        self.assertIn('>Core: Thinking: Critical Thinking</option>', rendered)
+        self.assertIn('<small class="text-muted">Core: Thinking</small>', rendered)
+
     def test_add_competency_fields__level_choices_use_the_decks_labels(self):
         """ The level pickers show this deck's custom proficiency scale labels """
         enable_competencies()
