@@ -175,6 +175,14 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(CompetencyAssessment.objects.count(), 4)
 
+    def test_approve__a_repeated_approval_records_nothing_more(self):
+        """ A second Approve on a submission that is already approved (a double-click) doesn't
+        record a second set of assessments """
+        self.post_decision('approve_button')
+        self.post_decision('approve_button')
+
+        self.assertEqual(CompetencyAssessment.objects.count(), 2)
+
     def test_approve__records_nothing_when_disabled_or_without_competencies(self):
         """ No evidence is recorded with the flag off, nor for a quest with no competencies """
         self.post_decision('approve_button', submission=self.make_submission(quest=baker.make(Quest)))
@@ -198,6 +206,23 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         assessment = CompetencyAssessment.objects.get()
         self.assertEqual((assessment.competency, assessment.level, assessment.assessed_by), (self.thinking, ProficiencyLevel.DEVELOPING, None))
         self.assertEqual(assessment.source_object, submission)
+
+    def test_complete__auto_approved_quest_records_once(self):
+        """ Completing an already auto-approved submission again (a duplicate submit) doesn't record
+        its competencies a second time """
+        auto_quest = baker.make(Quest, xp=5, verification_required=False)
+        QuestCompetency.objects.create(quest=auto_quest, competency=self.thinking)
+        submission = self.make_submission(quest=auto_quest, is_completed=False, draft_comment=baker.make(Comment, text='draft'))
+        self.client.force_login(self.student)
+        url = reverse('quests:complete', args=[submission.pk])
+
+        self.client.post(url, data={'complete': True, 'comment_text': 'done'})
+        submission.refresh_from_db()
+        submission.draft_comment = baker.make(Comment, text='draft again')
+        submission.save()
+        self.client.post(url, data={'complete': True, 'comment_text': 'done again'})
+
+        self.assertEqual(CompetencyAssessment.objects.count(), 1)
 
     def test_complete__quest_needing_approval_records_nothing_yet(self):
         """ Handing in a quest that needs a teacher's approval records nothing until it is approved """

@@ -1483,10 +1483,14 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
             blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
             # The competency levels on the form (each pre-selected to its default) are recorded
-            # with the approval, in one transaction so neither is saved without the other.
+            # with the approval, in one transaction so neither is saved without the other. Only an
+            # approval that changes the submission records them, so a double-clicked Approve doesn't
+            # record a second set; a return clears is_approved, so approving after one does.
+            newly_approved = not self.submission.is_approved
             with transaction.atomic():
                 self.submission.mark_approved()
-                record_approval_assessments(self.submission, assessed_by=self.request.user, data=self.request.POST)
+                if newly_approved:
+                    record_approval_assessments(self.submission, assessed_by=self.request.user, data=self.request.POST)
         elif "comment_button" in self.request.POST:
             note_verb = "commented on"
             icon = (
@@ -2622,10 +2626,13 @@ def complete(request, submission_id):
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
             # No teacher approves this quest, so its competency evidence is recorded at each
-            # link's default level with no assessor (system-assessed).
+            # link's default level with no assessor (system-assessed): once, not again for a
+            # duplicate submit of a submission this already approved.
+            newly_approved = not submission.is_approved
             with transaction.atomic():
                 submission.mark_approved()
-                record_approval_assessments(submission)
+                if newly_approved:
+                    record_approval_assessments(submission)
 
             # mark_approved() just set do_not_grant_xp to False (its transfer arg defaults to
             # False), so this is always true on the auto-approve path; the skip-notify branch
