@@ -163,6 +163,24 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "You must provide a text response")
         self.assertEqual(content.count("summernote.min.js"), 1)
 
+    def test_complete__failed_submit_rerenders_the_comment_editor(self):
+        """A submission bounced back for a validation error shows the comment box as the editor,
+        with what the student wrote in it, and the attachments control below it (#2926).
+
+        With no files attached, the POST is validated by `SubmissionQuickReplyFormStudent`,
+        whose `comment_text` is a plain textarea and which has no attachments field. Shown
+        back as it is, the page's Additional Submission Comments box is that textarea, holding
+        the editor's markup (`<p><br></p>` for an empty comment) as text.
+        """
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "<p>My notes</p>", **self.formset_data(short_text="")})
+
+        self.assertEqual(response.status_code, 200, "expected the validation-error re-render")
+        self.assertContains(response, "initSummernote_id_comment_text()")
+        self.assertContains(response, 'name="attachments"')
+        self.assertEqual(response.context["submission_form"]["comment_text"].value(), "<p>My notes</p>")
+
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset."""
         plain_quest = baker.make(Quest)
