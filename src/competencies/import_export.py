@@ -98,7 +98,8 @@ def validate_competency_set(data):
         raise ValidationError(f"Not a competency set: expected \"format\": \"{FORMAT_NAME}\".")
 
     version = data.get('version')
-    if not isinstance(version, int) or version < 1 or version > FORMAT_VERSION:
+    # bool is a subclass of int, so a version of true would otherwise pass as 1
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1 or version > FORMAT_VERSION:
         raise ValidationError(f"Unsupported competency set version: {version!r} (this deck supports up to {FORMAT_VERSION}).")
 
     entries = data.get('entries')
@@ -125,9 +126,14 @@ def validate_competency_set(data):
     if len(source_ids) != len(set(source_ids)):
         raise ValidationError("The competency set contains duplicate source_ids.")
 
-    metadata = {key: _text(data.get(key), key) for key in ('name', 'jurisdiction', 'subject', 'grade', 'source_url')}
-    if metadata['source_url'] and urlsplit(metadata['source_url']).scheme not in SOURCE_URL_SCHEMES:
-        raise ValidationError("source_url must be an http or https URL.")
+    metadata = {key: _text(data.get(key), f"The set's {key}") for key in ('name', 'jurisdiction', 'subject', 'grade', 'source_url')}
+    if metadata['source_url']:
+        try:
+            scheme = urlsplit(metadata['source_url']).scheme
+        except ValueError:  # urlsplit rejects some malformed URLs outright, e.g. "http://[::1"
+            scheme = None
+        if scheme not in SOURCE_URL_SCHEMES:
+            raise ValidationError("source_url must be an http or https URL.")
 
     return {
         'format': FORMAT_NAME,
@@ -176,6 +182,11 @@ def parse_csv_set(raw, name=''):
         raise ValidationError(
             f"Unknown CSV column(s): {', '.join(unknown)}. Expected columns: {', '.join(CSV_FIELDS)}."
         )
+    # two headers that normalize to the same name ("Name" and "name") would leave one column's
+    # values silently ignored
+    duplicates = sorted({h for h in header if h and header.count(h) > 1})
+    if duplicates:
+        raise ValidationError(f"Duplicate CSV column(s): {', '.join(duplicates)}. Each column can appear only once.")
     # read the rows under the normalized names, so "Name" or " name" columns are found as "name"
     reader.fieldnames = header
 

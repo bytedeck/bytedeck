@@ -76,6 +76,11 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps(make_set([{'name': 'x'}], version=99)))
 
+    def test_validate_competency_set__boolean_version(self):
+        """ A version of true is rejected, although Python treats True as the int 1 """
+        with self.assertRaises(ValidationError):
+            validate_competency_set(make_set([{'name': 'x'}], version=True))
+
     def test_parse_json_set__no_entries(self):
         """ A set with an empty entries list is rejected """
         with self.assertRaises(ValidationError):
@@ -171,6 +176,12 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
         self.assertEqual(competency_set['entries'][0]['name'], 'Think')
         self.assertEqual(competency_set['entries'][0]['category'], 'Thinking')
 
+    def test_parse_csv_set__duplicate_columns(self):
+        """ Two headers naming the same column, in any case, are rejected instead of one
+        column's values being silently dropped """
+        with self.assertRaisesMessage(ValidationError, "Duplicate CSV column(s): name"):
+            parse_csv_set("name,Name\nThink,Reflect\n")
+
     def test_parse_csv_set__row_with_more_cells_than_the_header(self):
         """ A row with surplus cells is rejected with a ValidationError rather than crashing """
         with self.assertRaises(ValidationError):
@@ -186,9 +197,15 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
                     validate_competency_set(make_set([entry]))
 
     def test_validate_competency_set__rejects_non_string_metadata(self):
-        """ Set metadata such as the set name must be text too """
-        with self.assertRaises(ValidationError):
+        """ Set metadata such as the set name must be text too, and the error names it as the
+        set's field rather than an entry's """
+        with self.assertRaisesMessage(ValidationError, "The set's name must be text."):
             validate_competency_set(make_set([{'name': 'Think'}], name=['a']))
+
+    def test_validate_competency_set__malformed_source_url(self):
+        """ A source_url that urlsplit can't parse at all is a validation error, not a crash """
+        with self.assertRaisesMessage(ValidationError, "source_url must be an http or https URL."):
+            validate_competency_set(make_set([{'name': 'Think'}], source_url='http://[::1'))
 
     def test_validate_competency_set__source_url_must_be_http_or_https(self):
         """ source_url is rendered as a link in the import preview, so only http(s) URLs (or none)
