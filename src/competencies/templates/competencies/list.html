@@ -2,8 +2,8 @@
 {% load static %}
 
 {% block head %}
-<link href="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.css" rel="stylesheet">
-<script src="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.js"></script>
+<link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
+<script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>
 {% endblock %}
 
 {% block heading_inner %}
@@ -27,6 +27,7 @@
 {% block content %}
 
     {% if object_list %}
+        {% include 'snippets/table_loading.html' %}
         <table
             data-toggle='table'
             data-search='true'
