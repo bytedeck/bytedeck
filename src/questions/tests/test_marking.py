@@ -243,6 +243,28 @@ class AnswerMarkingTest(QuestionSubmissionFlowTestBase):
 
         self.assertEqual(questions_to_answer(self.submission), [self.short_question, self.long_question])
 
+    def test_return__an_approved_hand_in_never_marked_brings_every_question_back(self):
+        """Returning a quest approved before answers were marked leaves its answers unmarked and
+        brings every question back, rather than counting each of them right."""
+        self.hand_in()
+        self.submission.mark_approved()  # approved without its answers being marked
+        self.review("return_button")
+
+        self.assertIsNone(self.answer(self.short_question).is_correct)
+        self.assertIsNone(self.answer(self.long_question).is_correct)
+        self.assertEqual(questions_to_answer(self.submission), [self.short_question, self.long_question])
+
+    def test_return__an_approved_quest_brings_back_what_approval_marked_wrong(self):
+        """Returning a quest approved with an answer marked wrong brings that question back: the
+        marks approval set stand."""
+        self.hand_in()
+        self.mark(self.answer(self.long_question))
+        self.review("approve_button")
+        self.review("return_button")
+
+        self.assertFalse(self.submission.is_approved)
+        self.assertEqual(questions_to_answer(self.submission), [self.long_question])
+
     def test_approve__marks_show_to_the_student_once_approved(self):
         """A teacher can mark an answer wrong and still approve: the student then sees a check on
         the right answer and an X on the wrong one, and saw neither while the quest awaited
@@ -336,6 +358,21 @@ class AnswerMarkingTest(QuestionSubmissionFlowTestBase):
         self.assertEqual([draft.question for draft in drafts], [file_question])
         self.assertFalse(drafts.get().response_file)
         self.assertEqual(drafts.get().response_text, "")
+
+    def test_sync__a_short_answer_comes_back_as_typed(self):
+        """A short answer is stored HTML-escaped, but comes back in its text input as the student
+        typed it, rather than showing the escaped entities."""
+        self.hand_in(short_text="R&D <3")
+        answer = self.answer(self.short_question)
+        self.assertEqual(answer.response_text, "R&amp;D &lt;3")  # as it is stored
+        self.mark(answer)
+        self.review("return_button")
+
+        response = self.student_page()
+
+        formset = response.context["question_formset"]
+        self.assertEqual(formset.forms[0].instance.response_text, "R&D <3")
+        self.assertContains(response, 'value="R&amp;D &lt;3"')
 
 
 class QuestionNumberTest(QuestionSubmissionFlowTestBase):

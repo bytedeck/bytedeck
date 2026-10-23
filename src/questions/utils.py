@@ -1,3 +1,5 @@
+import html
+
 from django.db.models import Case, Max, Value, When
 
 from .models import QuestionSubmission, QuestionType
@@ -182,7 +184,7 @@ def latest_published_answers(quest_submission):
     latest = {}
     for answer in QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=False, question__isnull=False,
-    ).order_by("comment_id"):
+    ).select_related("question").order_by("comment_id"):
         latest[answer.question_id] = answer
     return latest
 
@@ -216,6 +218,12 @@ def _previous_text(answer):
     """The text of an answer coming back to be fixed, or nothing for a file answer or a new
     question.
 
+    A short answer is stored HTML-escaped (`QuestionSubmissionForm.clean_response_text`), so a
+    student's ``R&D`` is kept as ``R&amp;D``. Its text input shows a value as plain text, so the
+    draft starts with the text as the student typed it: escaped, the field would show the entity
+    itself and could run past the field's 200-character limit. A long answer's editor shows HTML,
+    so its stored value is the right start as it is.
+
     Args:
         answer (QuestionSubmission): the question's latest published answer, or None.
 
@@ -224,6 +232,8 @@ def _previous_text(answer):
     """
     if answer is None or answer.question.type == QuestionType.FILE_UPLOAD:
         return ""
+    if answer.question.type == QuestionType.SHORT_ANSWER:
+        return html.unescape(answer.response_text)
     return answer.response_text
 
 
@@ -238,7 +248,9 @@ def finalize_answer_marks(quest_submission):
 
     Only a submission handed in and awaiting review is marked. One returned and not yet handed
     in again has no hand-in under review: its latest one was judged when it came back, so
-    approving it from there leaves those answers as they are.
+    approving it from there leaves those answers as they are. Nor is an approved one: approving
+    it already marked its answers, unless it was approved before answers were marked at all, and
+    then a return brings every question back, as a return did before marking existed.
 
     Args:
         quest_submission: the QuestSubmission being returned or approved.
@@ -246,7 +258,7 @@ def finalize_answer_marks(quest_submission):
     Returns:
         int: how many answers were marked.
     """
-    if not quest_submission.is_completed:
+    if not quest_submission.is_completed or quest_submission.is_approved:
         return 0
     latest_comment_id = QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=False,
