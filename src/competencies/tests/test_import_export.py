@@ -154,6 +154,22 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
         competency_set = parse_csv_set("name,category\nThink,Thinking,\n")
         self.assertEqual(competency_set['entries'][0]['category'], 'Thinking')
 
+    def test_parse_csv_set__value_under_a_blank_header(self):
+        """ A value in a column with a blank header is rejected rather than silently dropped,
+        wherever that column is and however many blank-header columns there are """
+        for raw in ["name,category,\nThink,Thinking,x\n", "name,,category,\nThink,x,Thinking,\n"]:
+            with self.subTest(raw=raw), self.assertRaisesMessage(ValidationError, "Line 2 has a value in a column with no header."):
+                parse_csv_set(raw)
+
+    def test_parse_csv_set__blank_cells_under_blank_headers_are_ignored(self):
+        """ Blank cells under blank headers (a trailing comma on every line, or an empty spacer
+        column) are fine: the rows still import """
+        for raw in ["name,category,\nThink,Thinking,\n", "name,,category\nThink,,Thinking\n"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_csv_set(raw)['entries'], [
+                    {'name': 'Think', 'category': 'Thinking', 'description': '', 'source_id': ''},
+                ])
+
     def test_parse_uploaded_file__unsupported_extension(self):
         """ An upload that is neither .json nor .csv is rejected with a ValidationError """
         with self.assertRaises(ValidationError):

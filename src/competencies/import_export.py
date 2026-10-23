@@ -187,16 +187,21 @@ def parse_csv_set(raw, name=''):
     duplicates = sorted({h for h in header if h and header.count(h) > 1})
     if duplicates:
         raise ValidationError(f"Duplicate CSV column(s): {', '.join(duplicates)}. Each column can appear only once.")
-    # read the rows under the normalized names, so "Name" or " name" columns are found as "name"
-    reader.fieldnames = header
+    # read the rows under the normalized names, so "Name" or " name" columns are found as "name".
+    # Each blank header gets a key of its own (DictReader would put them all under '', where
+    # they overwrite each other), so every cell under one can be checked.
+    reader.fieldnames = [h or f'__unnamed_{index}' for index, h in enumerate(header)]
+    unnamed = [key for key in reader.fieldnames if key not in header]
 
     entries = []
     for row in reader:
-        # DictReader collects cells beyond the header under the key None; blank ones are just
-        # trailing commas, but a value there has no column to go in
+        # DictReader collects cells beyond the header under the key None. Blank ones there, or
+        # under a blank header, are just trailing commas, but a value in either has no column to go in.
         surplus = row.pop(None, None) or []
         if any(cell.strip() for cell in surplus):
             raise ValidationError(f"Line {reader.line_num} has more cells than the header row.")
+        if any((row.pop(key) or '').strip() for key in unnamed):
+            raise ValidationError(f"Line {reader.line_num} has a value in a column with no header.")
         if not any((value or '').strip() for value in row.values()):
             continue  # ignore fully blank lines
         entries.append({field: (row.get(field) or '').strip() for field in CSV_FIELDS})
