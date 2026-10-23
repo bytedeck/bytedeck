@@ -798,3 +798,99 @@ class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
 
         self.assertIn(f'href="{answer.response_file.url}"', html)
         self.assertNotIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+
+
+class SolutionFileDownloadViewTest(ByteDeckTenantTestCase):
+    """A question's solution file is handed to staff as a download (#2924)."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Redirect MEDIA_ROOT to a temp directory, deleted along with the class, as
+        AnswerFileDownloadViewTest does: these tests store real files."""
+        cls._temp_media = tempfile.mkdtemp(prefix="test-media-solution-download-")
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        # registered before super(), so they run after the base class's own cleanups: LIFO
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, a student, and a quest."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.test_student = User.objects.create_user("test_student", password="password")
+        cls.quest = baker.make(Quest)
+
+    def question(self, solution_file=None, ordinal=1):
+        """A file question holding a stored solution file.
+
+        Args:
+            solution_file: the file to store; a small HTML page by default.
+            ordinal (int): the question's place in the quest.
+
+        Returns:
+            Question: the question.
+        """
+        if solution_file is None:
+            solution_file = SimpleUploadedFile("example.html", b"<h1>an example page</h1>", content_type="text/html")
+        return baker.make(Question, quest=self.quest, ordinal=ordinal, type="file_upload", solution_file=solution_file)
+
+    def test_solution_file_download__staff_get_the_file_as_an_attachment(self):
+        """The solution downloads, rather than rendering in the browser: an HTML solution opened
+        as a page would run its script in the marker's session."""
+        question = self.question()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("questions:solution_file_download", args=[question.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        disposition = response.headers["Content-Disposition"]
+        self.assertIn("attachment", disposition)
+        self.assertIn(os.path.basename(question.solution_file.name), disposition)
+        self.assertEqual(b"".join(response.streaming_content), b"<h1>an example page</h1>")
+
+    def test_solution_file_download__a_student_is_refused(self):
+        """Solutions are for markers, so a student gets no copy."""
+        question = self.question()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse("questions:solution_file_download", args=[question.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_solution_file_download__a_question_with_no_solution_file_is_404(self):
+        """Nothing to hand over, so the view refuses rather than failing on an empty file."""
+        question = baker.make(Question, quest=self.quest, ordinal=1, type="file_upload")
+        self.client.force_login(self.test_teacher)
+
+        self.assert404("questions:solution_file_download", args=[question.pk])
+
+    def test_solution_file_download__anonymous_redirects_to_login(self):
+        """Login first, like every other staff view."""
+        question = self.question()
+
+        self.assertRedirectsLogin("questions:solution_file_download", args=[question.pk])
+
+    def test_question_table__a_script_capable_solution_links_the_download_view_not_the_file(self):
+        """The question table never points at a script-capable solution's storage URL (#2924)."""
+        question = self.question()
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, reverse("questions:solution_file_download", args=[question.pk]))
+        self.assertNotContains(response, f'href="{question.solution_file.url}"')
+
+    def test_question_table__an_svg_solution_is_shown_as_a_picture(self):
+        """An SVG solution shows as a thumbnail through an <img>, where browsers run no script,
+        and still downloads from its link."""
+        question = self.question(SimpleUploadedFile(
+            "logo.svg", b"<svg xmlns='http://www.w3.org/2000/svg'></svg>", content_type="image/svg+xml"))
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, f'<img class="question-media-thumb" src="{question.solution_file.url}"')
+        self.assertContains(response, reverse("questions:solution_file_download", args=[question.pk]))
+        self.assertNotContains(response, f'href="{question.solution_file.url}"')

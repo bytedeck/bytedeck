@@ -199,6 +199,50 @@
       $('[data-toggle="tooltip"]').tooltip();
       $('[data-toggle="popover"]').popover();
 
+      // A question's marker notes open in a popover that shows them as written, from the
+      // <template> beside their button (questions/snippets/marker_notes_popover.html, #2923).
+      // Bootstrap's sanitizer would strip what the notes may hold (styles, tables, embedded
+      // video), and 3.4.1 takes `sanitize` from script only. The notes are written by staff and
+      // shown only to staff, as a quest's instructions are. Bound once to the body, so a button
+      // in content loaded later (an approval's preview, the reordered question table) works as
+      // well. A click opens the notes and they stay open, to be read, scrolled or followed,
+      // until the button, a click anywhere else, or Escape closes them.
+      $('body').popover({
+        selector: '.marker-notes-popover',
+        trigger: 'click',
+        html: true,
+        sanitize: false,
+        container: 'body',
+        placement: 'auto bottom',
+        template: '<div class="popover marker-notes-tip" role="tooltip"><div class="arrow"></div>' +
+                  '<h3 class="popover-title"></h3><div class="popover-content"></div></div>',
+        content: function() { return $(this).next('.marker-notes-content').html(); }
+      });
+      function hideMarkerNotes($except) {
+        $('.marker-notes-popover').not($except).each(function() {
+          var popover = $(this).data('bs.popover');
+          if (popover && popover.tip().hasClass('in')) {
+            $(this).popover('hide');
+          }
+        });
+      }
+      // Closed from here rather than by its own button, a popover still counts that button's
+      // last click as holding it open, and the next click would only undo that: clear it.
+      $(document).on('hidden.bs.popover', '.marker-notes-popover', function() {
+        $(this).data('bs.popover').inState.click = false;
+      });
+      $(document).on('click', function(e) {
+        if ($(e.target).closest('.marker-notes-tip').length) {
+          return;
+        }
+        hideMarkerNotes($(e.target).closest('.marker-notes-popover'));
+      });
+      $(document).on('keydown', function(e) {
+        if (e.key === 'Escape') {
+          hideMarkerNotes($());
+        }
+      });
+
       // Dismiss bootstrap alerts
       if ($('.dismiss-in-3').length) {
         setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
