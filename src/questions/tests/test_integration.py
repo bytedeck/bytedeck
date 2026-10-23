@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from unittest.mock import patch
 
@@ -849,6 +850,150 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(payload["saved_answer_files"], {})
         self.submission.draft_comment.refresh_from_db()
         self.assertEqual(self.submission.draft_comment.text, "<p>still saves</p>")
+
+
+class AnswerFileControlTest(QuestionSubmissionFlowTestBase):
+    """A file answer's control lists its saved file with a Delete button, as the submission's
+    attachments do (#2925), and never links a script-capable one at its storage URL (#2785)."""
+
+    def setUp(self):
+        """An optional image question that takes an SVG, added to the submission's quest."""
+        self.file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Upload your logo.</p>", allowed_file_type="image",
+            allow_script_capable_files=True,
+        )
+        super().setUp()
+
+    def save_file(self, upload):
+        """Choose a file for the question, as the page does: a draft save carrying it.
+
+        Args:
+            upload (SimpleUploadedFile): the chosen file.
+
+        Returns:
+            tuple: the draft save's JSON payload, and the answer row, refreshed.
+        """
+        field_name = self.file_field_name(self.file_question)
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={"comment": "", "submission_id": self.submission.id,
+                  **self.formset_data(short_text="draft"), field_name: upload},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=self.file_question)
+        return json.loads(response.content), row
+
+    def delete_file(self, row):
+        """Press the Delete button beside the answer's saved file.
+
+        Args:
+            row (QuestionSubmission): the answer whose file to remove.
+
+        Returns:
+            HttpResponse: the endpoint's response.
+        """
+        return self.client.post(
+            reverse("questions:ajax_delete_draft_answer_file", args=[row.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def png(self, name="logo.png"):
+        """A small PNG upload."""
+        return SimpleUploadedFile(name, b"png-bytes", content_type="image/png")
+
+    def test_save_draft__returns_the_file_as_its_control_lists_it(self):
+        """The draft save hands back the answer's saved file with its Delete button, for the page
+        to show in place of the old list."""
+        payload, row = self.save_file(self.png())
+
+        html = payload["answer_files_html"][self.file_field_name(self.file_question)]
+        self.assertIn(os.path.basename(row.response_file.name), html)
+        self.assertIn(reverse("questions:ajax_delete_draft_answer_file", args=[row.id]), html)
+
+    def test_submission_page__lists_the_saved_file_with_its_delete_button(self):
+        """A returning student sees the file their draft holds, with the button that removes it,
+        and no "Currently:" line from the input (#2925)."""
+        _, row = self.save_file(self.png())
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, 'class="answer-file-saved"')
+        self.assertContains(response, os.path.basename(row.response_file.name))
+        self.assertContains(response, reverse("questions:ajax_delete_draft_answer_file", args=[row.id]))
+        self.assertContains(response, "Choose file")
+        self.assertNotContains(response, "Currently")
+
+    def test_submission_page__a_saved_svg_is_never_linked_at_its_url(self):
+        """A draft-saved SVG is offered through the download view and nowhere at its storage URL,
+        where following the link would run its script in the student's session (#2785)."""
+        _, row = self.save_file(SimpleUploadedFile(
+            "logo.svg", b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            content_type="image/svg+xml"))
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, reverse("questions:answer_file_download", args=[row.id]))
+        self.assertNotContains(response, row.response_file.url)
+
+    def test_delete__removes_the_file_from_the_answer_and_storage(self):
+        """Delete empties the answer and its list, and the stored file goes once that commits."""
+        _, row = self.save_file(self.png())
+        stored = row.response_file.name
+        self.assertTrue(default_storage.exists(stored))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.delete_file(row)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["answer_file_html"].strip(), "")
+        row.refresh_from_db()
+        self.assertFalse(row.response_file)
+        self.assertFalse(default_storage.exists(stored))
+
+    def test_delete__another_students_answer_is_404(self):
+        """Only the student whose draft it is can remove its file."""
+        _, row = self.save_file(self.png())
+        self.client.force_login(User.objects.create_user("nosy", password="password"))
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+        row.refresh_from_db()
+        self.assertTrue(row.response_file)
+
+    def test_delete__a_published_answer_is_404(self):
+        """An answer handed in with the quest is the teacher's to read, not the student's to empty."""
+        _, row = self.save_file(self.png())
+        QuestionSubmission.objects.filter(pk=row.pk).update(comment=self.submission.draft_comment)
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+        row.refresh_from_db()
+        self.assertTrue(row.response_file)
+
+    def test_delete__a_finished_submission_is_404(self):
+        """Once the quest is handed in there is no draft left to change."""
+        _, row = self.save_file(self.png())
+        QuestSubmission.objects.filter(pk=self.submission.pk).update(draft_comment=None)
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+
+    def test_delete__an_answer_with_no_file_is_404(self):
+        """Nothing to remove, so the endpoint refuses rather than saving the row for nothing."""
+        row = sync_draft_question_submissions(self.submission).get(question=self.file_question)
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+
+    def test_delete__post_only(self):
+        """A GET removes nothing, so a link followed by mistake cannot empty an answer."""
+        _, row = self.save_file(self.png())
+
+        response = self.client.get(
+            reverse("questions:ajax_delete_draft_answer_file", args=[row.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 405)
+        row.refresh_from_db()
+        self.assertTrue(row.response_file)
 
 
 class DraftSaveRacesSubmitTest(QuestionSubmissionFlowTestBase):

@@ -136,25 +136,6 @@
                 {{ form.question.instructions|unwrap_p }}
               </div>
               {% crispy form %}
-              {% comment %} A file kept from an earlier submit that failed validation: the file input
-                 above always renders empty (browsers never repopulate it), so without this the
-                 student has no way to tell their upload survived, and would re-attach it (#2165). {% endcomment %}
-              {% if form.instance.response_file %}
-                <p class="help-block">
-                  <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  {% if form.instance.response_file_is_script_capable %}
-                    {% comment %} An SVG or HTML file is never linked at its storage URL, here either:
-                       navigating to one runs whatever script it carries in the session of whoever
-                       follows the link, and the student following it is signed in (#2559). The
-                       download view responds with Content-Disposition: attachment instead. {% endcomment %}
-                    <a href="{% url 'questions:answer_file_download' form.instance.id %}">
-                      <i class="fa fa-fw fa-download"></i>{{ form.instance.response_file|filename }}</a>
-                  {% else %}
-                    <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
-                  {% endif %}
-                  <small>(already saved: only choose a file above if you want to replace it)</small>
-                </p>
-              {% endif %}
             </div>
           {% endfor %}
           </div>
@@ -610,13 +591,15 @@
 
         function show_saved_files(json, sentFiles) {
             // A saved file is stored with the draft, so its input is cleared: the file no
-            // longer needs re-choosing, and the next autosave must not upload it again. A
-            // note under the input says where it went. A rejected file is cleared too, with
-            // the validation error in its place, so the student re-chooses knowing why.
-            $.each(json.saved_answer_files || {}, function(field_name, file_name) {
-                file_note($('[name="' + field_name + '"]'),
-                    '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
-                    ' <small>(saved with your draft)</small>', sentFiles);
+            // longer needs re-choosing, and the next autosave must not upload it again. The
+            // list above the input, which the server re-renders, shows where it went. A
+            // rejected file is cleared too, with the validation error in its place, so the
+            // student re-chooses knowing why.
+            $.each(json.answer_files_html || {}, function(field_name, html) {
+                // A file answer's list holds its one saved file, the one just chosen, with the
+                // button that removes it (#2925).
+                file_note($('[name="' + field_name + '"]'), '', sentFiles);
+                $('.answer-file-saved[data-for="' + field_name + '"]').html(html);
             });
             if (typeof json.draft_attachments_html === 'string') {
                 // The comment's attachments have a list of their own below the box, which the
@@ -671,10 +654,12 @@
             file_note_element(input).html(html).removeClass('draft-file-note-pending');
         }
 
-        // Removing a file attached by mistake. Delegated from the page, because the list this
-        // button sits in is replaced wholesale every time the server re-renders it.
-        $(document).on('click', '.draft-attachment-delete', function() {
+        // Removing a file attached by mistake, from the comment's attachments or from a file
+        // answer (#2925). Delegated from the page, because the list each button sits in is
+        // replaced wholesale every time the server re-renders it.
+        $(document).on('click', '.draft-attachment-delete, .answer-file-delete', function() {
             var $button = $(this);
+            var $list = $button.closest('#draft-attachments, .answer-file-saved');
             // No confirmation: the file is one the student just attached to their own draft,
             // and re-attaching it is a couple of clicks, so a dialog on every removal costs
             // more than the mistake it guards against (#2749). The button's tooltip says the
@@ -687,7 +672,7 @@
                 type : "POST",
                 data : { csrfmiddlewaretoken: '{{ csrf_token }}' },
                 success : function(json) {
-                    $('#draft-attachments').html(json.draft_attachments_html);
+                    $list.html($button.hasClass('answer-file-delete') ? json.answer_file_html : json.draft_attachments_html);
                 },
                 error : function(xhr, errmsg, err) {
                     $button.prop('disabled', false);

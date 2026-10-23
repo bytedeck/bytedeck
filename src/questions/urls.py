@@ -16,4 +16,6 @@ urlpatterns = [
     # A script-capable answer is downloaded through here rather than linked at its storage URL,
     # so that HTML or SVG a student uploaded is never opened as a page in a marker's session.
     path('answer/<int:pk>/download/', views.answer_file_download, name='answer_file_download'),
+    # The file saved with a student's draft answer, removed from the submission page (#2925).
+    path('answer/<int:pk>/delete-file/', views.ajax_delete_draft_answer_file, name='ajax_delete_draft_answer_file'),
 ]

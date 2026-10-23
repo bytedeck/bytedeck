@@ -140,6 +140,28 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertNotIn("response_text", form.fields)
         self.assertEqual(form.fields["response_file"].content_types, self.file_question.allowed_mime_types())
 
+    def test_init__file_upload_field_draws_no_currently_link(self):
+        """A file saved with the draft is not linked by the input itself (#2785, #2925).
+
+        The answer's control lists the saved file, through the download view when it is one a
+        browser would run a script from. A clearable input would draw its own "Currently:" line
+        as well, linking the file at its storage URL, where following it runs that script.
+        """
+        self.file_answer.response_file = "quest/question/submission/2026/10/23/abc/logo.svg"
+
+        rendered = str(QuestionSubmissionForm(instance=self.file_answer)["response_file"])
+
+        self.assertNotIn("Currently", rendered)
+        self.assertNotIn(self.file_answer.response_file.url, rendered)
+
+    def test_init__file_upload_help_text_says_a_chosen_file_saves_at_once(self):
+        """The help says what the control does: one file up to 16MB, saved with the draft as
+        soon as it is chosen, and replaced by choosing another (#2925)."""
+        help_text = QuestionSubmissionForm(instance=self.file_answer).fields["response_file"].help_text
+
+        self.assertIn("16MB limit", help_text)
+        self.assertIn("saved with your draft as soon as you choose it, and choosing another replaces it", help_text)
+
     def test_init__file_upload_help_text_carries_the_mime_type_popover(self):
         """The info icon listing exact MIME types sits inside the help text (#2169).
 
@@ -165,7 +187,8 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         help_text = QuestionSubmissionForm(instance=answer).fields["response_file"].help_text
 
-        self.assertEqual(help_text, "Allowed file types: All")
+        self.assertTrue(help_text.endswith("Allowed file types: All"), help_text)
+        self.assertNotIn("popover", help_text)
 
     def test_init__the_answer_field_opts_in_only_as_far_as_the_question_did(self):
         """The form field carries the question's own opt-in, and nothing wider (#2559).
@@ -241,7 +264,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         A quest with several questions renders several answer fields with no visible labels of
         their own (or, for file uploads, the identical one), so without this a screen-reader
-        student hears "Attach files" twice over and an unnamed editor between them (#2570).
+        student hears "Attach a file" twice over and an unnamed editor between them (#2570).
         """
         queryset = QuestionSubmission.objects.filter(
             quest_submission=self.submission,
@@ -255,7 +278,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         ]
         self.assertEqual(
             labels,
-            ["Response to question 1", "Response to question 2", "Attach files for question 3"],
+            ["Response to question 1", "Response to question 2", "Attach a file for question 3"],
         )
 
     def test_init__file_aria_label_contains_its_visible_label(self):
@@ -280,7 +303,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         file_form = QuestionSubmissionForm(instance=self.file_answer)
 
         self.assertEqual(long_form.fields["response_text"].widget.attrs["aria-label"], "Response")
-        self.assertEqual(file_form.fields["response_file"].widget.attrs["aria-label"], "Attach files")
+        self.assertEqual(file_form.fields["response_file"].widget.attrs["aria-label"], "Attach a file")
 
     def test_init__answer_fields_render_their_aria_label(self):
         """The aria-label survives rendering, on the editor's wrapper and on the file input.
@@ -298,7 +321,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         self.assertIn("$wrap.attr('aria-label', 'Response to question 2');", long_html)
         self.assertIn(".note-editable').attr('aria-label', ariaLabel)", long_html)
-        self.assertIn('aria-label="Attach files for question 3"', file_html)
+        self.assertIn('aria-label="Attach a file for question 3"', file_html)
 
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and

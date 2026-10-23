@@ -1,3 +1,5 @@
+from django.template.loader import render_to_string
+
 from .models import QuestionSubmission
 
 
@@ -153,3 +155,20 @@ def sync_draft_question_submissions(quest_submission):
     return QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=True, question__isnull=False
     )
+
+
+def render_answer_file(answer):
+    """Render the file saved with a draft answer to a file question, with its Delete button.
+
+    The submission page shows this in the answer's control, and the draft-save and delete
+    endpoints hand it back so the page can replace it without a reload (#2925). Rendering it in
+    one place keeps what the student sees after a save or a removal identical to what a fresh
+    page would show.
+
+    Args:
+        answer (QuestionSubmission): the draft answer.
+
+    Returns:
+        str: the rendered HTML, empty when the answer holds no file.
+    """
+    return render_to_string("questions/snippets/answer_file_saved.html", {"answer": answer})

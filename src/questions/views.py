@@ -7,14 +7,16 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
-from hackerspace_online.decorators import StaffMemberRequiredMixin
+from hackerspace_online.decorators import StaffMemberRequiredMixin, xml_http_request_required
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
-from quest_manager.models import Quest
+from quest_manager.models import Quest, QuestSubmission
 
 from .forms import QuestionForm
 from .models import Question, QuestionSubmission, QuestionType
+from .utils import render_answer_file
 
 
 class QuestionListView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, ListView):
@@ -275,3 +277,60 @@ def answer_file_download(request, pk):
         as_attachment=True,
         filename=os.path.basename(answer.response_file.name),
     )
+
+
+@xml_http_request_required
+@non_public_only_view
+@login_required
+@require_POST
+def ajax_delete_draft_answer_file(request, pk):
+    """Remove the file saved with one of the requesting student's draft answers (#2925).
+
+    A file question's answer is saved as soon as the student chooses a file, so one chosen by
+    mistake is already stored: this is how they take it back without choosing another, which
+    is the only way out on an optional question.
+
+    Only a draft answer reaches here. The lookup requires the answer to be unpublished and its
+    submission to be one of the requesting user's, still in progress (holding a draft comment):
+    completing a submission publishes its answers, so an answer the teacher can already see is
+    a 404, as is any other student's.
+
+    Args:
+        request: the POST, sent by the submission page as XHR.
+        pk: pk of the QuestionSubmission whose file to remove.
+
+    Returns:
+        JsonResponse: ``answer_file_html``, the answer's saved file as it now stands (nothing),
+        for the page to render in place of the old one.
+
+    Raises:
+        Http404: for an answer that is not one of this user's drafts, or that holds no file.
+    """
+    # Under a lock on the submission row, as the draft attachment delete is, because the
+    # student can submit the quest at the same moment: completing publishes the answers with
+    # an UPDATE made under the same lock. So either the answer is still a draft for as long as
+    # this takes, or the completion got there first and the lookup below finds nothing.
+    # of=("self",) and include_related=False for the reasons the draft save gives.
+    with transaction.atomic():
+        submission = QuestSubmission.objects.get_queryset(include_related=False).select_for_update(
+            of=("self",)
+        ).filter(
+            question_submissions=pk, user=request.user, draft_comment__isnull=False,
+        ).first()
+        answer = None
+        if submission is not None:
+            answer = QuestionSubmission.objects.filter(
+                pk=pk, quest_submission=submission, comment__isnull=True,
+            ).first()
+        if answer is None or not answer.response_file:
+            raise Http404("No such file on one of your draft answers.")
+
+        # The row inside the transaction, the stored file only once that commits, for the
+        # reasons the draft attachment delete gives: storage is not transactional.
+        storage, file_name = answer.response_file.storage, answer.response_file.name
+        answer.response_file = None
+        answer.full_clean()
+        # only the file, as the draft save writes it (#2565)
+        answer.save(update_fields=["response_file", "datetime_last_edit"])
+        transaction.on_commit(lambda: storage.delete(file_name))
+        return JsonResponse({"answer_file_html": render_answer_file(answer)})
