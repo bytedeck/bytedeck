@@ -37,9 +37,15 @@ from badges.models import BadgeAssertion
 from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
+from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
+from questions.utils import (
+    discard_draft_question_submissions,
+    finalize_answer_marks,
+    save_draft_file_answers,
+    sync_draft_question_submissions,
+)
 from courses.models import Block, CourseStudent
 from utilities.redirects import redirect_back, safe_local_url, where_from
 from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
@@ -447,12 +453,12 @@ class QuestCopy(QuestCreate):
         """Fill the create form with a copy of the quest being copied.
 
         The form is bound to an unsaved copy of that quest, named with " - COPY" and given a new
-        import_id, and starts with the quest's tags and with the quest itself as the copy's
-        prerequisite.
+        import_id, and starts with the quest's tags and competencies (with their default levels)
+        and with the quest itself as the copy's prerequisite.
 
         Returns:
             dict: the quest form's keyword arguments, with `instance` the unsaved copy and `initial`
-            holding its tags and prerequisite.
+            holding its tags, competencies and prerequisite.
         """
         kwargs = super().get_form_kwargs()
 
@@ -462,6 +468,7 @@ class QuestCopy(QuestCreate):
         # Set initial tags and prerequisite for the form. The quest it was copied from is the copy's
         # prerequisite, so the deck's default badge prerequisite (QuestCreate.get_initial) is left out.
         kwargs["initial"]["tags"] = copied_quest.tags.all()
+        kwargs["initial"].update(quest_competency_initial(copied_quest))
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
         kwargs["initial"].pop("new_badge_prerequisite", None)
 
@@ -1478,6 +1485,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "</span>"
             )
             blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
+            # the answers show a check or the X a teacher gave them, approved or not (#2933)
+            finalize_answer_marks(self.submission)
             self.submission.mark_approved()
         elif "comment_button" in self.request.POST:
             note_verb = "commented on"
@@ -1499,6 +1508,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "</span>"
             )
             blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
+            # marked before the student sees the quest again, since the answers marked wrong
+            # are the questions that come back for them to answer (#2933)
+            finalize_answer_marks(self.submission)
             self.submission.mark_returned()
         # dispatch() raises Http404 unless post_has_valid_button() is true, so one of the four
         # buttons is always present by the time this runs; this elif always matches when the

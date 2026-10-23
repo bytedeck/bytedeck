@@ -1,6 +1,8 @@
 import json
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from model_bakery import baker
 
@@ -13,6 +15,7 @@ from competencies.import_export import (
     load_bundled_set,
     parse_csv_set,
     parse_json_set,
+    parse_uploaded_file,
     preview_entry_statuses,
     validate_competency_set,
 )
@@ -72,6 +75,11 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
         """ A version newer than this deck supports is rejected """
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps(make_set([{'name': 'x'}], version=99)))
+
+    def test_validate_competency_set__boolean_version(self):
+        """ A version of true is rejected, although Python treats True as the int 1 """
+        with self.assertRaises(ValidationError):
+            validate_competency_set(make_set([{'name': 'x'}], version=True))
 
     def test_parse_json_set__no_entries(self):
         """ A set with an empty entries list is rejected """
@@ -134,6 +142,104 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
         """ A CSV row with an empty name cell is rejected """
         with self.assertRaises(ValidationError):
             parse_csv_set("name,category\n,Thinking\n")
+
+    def test_parse_csv_set__not_utf8(self):
+        """ CSV bytes that aren't UTF-8 text are rejected with a ValidationError """
+        with self.assertRaises(ValidationError):
+            parse_csv_set(b'name\n\xff\xfe broken\n')
+
+    def test_parse_csv_set__blank_trailing_cells_are_ignored(self):
+        """ Empty cells past the header (a trailing comma, as spreadsheets often export) are
+        not "more cells than the header": the row still imports """
+        competency_set = parse_csv_set("name,category\nThink,Thinking,\n")
+        self.assertEqual(competency_set['entries'][0]['category'], 'Thinking')
+
+    def test_parse_csv_set__value_under_a_blank_header(self):
+        """ A value in a column with a blank header is rejected rather than silently dropped,
+        wherever that column is and however many blank-header columns there are """
+        for raw in ["name,category,\nThink,Thinking,x\n", "name,,category,\nThink,x,Thinking,\n"]:
+            with self.subTest(raw=raw), self.assertRaisesMessage(ValidationError, "Line 2 has a value in a column with no header."):
+                parse_csv_set(raw)
+
+    def test_parse_csv_set__blank_cells_under_blank_headers_are_ignored(self):
+        """ Blank cells under blank headers (a trailing comma on every line, or an empty spacer
+        column) are fine: the rows still import """
+        for raw in ["name,category,\nThink,Thinking,\n", "name,,category\nThink,,Thinking\n"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_csv_set(raw)['entries'], [
+                    {'name': 'Think', 'category': 'Thinking', 'description': '', 'source_id': ''},
+                ])
+
+    def test_parse_uploaded_file__unsupported_extension(self):
+        """ An upload that is neither .json nor .csv is rejected with a ValidationError """
+        with self.assertRaises(ValidationError):
+            parse_uploaded_file(SimpleUploadedFile('set.txt', b'name\nThink\n'))
+
+    def test_validate_competency_set__not_an_object(self):
+        """ A set that isn't a JSON object (e.g. a bare list) is rejected """
+        with self.assertRaises(ValidationError):
+            validate_competency_set([{'name': 'Think'}])
+
+    def test_validate_competency_set__entry_not_an_object(self):
+        """ An entry that isn't a JSON object (e.g. a bare string) is rejected """
+        with self.assertRaises(ValidationError):
+            validate_competency_set(make_set(['Think']))
+
+    def test_parse_csv_set__header_names_ignore_case_and_whitespace(self):
+        """ Headers like "Name, Category" (a common spreadsheet layout) are read the same as
+        "name,category": the rows' values are found under the normalized column names """
+        competency_set = parse_csv_set("Name, Category\nThink,Thinking\n")
+        self.assertEqual(competency_set['entries'][0]['name'], 'Think')
+        self.assertEqual(competency_set['entries'][0]['category'], 'Thinking')
+
+    def test_parse_csv_set__duplicate_columns(self):
+        """ Two headers naming the same column, in any case, are rejected instead of one
+        column's values being silently dropped """
+        with self.assertRaisesMessage(ValidationError, "Duplicate CSV column(s): name"):
+            parse_csv_set("name,Name\nThink,Reflect\n")
+
+    def test_parse_csv_set__row_with_more_cells_than_the_header(self):
+        """ A row with surplus cells is rejected with a ValidationError rather than crashing """
+        with self.assertRaises(ValidationError):
+            parse_csv_set("name,category\nThink,Thinking,extra\n")
+
+    def test_validate_competency_set__rejects_non_string_entry_fields(self):
+        """ An entry field holding a list, object, or number is rejected instead of being stored
+        as its Python repr (e.g. a name of ["a"] becoming the text "['a']") """
+        for field in ['name', 'description', 'category', 'source_id']:
+            for value in [['a'], {'a': 1}, 42]:
+                entry = {'name': 'Think', field: value}
+                with self.subTest(field=field, value=value), self.assertRaises(ValidationError):
+                    validate_competency_set(make_set([entry]))
+
+    def test_validate_competency_set__rejects_non_string_metadata(self):
+        """ Set metadata such as the set name must be text too, and the error names it as the
+        set's field rather than an entry's """
+        with self.assertRaisesMessage(ValidationError, "The set's name must be text."):
+            validate_competency_set(make_set([{'name': 'Think'}], name=['a']))
+
+    def test_validate_competency_set__malformed_source_url(self):
+        """ A source_url that urlsplit can't parse at all is a validation error, not a crash """
+        with self.assertRaisesMessage(ValidationError, "source_url must be an http or https URL."):
+            validate_competency_set(make_set([{'name': 'Think'}], source_url='http://[::1'))
+
+    def test_validate_competency_set__source_url_must_be_http_or_https(self):
+        """ source_url is rendered as a link in the import preview, so only http(s) URLs (or none)
+        are accepted: a javascript: URL would run script for the staff user who clicks it """
+        for url in ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,hi', 'ftp://example.com/set']:
+            with self.subTest(url=url), self.assertRaises(ValidationError):
+                validate_competency_set(make_set([{'name': 'Think'}], source_url=url))
+
+        for url in ['', 'http://example.com/set', 'https://curriculum.gov.bc.ca/competencies']:
+            with self.subTest(url=url):
+                self.assertEqual(validate_competency_set(make_set([{'name': 'Think'}], source_url=url))['source_url'], url)
+
+    def test_validate_competency_set__rejects_overlong_category_and_source_id(self):
+        """ Every length-limited field is checked up front, so an overlong value is a validation
+        error before anything is imported, not a failure part way through the import """
+        for field in ['category', 'source_id']:
+            with self.subTest(field=field), self.assertRaises(ValidationError):
+                validate_competency_set(make_set([{'name': 'Think', field: 'x' * 256}]))
 
 
 class BundledSetsTest(ByteDeckTenantTestCase):
@@ -268,9 +374,53 @@ class ImportCompetencySetTest(ByteDeckTenantTestCase):
         ]))
         self.assertEqual([e['status'] for e in entries], ['update', 'create'])
 
+    def test_preview_entry_statuses__unsourced_competency_is_claimed_once(self):
+        """ The preview agrees with the import: only the first of two sourced entries sharing a
+        hand-typed competency's name adopts it, and the second would be created """
+        baker.make(Competency, name='Estimate reasonably', source_id=None)
+        entries = preview_entry_statuses(make_valid_set([
+            {'source_id': 'bc:math:7:reasoning-3', 'name': 'Estimate reasonably'},
+            {'source_id': 'bc:math:8:reasoning-3', 'name': 'Estimate reasonably'},
+        ]))
+        self.assertEqual([e['status'] for e in entries], ['update', 'create'])
+
+    def test_import__unsourced_competency_is_claimed_once(self):
+        """ Two sourced entries with a hand-typed competency's name: the first adopts it and the
+        second is created, rather than the second overwriting the first's source_id and content """
+        hand_typed = baker.make(Competency, name='Estimate reasonably', source_id=None)
+
+        created, updated = import_competency_set(make_valid_set([
+            {'source_id': 'bc:math:7:reasoning-3', 'name': 'Estimate reasonably', 'category': 'Grade 7'},
+            {'source_id': 'bc:math:8:reasoning-3', 'name': 'Estimate reasonably', 'category': 'Grade 8'},
+        ]))
+
+        self.assertEqual((created, updated), (1, 1))
+        hand_typed.refresh_from_db()
+        self.assertEqual((hand_typed.source_id, hand_typed.category), ('bc:math:7:reasoning-3', 'Grade 7'))
+        self.assertEqual(Competency.objects.get(source_id='bc:math:8:reasoning-3').category, 'Grade 8')
+
+    def test_import__failure_part_way_saves_nothing(self):
+        """ The import is all or nothing: if saving one entry fails, the entries before it are
+        rolled back too, rather than leaving a partly imported set """
+        competency_set = make_valid_set([{'source_id': 'x:1', 'name': 'a'}, {'source_id': 'x:2', 'name': 'b'}])
+
+        with patch.object(Competency, 'full_clean', side_effect=[None, ValidationError('boom')]):
+            with self.assertRaises(ValidationError):
+                import_competency_set(competency_set)
+
+        self.assertFalse(Competency.objects.exists())
+
 
 class ExportRoundTripTest(ByteDeckTenantTestCase):
     """ Tests for the exporters and full export-import round trips. """
+
+    def test_export_competency_set__given_queryset(self):
+        """ When a queryset is passed, exactly those competencies are exported (inactive ones included) """
+        retired = baker.make(Competency, name='Retired one', active=False)
+        baker.make(Competency, name='Active one', active=True)
+
+        competency_set = export_competency_set(Competency.objects.filter(pk=retired.pk))
+        self.assertEqual([e['name'] for e in competency_set['entries']], ['Retired one'])
 
     def test_export__active_competencies_only(self):
         """ The default export includes active competencies and skips deactivated ones """
