@@ -16,4 +16,6 @@ urlpatterns = [
     # A script-capable answer is downloaded through here rather than linked at its storage URL,
     # so that HTML or SVG a student uploaded is never opened as a page in a marker's session.
     path('answer/<int:pk>/download/', views.answer_file_download, name='answer_file_download'),
+    # The same for a question's solution file, which can be of any type too (#2924).
+    path('<int:pk>/solution/download/', views.solution_file_download, name='solution_file_download'),
 ]

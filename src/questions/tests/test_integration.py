@@ -994,20 +994,40 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "An URL like https://example.com")
         self.assertContains(response, "Check it loads.")
 
-    def test_display__multiparagraph_marker_notes_render_in_div(self):
-        """Multi-paragraph marker notes keep their <p> tags (unwrap_p only strips a single
-        wrapping one), so the label wrapper is a <div>, not a <p>: a <p> nested in a <p> is
-        invalid and the browser would auto-close the outer one, breaking the label layout."""
-        self.short_question.marker_notes = "<p>First note.</p><p>Second note.</p>"
+    def test_display__staff_get_a_solution_column(self):
+        """Markers get three columns, Question, Answer provided and Solution, with the solution
+        in a cell of its own beside the answer (#2927)."""
+        self.short_question.solution_text = "An URL like https://example.com"
         self.short_question.save()
         self.complete_with_answers()
 
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertContains(response, '<div class="text-muted"><small><b>Marker notes:</b>')
-        # both paragraphs survive verbatim: unwrap_p only strips a single wrapping <p>, so
-        # multi-paragraph notes keep their tags (rather than being flattened or escaped)
-        self.assertContains(response, "<p>First note.</p><p>Second note.</p>")
+
+        content = response.content.decode()
+        headers = re.findall(r'<th class="col-sm-\d">([^<]*)</th>', content)
+        self.assertEqual(headers, ["Question", "Answer provided", "Solution"])
+        solution_cell = re.search(r'<td class="col-sm-3">(.*?)</td>', content, re.S).group(1)
+        self.assertIn("An URL like https://example.com", solution_cell)
+        # the long answer has no solution, so its cell says so rather than standing empty
+        self.assertEqual(len(re.findall(r'<td class="col-sm-3">', content)), 2)
+        self.assertContains(response, '<span class="text-muted">-</span>')
+
+    def test_display__marker_notes_are_kept_as_written_beside_the_solution(self):
+        """The marker notes sit behind an info button in the Solution cell, as the teacher wrote
+        them, paragraphs, images and links included, ready for the popover to show (#2923)."""
+        notes = '<p>First note.</p><p><img src="/media/rubric.png"> <a href="https://example.com">rubric</a></p>'
+        self.short_question.marker_notes = notes
+        self.short_question.save()
+        self.complete_with_answers()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        content = response.content.decode()
+        solution_cell = re.search(r'<td class="col-sm-3">(.*?)</td>', content, re.S).group(1)
+        self.assertIn('class="btn btn-link marker-notes-popover"', solution_cell)
+        self.assertIn(f'<template class="marker-notes-content">{notes}</template>', solution_cell)
 
     def publish_file_answer(self, file_name, content=b"pretend media"):
         """Give the submission a published file answer, as if the student had uploaded one.
@@ -1083,18 +1103,36 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
 
         self.short_question.refresh_from_db()
-        self.assertContains(response, "<b>Solution file:</b>")
         self.assertContains(response, self.short_question.solution_file.url)
         self.assertContains(response, '<img class="question-media"')
 
+    def test_display__a_script_capable_solution_downloads(self):
+        """A solution a browser would run a script from is linked through the download view,
+        never at its storage URL, beside the answers it is compared with (#2924)."""
+        self.short_question.solution_file = SimpleUploadedFile("example.html", b"<h1>example</h1>")
+        self.short_question.save()
+        self.complete_with_answers()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.short_question.refresh_from_db()
+        self.assertContains(response, reverse("questions:solution_file_download", args=[self.short_question.pk]))
+        self.assertNotContains(response, f'href="{self.short_question.solution_file.url}"')
+
     def test_display__student_does_not_see_marker_notes(self):
-        """Solutions and marker notes stay staff-only in the answers display."""
+        """Solutions and marker notes stay staff-only in the answers display, which keeps its
+        two columns for the student."""
         self.short_question.solution_text = "SECRET SOLUTION"
+        self.short_question.marker_notes = "<p>SECRET NOTES</p>"
         self.short_question.save()
         self.complete_with_answers()
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.assertContains(response, "My answer")
         self.assertNotContains(response, "SECRET SOLUTION")
+        self.assertNotContains(response, "SECRET NOTES")
+        headers = re.findall(r'<th class="col-sm-\d">([^<]*)</th>', response.content.decode())
+        self.assertEqual(headers, ["Question", "Your answer"])
 
 
 class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
@@ -1129,22 +1167,53 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "Tom &amp; Jerry")
         self.assertNotContains(response, "&amp;amp;")
 
-    def test_quest_detail__marker_notes_popover_is_initialized(self):
-        """The marker-notes popover in the question table is activated on this page (#2166).
+    def test_quest_detail__marker_notes_popover_shows_the_notes_as_written(self):
+        """The question table's marker notes keep their HTML for the popover that shows them,
+        and the page sets that popover up (#2166, #2923).
 
-        A bootstrap popover does nothing until something initializes it: without the site-wide
-        initializer this icon offers only its native "Marker Notes" title, leaving the notes
-        themselves unreadable on the page a teacher marks from.
+        The popover's behaviour, opening and closing and what it shows, is covered in a browser
+        by test_marker_notes_render.py.
         """
-        self.short_question.marker_notes = "<p>Accept any working URL.</p>"
+        notes = '<p>Accept any <b>working</b> URL.</p><p><img src="/media/example.png"></p>'
+        self.short_question.marker_notes = notes
         self.short_question.save()
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
 
-        self.assertContains(response, "Accept any working URL.")
-        self.assertContains(response, 'data-toggle="popover"')
-        self.assertContains(response, """$('[data-toggle="popover"]').popover();""")
+        self.assertContains(response, f'<template class="marker-notes-content">{notes}</template>')
+        self.assertContains(response, "selector: '.marker-notes-popover'")
+        self.assertContains(response, "sanitize: false")
+
+    def test_quest_detail__marker_notes_drop_what_could_run_a_script(self):
+        """Marker notes keep their formatting but lose script and event handlers on the way to
+        the page: a quest imported from the Shared Library brings notes written on another
+        deck, which must not run in the session of the staff reading them (#2923)."""
+        self.short_question.marker_notes = (
+            '<p><b>Check</b> it <img src="/media/x.png" onerror="alert(1)"></p><script>alert(2)</script>')
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        notes = re.search(r'<template class="marker-notes-content">(.*?)</template>', response.content.decode(), re.S).group(1)
+        self.assertIn('<b>Check</b>', notes)
+        self.assertIn('<img src="/media/x.png">', notes)
+        self.assertNotIn("onerror", notes)
+        self.assertNotIn("<script>", notes)
+
+    def test_quest_detail__questions_panel_follows_quest_details(self):
+        """Staff see the Submission Questions panel right after Quest Details, ahead of the
+        Submission Instructions and Instructor Notes (#2922)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        content = response.content.decode()
+        panels = [f'id="{name}-{self.quest.id}"' for name in
+                  ("quest-instructions", "quest-questions", "submission-instructions", "instructor-notes")]
+        positions = [content.index(panel) for panel in panels]
+        self.assertEqual(positions, sorted(positions))
 
 
 class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
