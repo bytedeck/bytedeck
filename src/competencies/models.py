@@ -4,6 +4,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from siteconfig.models import SiteConfig
+
 
 class ProficiencyLevel(models.IntegerChoices):
     """ The BC 4-point proficiency scale: https://curriculum.gov.bc.ca/
@@ -67,6 +69,17 @@ class Competency(models.Model):
         return self.name
 
 
+class QuestCompetencyManager(models.Manager):
+    """ Default manager for QuestCompetency, so related managers such as quest.quest_competencies
+    use it too. A link is nearly always shown by its competency's name, and the default ordering
+    joins the competency anyway, so it is loaded in the same query.
+    """
+
+    def get_queryset(self):
+        """ Returns the links with their competencies selected in the same query. """
+        return super().get_queryset().select_related('competency')
+
+
 class QuestCompetency(models.Model):
     """ Through-table linking a Quest to a Competency, carrying the default proficiency level
     that approving a submission of this quest generally demonstrates.
@@ -86,15 +99,23 @@ class QuestCompetency(models.Model):
                   "Teachers can adjust the level for individual students when approving submissions."
     )
 
+    objects = QuestCompetencyManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['quest', 'competency'], name='unique_quest_competency')
         ]
+        ordering = ['competency__category', 'competency__name']
         verbose_name_plural = 'quest competencies'
 
     def __str__(self):
         """ Returns "<quest> - <competency>", identifying both ends of the link. """
         return f"{self.quest} - {self.competency}"
+
+    def get_default_level_label(self):
+        """ Returns this deck's display label for the link's default level (the custom
+        proficiency scale labels in SiteConfig, e.g. "Proficient"). """
+        return SiteConfig.get().get_competency_scale_labels()[self.default_level]
 
 
 class CompetencyAssessment(models.Model):
