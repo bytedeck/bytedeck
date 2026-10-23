@@ -2,6 +2,7 @@ import os
 import uuid
 
 from django.db import models
+from django.utils.functional import cached_property
 from django.urls import reverse
 
 from comments.models import Comment
@@ -182,6 +183,16 @@ class Question(models.Model):
         highest = cls.objects.filter(quest=quest).aggregate(models.Max("ordinal"))["ordinal__max"]
         return (highest or 0) + 1
 
+    @cached_property
+    def number(self):
+        """This question's 1-based place among its quest's questions, by ordinal.
+
+        The submission page and the marking table both number questions this way, so a student
+        answering only some of them again after a return still sees each under the number it
+        had the first time (#2933).
+        """
+        return Question.objects.filter(quest_id=self.quest_id, ordinal__lt=self.ordinal).count() + 1
+
     def get_absolute_url(self):
         """Return the URL to the question's update view."""
         return reverse("questions:update", kwargs={"quest_id": self.quest_id, "pk": self.pk})
@@ -286,6 +297,27 @@ class QuestionSubmission(models.Model):
         Comment, on_delete=models.SET_NULL, null=True, blank=True, related_name="question_submissions"
     )
 
+    # The marker's verdict on this answer (#2933). `marked_wrong` is what the X beside the answer
+    # in the marking table toggles while the submission waits for review: seen only by staff, and
+    # changeable until the teacher returns or approves the quest. That sets `is_correct` from it
+    # (questions.utils.finalize_answer_marks), and `is_correct` is what everyone is shown: a check
+    # or an X. It stays NULL for an answer that was never judged this way, such as one published
+    # before marking existed, which shows neither.
+    #
+    # db_default as well as default: during a deploy the outgoing version still inserts answers
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and
+    # the deploy window").
+    marked_wrong = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Marked wrong by a teacher reviewing the submission. Seen only by staff until the quest is returned or approved.",
+    )
+    is_correct = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Set when the quest is returned or approved: whether the answer was right. Empty for an answer never marked.",
+    )
+
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_last_edit = models.DateTimeField(auto_now=True)
 
@@ -302,6 +334,29 @@ class QuestionSubmission(models.Model):
             return f"{created} - ({self.question.ordinal})"
         else:
             return f"{created} - (?)"
+
+    @cached_property
+    def awaiting_mark(self):
+        """Whether a teacher can still mark this answer right or wrong (#2933).
+
+        Only the answers handed in with the submission's latest completion, while the submission
+        waits for review: completed and not yet approved, and not already marked. Once the quest
+        is returned or approved the marks are set and shown, and an earlier hand-in's answers were
+        judged when that one came back.
+
+        Returns:
+            bool: True for an unmarked answer from the latest hand-in of a submission awaiting
+            review.
+        """
+        submission = self.quest_submission
+        if self.is_correct is not None or self.comment_id is None:
+            return False
+        if not submission.is_completed or submission.is_approved:
+            return False
+        latest = QuestionSubmission.objects.filter(
+            quest_submission_id=self.quest_submission_id, comment__isnull=False,
+        ).aggregate(models.Max("comment_id"))["comment_id__max"]
+        return self.comment_id == latest
 
     @property
     def is_published(self):

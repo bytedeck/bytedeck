@@ -3,7 +3,8 @@
   A published comment's question answers. Expects `answers` (QuestionSubmission qs).
 
   Staff are marking, so they get a third column beside the student's answer: each question's
-  solution, with its marker notes behind an info button (#2927). On a screen narrower than
+  solution, with its marker notes behind an info button (#2927). Each answer carries its mark
+  (answer_mark.html, #2933): the X staff mark it wrong with, then the check or X it was given. On a screen narrower than
   Bootstrap's sm breakpoint the columns stack, question first, then the answer, then the
   solution, each under a label of its own, since the header row is hidden there
   (css/custom_common.css).
@@ -25,7 +26,8 @@
       <td class="{% if request.user.is_staff %}col-sm-4{% else %}col-sm-5{% endif %}">
         {# number each answer inline, matching the "Question N" heading on the submission form; #}
         {# unwrap_p strips Summernote's wrapping paragraph element so the number sits right before a one-line prompt. #}
-        <strong>{{ forloop.counter }}.</strong>
+        {# the question's own number, so a hand-in answering only some of them again keeps each one's number (#2933) #}
+        <strong>{% if answer.question %}{{ answer.question.number }}{% else %}?{% endif %}.</strong>
         {% if answer.question %}
           {# a small type icon (text cursor / paragraph / paperclip) right after the number, so the answer's shape reads at a glance #}
           <i class="fa fa-fw {{ answer.question.type|question_type_icon }} text-muted" title="{{ answer.question.get_type_display }}"></i>
@@ -36,6 +38,7 @@
       </td>
       <td class="{% if request.user.is_staff %}col-sm-5{% else %}col-sm-7{% endif %}">
         <div class="question-answers-label">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</div>
+        {% include 'questions/snippets/answer_mark.html' %}
         {% if answer.response_file %}
           {% if answer.response_file_is_script_capable %}
             {% comment %} The stored file decides this, not the question, so a question that is

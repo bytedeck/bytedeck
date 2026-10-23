@@ -12,6 +12,7 @@ available, like the other render tests (e.g. quest_manager/tests/test_flag_submi
 """
 
 import glob
+import json
 import os
 from unittest import skipUnless
 from urllib.parse import urlparse
@@ -20,6 +21,7 @@ from django.conf import settings
 from django.contrib.staticfiles import finders
 from django.urls import reverse
 
+from questions.models import QuestionSubmission
 from questions.tests.test_integration import QuestionSubmissionFlowTestBase
 
 try:
@@ -85,12 +87,19 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="table table-condensed question-answers"')
         self.html = response.content.decode()
+        # the short answer's X, which the test answers itself (_serve)
+        self.mark_path = reverse("questions:ajax_mark_answer", args=[
+            QuestionSubmission.objects.get(question=self.short_question, comment__isnull=False).id])
+        self.mark_status = 200  # how the test answers a mark
+        self.marks = []  # the body of each mark request
+        self.dialogs = []  # the text of any alert the page raised
 
         playwright = sync_playwright().start()
         self.addCleanup(playwright.stop)
         browser = playwright.chromium.launch(executable_path=_CHROMIUM)
         self.addCleanup(browser.close)
         self.page = browser.new_page(viewport={"width": 1200, "height": 900})
+        self.page.on("dialog", lambda dialog: (self.dialogs.append(dialog.message), dialog.dismiss()))
         self.page.route("**/*", self._serve)
         self.page.goto(f"{PAGE_ORIGIN}/page/")
 
@@ -107,6 +116,11 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
             route.fulfill(status=200, content_type="text/html; charset=utf-8", body=self.html)
         elif path.startswith(settings.STATIC_URL) and finders.find(path[len(settings.STATIC_URL):]):
             route.fulfill(path=finders.find(path[len(settings.STATIC_URL):]))
+        elif path == self.mark_path and request.method == "POST":
+            self.marks.append(request.post_data)
+            wrong = "wrong=true" in request.post_data
+            route.fulfill(status=self.mark_status, content_type="application/json",
+                          body=json.dumps({"marked_wrong": wrong}))
         else:
             route.abort()
 
@@ -174,6 +188,44 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertLess(cells[0]["x"], cells[1]["x"])
         self.assertLess(cells[1]["x"], cells[2]["x"])
         self.assertFalse(self.page.locator(".question-answers-label").first.is_visible())
+
+    def test_mark__the_x_marks_an_answer_wrong_and_back(self):
+        """The X beside an answer saves the mark as it is clicked, and shows it: pressed and red
+        once marked wrong, plain again once the mark is taken back (#2933)."""
+        x = self.page.locator(f'.answer-mark-wrong[data-mark-url="{self.mark_path}"]')
+        self.assertEqual(x.get_attribute("aria-pressed"), "false")
+
+        x.click()
+
+        self.page.wait_for_function(
+            f"document.querySelector('.answer-mark-wrong[data-mark-url=\"{self.mark_path}\"]').getAttribute('aria-pressed') === 'true'",
+            timeout=10000)
+        self.assertIn("wrong=true", self.marks[0])
+        self.assertIn("btn-danger", x.get_attribute("class"))
+        self.assertIn("take the mark back", x.get_attribute("title"))
+
+        x.click()
+
+        self.page.wait_for_function(
+            f"document.querySelector('.answer-mark-wrong[data-mark-url=\"{self.mark_path}\"]').getAttribute('aria-pressed') === 'false'",
+            timeout=10000)
+        self.assertIn("wrong=false", self.marks[1])
+        self.assertNotIn("btn-danger", x.get_attribute("class"))
+        self.assertEqual(self.dialogs, [])
+
+    def test_mark__a_failed_save_says_so_and_leaves_the_x_as_it_was(self):
+        """A mark the server refuses is reported, and the X stays unpressed and usable."""
+        self.mark_status = 500
+        x = self.page.locator(f'.answer-mark-wrong[data-mark-url="{self.mark_path}"]')
+
+        x.click()
+
+        self.page.wait_for_function("window.document.querySelector('.answer-mark-wrong:disabled') === null", timeout=10000)
+        self.page.wait_for_timeout(200)
+        self.assertEqual(len(self.dialogs), 1)
+        self.assertIn("wasn't saved", self.dialogs[0])
+        self.assertEqual(x.get_attribute("aria-pressed"), "false")
+        self.assertTrue(x.is_enabled())
 
     def test_layout__stacked_on_a_narrow_screen(self):
         """Below Bootstrap's sm breakpoint the question comes first, then the answer, then the

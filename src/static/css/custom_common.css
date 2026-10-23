@@ -1475,6 +1475,14 @@ table[data-toggle="table"].bt-reveal {
     max-height: 40px;
 }
 
+/* An answer's mark in the marking table (questions/snippets/answer_mark.html, #2933): the X staff
+   mark it wrong with, or the check or X it was given, at the right of the answer's cell with
+   room between it and the answer. */
+.question-answers .answer-mark,
+.question-answers .answer-mark-wrong {
+    margin-left: 8px;
+}
+
 /* The label over each answer and solution in a submission's question answers
    (questions/snippets/comment_answers.html). On a wide screen the header row names the
    columns, so the labels are for a narrow one, where the columns stack (#2927). */

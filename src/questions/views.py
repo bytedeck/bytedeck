@@ -7,9 +7,10 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
-from hackerspace_online.decorators import StaffMemberRequiredMixin, staff_member_required
+from hackerspace_online.decorators import StaffMemberRequiredMixin, staff_member_required, xml_http_request_required
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from quest_manager.models import Quest
 
@@ -307,3 +308,38 @@ def solution_file_download(request, pk):
         as_attachment=True,
         filename=os.path.basename(question.solution_file.name),
     )
+
+
+@xml_http_request_required
+@non_public_only_view
+@staff_member_required
+@require_POST
+def ajax_mark_answer(request, pk):
+    """Mark one answer of a submission awaiting review wrong, or take the mark back (#2933).
+
+    The X beside an answer in the marking table posts here, and the mark is saved at once, so it
+    works wherever the table is shown: the submission page and the Approvals tab's preview. It
+    stays with staff until the quest is returned or approved, which turns it into the check or
+    X the student sees (`questions.utils.finalize_answer_marks`).
+
+    Args:
+        request: the POST, sent as XHR, with `wrong` "true" to mark the answer wrong and
+            anything else to unmark it.
+        pk: pk of the QuestionSubmission to mark.
+
+    Returns:
+        JsonResponse: `marked_wrong`, the answer's mark as it now stands.
+
+    Raises:
+        Http404: for an answer that can't be marked any more, or never could: one already
+            marked, one from an earlier hand-in, or one whose submission isn't awaiting review.
+    """
+    answer = get_object_or_404(QuestionSubmission.objects.select_related("quest_submission"), pk=pk)
+    if not answer.awaiting_mark:
+        raise Http404("That answer can't be marked now.")
+
+    answer.marked_wrong = request.POST.get("wrong") == "true"
+    answer.full_clean()
+    # only the mark: the student's answer itself is not this request's to write
+    answer.save(update_fields=["marked_wrong", "datetime_last_edit"])
+    return JsonResponse({"marked_wrong": answer.marked_wrong})
