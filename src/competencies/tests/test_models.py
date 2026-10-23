@@ -112,6 +112,16 @@ class QuestCompetencyModelTest(ByteDeckTenantTestCase):
         QuestCompetency.objects.create(quest=other_quest, competency=self.competency)
         self.assertEqual(QuestCompetency.objects.count(), 2)
 
+    def test_quest_competencies__load_their_competency_in_the_same_query(self):
+        """ A quest's links come with their competencies, so naming them takes no further queries """
+        baker.make(QuestCompetency, quest=self.quest, competency=baker.make(Competency, name="Communicating"))
+        links = list(self.quest.quest_competencies.all())
+
+        with self.assertNumQueries(0):
+            names = [link.competency.name for link in links]
+
+        self.assertEqual(names, ["Communicating", "Creative Thinking"])
+
     def test_quest_delete__removes_link_but_not_competency(self):
         """ Deleting a quest cascades away its competency links, leaving the competency itself alone """
         self.quest.delete()

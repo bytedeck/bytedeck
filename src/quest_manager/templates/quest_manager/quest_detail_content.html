@@ -40,6 +40,8 @@
           {% else %}
           <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
           {% endif %}
+          {# hidden on Library pages: quest competency links don't move between decks yet (#1915) #}
+          {% if config.enable_competencies and not dont_show_competencies %}{% include 'competencies/snippets/quest_competency_chips.html' %}{% endif %}
           {% if quest.max_repeats != 0 %}
           <li>Maximum total XP: {% if quest.max_xp == -1 %} Unlimited
               {% else %} {{quest.max_xp}}

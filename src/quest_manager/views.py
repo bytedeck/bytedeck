@@ -37,6 +37,7 @@ from badges.models import BadgeAssertion
 from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
+from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import (
@@ -452,12 +453,12 @@ class QuestCopy(QuestCreate):
         """Fill the create form with a copy of the quest being copied.
 
         The form is bound to an unsaved copy of that quest, named with " - COPY" and given a new
-        import_id, and starts with the quest's tags and with the quest itself as the copy's
-        prerequisite.
+        import_id, and starts with the quest's tags and competencies (with their default levels)
+        and with the quest itself as the copy's prerequisite.
 
         Returns:
             dict: the quest form's keyword arguments, with `instance` the unsaved copy and `initial`
-            holding its tags and prerequisite.
+            holding its tags, competencies and prerequisite.
         """
         kwargs = super().get_form_kwargs()
 
@@ -467,6 +468,7 @@ class QuestCopy(QuestCreate):
         # Set initial tags and prerequisite for the form. The quest it was copied from is the copy's
         # prerequisite, so the deck's default badge prerequisite (QuestCreate.get_initial) is left out.
         kwargs["initial"]["tags"] = copied_quest.tags.all()
+        kwargs["initial"].update(quest_competency_initial(copied_quest))
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
         kwargs["initial"].pop("new_badge_prerequisite", None)
 

@@ -1556,3 +1556,13 @@ table[data-toggle="table"].bt-reveal {
 .fa-stack.unflag-icon .fa-ban {
     color: tomato;
 }
+
+/* Competency chips on the quest detail page. Bootstrap labels never wrap, and curriculum
+   competency names are often a full sentence, so let a chip wrap within the column. */
+.competency-chip {
+    display: inline-block;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.4;
+    margin: 0 2px 4px 0;
+}
