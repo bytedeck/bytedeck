@@ -40,7 +40,12 @@ from comments.utils import accepted_attachments, save_draft_attachments
 from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
+from questions.utils import (
+    discard_draft_question_submissions,
+    finalize_answer_marks,
+    save_draft_file_answers,
+    sync_draft_question_submissions,
+)
 from courses.models import Block, CourseStudent
 from utilities.redirects import redirect_back, safe_local_url, where_from
 from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
@@ -1480,6 +1485,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "</span>"
             )
             blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
+            # the answers show a check or the X a teacher gave them, approved or not (#2933)
+            finalize_answer_marks(self.submission)
             self.submission.mark_approved()
         elif "comment_button" in self.request.POST:
             note_verb = "commented on"
@@ -1501,6 +1508,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "</span>"
             )
             blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
+            # marked before the student sees the quest again, since the answers marked wrong
+            # are the questions that come back for them to answer (#2933)
+            finalize_answer_marks(self.submission)
             self.submission.mark_returned()
         # dispatch() raises Http404 unless post_has_valid_button() is true, so one of the four
         # buttons is always present by the time this runs; this elif always matches when the

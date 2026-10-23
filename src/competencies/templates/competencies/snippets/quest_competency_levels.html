@@ -18,7 +18,7 @@
       <tr data-competency-id="{{ competency.pk }}"{% if not selected %} class="hidden"{% endif %}>
         <td>
           <label for="{{ field.id_for_label }}">{{ competency.name }}</label>
-          {% if competency.category %}<br><small class="text-muted">{{ competency.category }}</small>{% endif %}
+          {% if competency.course_and_category %}<br><small class="text-muted">{{ competency.course_and_category }}</small>{% endif %}
         </td>
         <td>
           {{ field }}

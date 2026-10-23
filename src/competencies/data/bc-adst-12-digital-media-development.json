@@ -1,0 +1,198 @@
+{
+    "format": "bytedeck-competency-set",
+    "version": 1,
+    "name": "BC Digital Media Development 12 Curricular Competencies",
+    "jurisdiction": "BC",
+    "subject": "Applied Design, Skills, and Technologies",
+    "grade": "12",
+    "source_url": "https://curriculum.gov.bc.ca/curriculum/adst/12/digital-media-development",
+    "course": "Digital Media Development 12",
+    "entries": [
+        {
+            "source_id": "bc:adst:12:digital-media-development:understanding-context-1",
+            "name": "Conduct user-centred research to determine design opportunities and barriers",
+            "description": "",
+            "category": "Understanding context"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:defining-1",
+            "name": "Establish a point of view for a chosen design opportunity",
+            "description": "",
+            "category": "Defining"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:defining-2",
+            "name": "Identify potential users, intended impact, and possible unintended negative consequences",
+            "description": "",
+            "category": "Defining"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:defining-3",
+            "name": "Make decisions about premises and constraints that define the design space",
+            "description": "",
+            "category": "Defining"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:ideating-1",
+            "name": "Identify gaps to explore a design space",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:ideating-2",
+            "name": "Generate ideas and add to others’ ideas to create possibilities, and prioritize them for prototyping",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:ideating-3",
+            "name": "Critically analyze how competing social, ethical, and community factors may impact design",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:ideating-4",
+            "name": "Prioritize ideas for prototyping",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:ideating-5",
+            "name": "Work with users throughout the design process",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:prototyping-1",
+            "name": "Identify and apply sources of inspiration and information",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:prototyping-2",
+            "name": "Choose an appropriate form, scale, and level of detail for prototyping, and plan procedures for prototyping multiple ideas",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:prototyping-3",
+            "name": "Analyze the design for the life cycle and evaluate its impacts",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:prototyping-4",
+            "name": "Construct prototypes, making changes to tools, materials, and procedures as needed",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:prototyping-5",
+            "name": "Record iterations of prototyping",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:testing-1",
+            "name": "Identify and communicate with sources of feedback",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:testing-2",
+            "name": "Develop an appropriate test of the prototype",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:testing-3",
+            "name": "Apply critiques to design or processes throughout",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:testing-4",
+            "name": "Iterate the prototype or abandon the design idea",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:making-1",
+            "name": "Identify appropriate tools, technologies, materials, processes, and time needed for production",
+            "description": "",
+            "category": "Making"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:making-2",
+            "name": "Use project management processes when working individually or collaboratively to coordinate production",
+            "description": "",
+            "category": "Making"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:sharing-1",
+            "name": "Share progress while creating to increase opportunities for critique, collaboration, and, if applicable, marketing",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:sharing-2",
+            "name": "Decide on how and with whom to share or promote their product, creativity, and, if applicable, intellectual property",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:sharing-3",
+            "name": "Consider how others might build upon the design concept",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:sharing-4",
+            "name": "Critically reflect on their design thinking and processes, and identify new design goals",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:sharing-5",
+            "name": "Assess ability to work effectively both as individuals and collaboratively while implementing project management processes",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:applied-skills-1",
+            "name": "Apply safety procedures for themselves, co-workers, and users in both physical and digital environments",
+            "description": "",
+            "category": "Applied Skills"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:applied-skills-2",
+            "name": "Identify and assess skills needed for design interests, and develop specific plans to learn or refine them over time",
+            "description": "",
+            "category": "Applied Skills"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:applied-technologies-1",
+            "name": "Explore existing, new, and emerging tools, technologies, and systems to evaluate their suitability for their design interests",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:applied-technologies-2",
+            "name": "Evaluate impacts, including unintended negative consequences, of choices made about technology use",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:applied-technologies-3",
+            "name": "Analyze the role technologies play in societal change",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:12:digital-media-development:applied-technologies-4",
+            "name": "Examine how cultural beliefs, values, and ethical positions affect the development and use of technologies",
+            "description": "",
+            "category": "Applied Technologies"
+        }
+    ]
+}

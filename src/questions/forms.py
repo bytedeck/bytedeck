@@ -326,19 +326,20 @@ class QuestionSubmissionForm(forms.ModelForm):
         )
 
     def _question_position(self):
-        """Return this question's 1-based position on the submission page, or None.
+        """Return this question's number, as the "Question N:" heading above its answer field
+        in submission.html shows it, or None.
 
-        The form's formset prefix is "question_submissions-<i>" (0-based); i + 1 matches the
-        visible "Question N:" heading rendered just above the answer field in submission.html.
+        That is the question's own place in the quest (`Question.number`), so a student
+        answering only some questions again after a return still sees each under its number
+        (#2933).
 
         Returns:
             int | None: the question number, or None if the form isn't in a formset (no numeric
             prefix, e.g. the formset's empty_form placeholder).
         """
-        try:
-            return int(self.prefix.rsplit("-", 1)[-1]) + 1
-        except (AttributeError, ValueError):
+        if not (self.prefix or "").rsplit("-", 1)[-1].isdigit():
             return None
+        return self.question.number
 
     def _response_aria_label(self):
         """Return a per-question aria-label for the short-answer input or long-answer editor.

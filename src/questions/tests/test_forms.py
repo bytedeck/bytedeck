@@ -271,9 +271,11 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertFalse(form.fields["response_text"].required)
 
     def test_short_answer__distinct_aria_labels_in_formset(self):
-        """Each short-answer input in a formset gets a position-based aria-label matching its
-        visible 'Question N:' heading, so screen-reader users can tell multiple short-answer
-        inputs apart (they'd otherwise all announce the identical 'Response')."""
+        """Each short-answer input in a formset gets an aria-label with its question's number,
+        matching its visible 'Question N:' heading, so screen-reader users can tell multiple
+        short-answer inputs apart (they'd otherwise all announce the identical 'Response'). The
+        number is the question's place in the quest, so the second short answer here, the
+        quest's fourth question, is question 4 (#2933)."""
         # a second short-answer question so the formset renders two short-answer inputs
         second_short = baker.make(
             Question, quest=self.quest, ordinal=6, type="short_answer", required=True,
@@ -286,7 +288,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
 
         labels = [form.fields["response_text"].widget.attrs["aria-label"] for form in formset.forms]
-        self.assertEqual(labels, ["Response to question 1", "Response to question 2"])
+        self.assertEqual(labels, ["Response to question 1", "Response to question 4"])
 
     def test_short_answer__aria_label_fallback_without_formset(self):
         """A standalone short-answer form (no numeric formset prefix) falls back to a generic

@@ -49,6 +49,16 @@ def quest_competency_initial(quest):
     return initial
 
 
+class CompetencyMultipleChoiceField(forms.ModelMultipleChoiceField):
+    """ A multi-select of competencies labelled with their course and category, e.g. "ADST 9:
+    Defining: Choose a design opportunity", so a deck holding several courses' competencies (many
+    of them worded alike) can tell them apart, and searching for a course finds its competencies. """
+
+    def label_from_instance(self, obj):
+        """ Returns the competency's qualified name. """
+        return obj.qualified_name
+
+
 class QuestCompetenciesSelect2Widget(Select2MultipleWidget):
     """ The quest form's competency chips. Its media carries the script that shows a
     default-level picker for each selected competency, so the script only loads on pages
@@ -77,13 +87,12 @@ class CompetencyImportForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         """ Populates the bundled_set choices from the datasets shipped in the app's
-        data/ directory (labelled by each set's name), on top of the standard form
-        args/kwargs.
+        data/ directory, labelled by each set's name and listed alphabetically by it (so a
+        course's grades sit together), on top of the standard form args/kwargs.
         """
         super().__init__(*args, **kwargs)
-        self.fields['bundled_set'].choices = [('', '---------')] + [
-            (key, load_bundled_set(key)['name'] or key) for key in get_bundled_set_keys()
-        ]
+        sets = sorted(((load_bundled_set(key)['name'] or key, key) for key in get_bundled_set_keys()), key=lambda s: s[0].lower())
+        self.fields['bundled_set'].choices = [('', '---------')] + [(key, name) for name, key in sets]
 
     def clean(self):
         """ Validates that exactly one source was provided (a bundled set OR an uploaded
@@ -138,7 +147,7 @@ class QuestCompetenciesFormMixin:
         links = {link.competency_id: link for link in quest.quest_competencies.all()} if quest.pk else {}
         queryset = Competency.objects.filter(Q(active=True) | Q(pk__in=links))
 
-        self.fields[COMPETENCIES_FIELD] = forms.ModelMultipleChoiceField(
+        self.fields[COMPETENCIES_FIELD] = CompetencyMultipleChoiceField(
             queryset=queryset,
             required=False,
             initial=list(links),
