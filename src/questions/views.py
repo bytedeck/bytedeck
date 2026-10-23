@@ -9,7 +9,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
-from hackerspace_online.decorators import StaffMemberRequiredMixin
+from hackerspace_online.decorators import StaffMemberRequiredMixin, staff_member_required
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from quest_manager.models import Quest
 
@@ -274,4 +274,36 @@ def answer_file_download(request, pk):
         answer.response_file.open("rb"),
         as_attachment=True,
         filename=os.path.basename(answer.response_file.name),
+    )
+
+
+@non_public_only_view
+@staff_member_required
+def solution_file_download(request, pk):
+    """Hand a question's solution file to staff as a download instead of opening it in the site.
+
+    A solution file can be of any type, HTML and SVG included, so a teacher can show the marker
+    an example in the format the students answer in (#2924). Those are linked through here for
+    the reason a script-capable answer is (see `answer_file_download`): followed, the link saves
+    the file rather than rendering it in the marker's session. Solutions are for markers, so
+    only staff get one.
+
+    Args:
+        request (HttpRequest): the request.
+        pk (int): id of the ``Question`` whose ``solution_file`` to serve.
+
+    Returns:
+        FileResponse: the stored file, as an attachment.
+
+    Raises:
+        Http404: if the question has no solution file.
+    """
+    question = get_object_or_404(Question, pk=pk)
+    if not question.solution_file:
+        raise Http404("That question doesn't have a solution file.")
+
+    return FileResponse(
+        question.solution_file.open("rb"),
+        as_attachment=True,
+        filename=os.path.basename(question.solution_file.name),
     )

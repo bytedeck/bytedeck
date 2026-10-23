@@ -1,12 +1,14 @@
 import html
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from questions.forms import (
+    MAX_RESPONSE_FILE_SIZE,
     SHORT_ANSWER_MAX_LENGTH,
     QuestionForm,
     QuestionSubmissionForm,
@@ -62,6 +64,62 @@ class QuestionFormTest(ByteDeckTenantTestCase):
         question.full_clean()
         question.save()
         self.assertEqual(Question.objects.get(id=question.id).instructions, "What did you learn?")
+
+
+    def solution_form(self, solution_file, instance=None):
+        """A file question's form, bound to a valid POST carrying the given solution file.
+
+        Args:
+            solution_file (UploadedFile): the file chosen as the solution.
+            instance (Question): the question being edited, or None for a new one.
+
+        Returns:
+            QuestionForm: the bound form, not yet validated.
+        """
+        return QuestionForm(
+            data={"type": "file_upload", "instructions": "Build a page", "allowed_file_type": "all", "required": True},
+            files={"solution_file": solution_file},
+            instance=instance,
+            question_type="file_upload",
+        )
+
+    def test_solution_file__accepts_a_script_capable_file(self):
+        """A solution can be a web page or an SVG, the formats a web or graphic design question's
+        students answer in (#2924)."""
+        for name, content_type in (("index.html", "text/html"), ("logo.svg", "image/svg+xml")):
+            with self.subTest(name=name):
+                form = self.solution_form(SimpleUploadedFile(name, b"<p>example</p>", content_type=content_type))
+                self.assertTrue(form.is_valid(), form.errors)
+
+    def test_solution_file__allowed_up_to_the_size_of_an_answer(self):
+        """A solution is held to the size a student's answer is, not the 500 KB the model
+        field's default form field allows, so an example video fits (#2924)."""
+        big = SimpleUploadedFile("example.mp4", b"x" * 600_000, content_type="video/mp4")
+        self.assertTrue(self.solution_form(big).is_valid())
+
+        too_big = SimpleUploadedFile("example.mp4", b"x", content_type="video/mp4")
+        too_big.size = MAX_RESPONSE_FILE_SIZE + 1
+        form = self.solution_form(too_big)
+        self.assertFalse(form.is_valid())
+        self.assertIn("Max filesize", str(form.errors["solution_file"]))
+
+    def test_solution_file__a_script_capable_solution_is_linked_as_a_download(self):
+        """Editing a question whose solution is a web page links it through the download view,
+        never at its storage URL, where it would open as a page in the teacher's session (#2924)."""
+        question = baker.make(Question, type="file_upload", solution_file="quest/question/solution/index.html")
+
+        rendered = str(QuestionForm(instance=question, question_type="file_upload")["solution_file"])
+
+        self.assertIn(f'href="{reverse("questions:solution_file_download", args=[question.pk])}"', rendered)
+        self.assertNotIn(f'href="{question.solution_file.url}"', rendered)
+
+    def test_solution_file__any_other_solution_keeps_its_direct_link(self):
+        """A solution a browser runs no script from is linked where it is stored, as before."""
+        question = baker.make(Question, type="file_upload", solution_file="quest/question/solution/photo.png")
+
+        rendered = str(QuestionForm(instance=question, question_type="file_upload")["solution_file"])
+
+        self.assertIn(f'href="{question.solution_file.url}"', rendered)
 
 
 class QuestionSubmissionFormTest(ByteDeckTenantTestCase):

@@ -1,20 +1,28 @@
 {% load comment_tags question_tags %}
-{# A published comment's question answers. Expects `answers` (QuestionSubmission qs). #}
-{# Staff additionally see each question's solution and marker notes for easy comparison. #}
+{% comment %}
+  A published comment's question answers. Expects `answers` (QuestionSubmission qs).
+
+  Staff are marking, so they get a third column beside the student's answer: each question's
+  solution, with its marker notes behind an info button (#2927). On a screen narrower than
+  Bootstrap's sm breakpoint the columns stack, question first, then the answer, then the
+  solution, each under a label of its own, since the header row is hidden there
+  (css/custom_common.css).
+{% endcomment %}
 <hr class="tighter">
 <table class="table table-condensed question-answers">
   <thead>
     <tr>
       {# same col-sm-* widths as the body cells below so the headers line up with their columns #}
-      <th class="col-sm-5">Question</th>
-      {# staff are marking, so the right column is the student's answer to compare against; the student sees their own answer #}
-      <th class="col-sm-7">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</th>
+      <th class="{% if request.user.is_staff %}col-sm-4{% else %}col-sm-5{% endif %}">Question</th>
+      {# staff are marking, so the column is the student's answer to compare against; the student sees their own answer #}
+      <th class="{% if request.user.is_staff %}col-sm-5{% else %}col-sm-7{% endif %}">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</th>
+      {% if request.user.is_staff %}<th class="col-sm-3">Solution</th>{% endif %}
     </tr>
   </thead>
   <tbody>
   {% for answer in answers %}
     <tr>
-      <td class="col-sm-5">
+      <td class="{% if request.user.is_staff %}col-sm-4{% else %}col-sm-5{% endif %}">
         {# number each answer inline, matching the "Question N" heading on the submission form; #}
         {# unwrap_p strips Summernote's wrapping paragraph element so the number sits right before a one-line prompt. #}
         <strong>{{ forloop.counter }}.</strong>
@@ -22,44 +30,18 @@
           {# a small type icon (text cursor / paragraph / paperclip) right after the number, so the answer's shape reads at a glance #}
           <i class="fa fa-fw {{ answer.question.type|question_type_icon }} text-muted" title="{{ answer.question.get_type_display }}"></i>
           {{ answer.question.instructions|unwrap_p }}
-          {% if request.user.is_staff %}
-            {% if answer.question.solution_text %}
-              <p class="text-muted"><small><b>Solution:</b> {{ answer.question.solution_text|linebreaksbr }}</small></p>
-            {% endif %}
-            {% if answer.question.solution_file %}
-              {# a div, not a paragraph: the snippet can render a video or audio player, which is invalid inside one #}
-              <div class="text-muted"><small><b>Solution file:</b>
-                {% include 'questions/snippets/question_file.html' with file=answer.question.solution_file %}</small></div>
-            {% endif %}
-            {% if answer.question.marker_notes %}
-              {# unwrap_p strips Summernote's wrapping paragraph element so a one-line note sits beside its label, like Solution above. #}
-              {# A div wrapper (not a paragraph) holds it, because multi-paragraph notes keep their paragraph tags, which would be invalid nested inside another paragraph. #}
-              <div class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|unwrap_p }}</small></div>
-            {% endif %}
-          {% endif %}
         {% else %}
           <em>(question was deleted)</em>
         {% endif %}
       </td>
-      <td class="col-sm-7">
+      <td class="{% if request.user.is_staff %}col-sm-5{% else %}col-sm-7{% endif %}">
+        <div class="question-answers-label">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</div>
         {% if answer.response_file %}
           {% if answer.response_file_is_script_capable %}
-            {% comment %} HTML and SVG run whatever script they carry if a browser navigates to
-               them, so such an answer is never linked at its storage URL: this link goes through
-               a view that responds with Content-Disposition: attachment, and the file is saved
-               rather than opened in the marker's session (#2559). An SVG is shown as well,
-               through an <img>, where browsers run no script at all, so a graphic design answer
-               can still be looked at. The stored file decides this, not the question, so a
-               question that is later deleted, retyped or unticked cannot bring the direct link back.
-               {% endcomment %}
-            {% if answer.response_file|is_displayable_svg %}
-              <img class="question-media" src="{{ answer.response_file.url }}"
-                   alt="{{ answer.response_file|filename|striptags }}">
-              <br>
-            {% endif %}
-            <a href="{% url 'questions:answer_file_download' answer.id %}">
-              <i class="fa fa-fw fa-download"></i>{{ answer.response_file|filename }}</a>
-            <small class="text-muted">(downloads)</small>
+            {% comment %} The stored file decides this, not the question, so a question that is
+               later deleted, retyped or unticked cannot bring the direct link back (#2559). {% endcomment %}
+            {% url 'questions:answer_file_download' answer.id as download_url %}
+            {% include 'questions/snippets/download_file.html' with file=answer.response_file %}
           {% else %}
             {% include 'questions/snippets/question_file.html' with file=answer.response_file %}
           {% endif %}
@@ -69,6 +51,33 @@
           <em>(no answer)</em>
         {% endif %}
       </td>
+      {% if request.user.is_staff %}
+      <td class="col-sm-3">
+        <div class="question-answers-label">Solution</div>
+        {% with question=answer.question %}
+          {% if question.marker_notes %}
+            <span class="pull-right">{% include 'questions/snippets/marker_notes_popover.html' %}</span>
+          {% endif %}
+          {% if question.solution_text %}
+            <p>{{ question.solution_text|linebreaksbr }}</p>
+          {% endif %}
+          {% if question.solution_file %}
+            {# a div, not a paragraph: the snippet can render a video or audio player, which is invalid inside one #}
+            <div>
+              {% if question.solution_file_is_script_capable %}
+                {% url 'questions:solution_file_download' question.id as download_url %}
+                {% include 'questions/snippets/download_file.html' with file=question.solution_file %}
+              {% else %}
+                {% include 'questions/snippets/question_file.html' with file=question.solution_file %}
+              {% endif %}
+            </div>
+          {% endif %}
+          {% if not question.solution_text and not question.solution_file %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        {% endwith %}
+      </td>
+      {% endif %}
     </tr>
   {% endfor %}
   </tbody>

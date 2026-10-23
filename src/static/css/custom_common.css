@@ -1475,6 +1475,62 @@ table[data-toggle="table"].bt-reveal {
     max-height: 40px;
 }
 
+/* The label over each answer and solution in a submission's question answers
+   (questions/snippets/comment_answers.html). On a wide screen the header row names the
+   columns, so the labels are for a narrow one, where the columns stack (#2927). */
+.question-answers-label {
+    display: none;
+}
+@media (max-width: 767px) {
+    /* Bootstrap's sm breakpoint, as the grid's: below it, each answer's question, then its
+       answer, then its solution, one under another, with a rule between answers but not
+       between the parts of one. */
+    .question-answers > thead {
+        display: none;
+    }
+    table.question-answers > tbody > tr > td {
+        display: block;
+        width: 100%;
+    }
+    table.question-answers > tbody > tr > td + td {
+        border-top: none;
+    }
+    .question-answers-label {
+        display: block;
+        font-weight: bold;
+    }
+}
+
+/* A question's marker notes, opened from their info button (#2923). They show as written, so
+   the popover is wider than a hint's, what is in it is held to its width, and long notes
+   scroll inside it rather than running off the screen. */
+.btn.marker-notes-popover {
+    padding: 0 2px;
+    vertical-align: baseline;
+}
+/* Bootstrap rings a button it has focus on, so a click would leave one round the icon while
+   the notes are open; the ring stays for someone reaching the button by keyboard. */
+.btn.marker-notes-popover:focus:not(:focus-visible) {
+    outline: none;
+}
+.popover.marker-notes-tip {
+    max-width: min(600px, calc(100vw - 20px));
+}
+.popover.marker-notes-tip .popover-content {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+}
+.popover.marker-notes-tip img,
+.popover.marker-notes-tip video,
+.popover.marker-notes-tip iframe {
+    max-width: 100%;
+}
+.popover.marker-notes-tip img,
+.popover.marker-notes-tip video {
+    height: auto;
+}
+
 /* The bar under a file being attached by a draft save (#784): a slim Bootstrap progress bar on a
    line of its own, inside the note's paragraph under the file input. */
 .draft-upload-progress {
