@@ -7,19 +7,19 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel, QuestCompetency
 from quest_manager.models import Quest, QuestSubmission
 
 User = get_user_model()
 
 
-class ProficiencyLevelTest(TenantTestCase):
+class ProficiencyLevelTest(ByteDeckTenantTestCase):
     """ Tests for the ProficiencyLevel integer choices. """
 
-    def test_level_values(self):
+    def test_proficiency_level__values_are_bc_scale_ints(self):
         """ Levels are stored as ints on the BC 4-point scale so aggregation/comparison is trivial """
         self.assertEqual(ProficiencyLevel.EMERGING, 1)
         self.assertEqual(ProficiencyLevel.DEVELOPING, 2)
@@ -27,7 +27,7 @@ class ProficiencyLevelTest(TenantTestCase):
         self.assertEqual(ProficiencyLevel.EXTENDING, 4)
 
 
-class CompetencyModelTest(TenantTestCase):
+class CompetencyModelTest(ByteDeckTenantTestCase):
     """ Tests for the Competency model: creation, the active flag, and deletion protection. """
 
     def setUp(self):
@@ -45,20 +45,20 @@ class CompetencyModelTest(TenantTestCase):
             level=ProficiencyLevel.PROFICIENT,
         )
 
-    def test_object_creation(self):
+    def test_competency__creation_str_and_active_default(self):
         """ A Competency can be created, str()s to its name, and defaults to active """
         self.assertIsInstance(self.competency, Competency)
         self.assertEqual(str(self.competency), "Communicating")
         self.assertTrue(self.competency.active)
 
-    def test_active_queryset(self):
+    def test_active__excludes_deactivated(self):
         """ Competency.objects.active() includes active competencies and excludes deactivated ones """
         inactive_competency = baker.make(Competency, active=False)
         active_qs = Competency.objects.active()
         self.assertIn(self.competency, active_qs)
         self.assertNotIn(inactive_competency, active_qs)
 
-    def test_soft_delete_via_active_flag(self):
+    def test_active_flag__deactivating_keeps_competency_and_evidence(self):
         """ Deactivating a competency doesn't remove it or its related objects """
         assessment = self.make_assessment(self.competency)
         self.competency.active = False
@@ -68,13 +68,13 @@ class CompetencyModelTest(TenantTestCase):
         self.assertTrue(Competency.objects.filter(pk=self.competency.pk).exists())
         self.assertTrue(CompetencyAssessment.objects.filter(pk=assessment.pk).exists())
 
-    def test_delete_protected_when_evidence_exists(self):
+    def test_delete__protected_when_evidence_exists(self):
         """ A competency referenced by assessment evidence can never be hard-deleted """
         self.make_assessment(self.competency)
         with self.assertRaises(ProtectedError):
             self.competency.delete()
 
-    def test_delete_allowed_without_evidence(self):
+    def test_delete__allowed_without_evidence(self):
         """ A competency with no assessment evidence can be hard-deleted,
         even if it is linked to quests (the links are just authoring config) """
         baker.make(QuestCompetency, competency=self.competency)
@@ -83,7 +83,7 @@ class CompetencyModelTest(TenantTestCase):
         self.assertFalse(QuestCompetency.objects.exists())
 
 
-class QuestCompetencyModelTest(TenantTestCase):
+class QuestCompetencyModelTest(ByteDeckTenantTestCase):
     """ Tests for the QuestCompetency through-table linking quests to competencies. """
 
     def setUp(self):
@@ -92,16 +92,16 @@ class QuestCompetencyModelTest(TenantTestCase):
         self.competency = baker.make(Competency, name="Creative Thinking")
         self.quest_competency = QuestCompetency.objects.create(quest=self.quest, competency=self.competency)
 
-    def test_object_creation(self):
+    def test_quest_competency__creation_and_str(self):
         """ A QuestCompetency can be created and str()s to "<quest> - <competency>" """
         self.assertIsInstance(self.quest_competency, QuestCompetency)
         self.assertEqual(str(self.quest_competency), "Test Quest - Creative Thinking")
 
-    def test_default_level_is_proficient(self):
+    def test_default_level__is_proficient(self):
         """ Completing a quest generally demonstrates Proficient, so that's the default """
         self.assertEqual(self.quest_competency.default_level, ProficiencyLevel.PROFICIENT)
 
-    def test_unique_together_quest_competency(self):
+    def test_unique_constraint__one_link_per_quest_and_competency(self):
         """ A competency can only be attached to a quest once """
         with transaction.atomic():
             with self.assertRaises(IntegrityError):
@@ -112,14 +112,14 @@ class QuestCompetencyModelTest(TenantTestCase):
         QuestCompetency.objects.create(quest=other_quest, competency=self.competency)
         self.assertEqual(QuestCompetency.objects.count(), 2)
 
-    def test_quest_delete_removes_link_but_not_competency(self):
+    def test_quest_delete__removes_link_but_not_competency(self):
         """ Deleting a quest cascades away its competency links, leaving the competency itself alone """
         self.quest.delete()
         self.assertFalse(QuestCompetency.objects.exists())
         self.assertTrue(Competency.objects.filter(pk=self.competency.pk).exists())
 
 
-class CompetencyAssessmentModelTest(TenantTestCase):
+class CompetencyAssessmentModelTest(ByteDeckTenantTestCase):
     """ Tests for the CompetencyAssessment evidence record: creation, validation,
     the generic source FK, and evidence surviving the deletion of its sources. """
 
@@ -141,7 +141,7 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         kwargs.setdefault('source_object', self.submission)
         return CompetencyAssessment.objects.create(**kwargs)
 
-    def test_object_creation(self):
+    def test_competency_assessment__creation_timestamp_and_str(self):
         """ An assessment can be created, gets an auto timestamp, and str()s to
         "<student>: <competency> = <level label>" """
         assessment = self.make_assessment()
@@ -152,7 +152,7 @@ class CompetencyAssessmentModelTest(TenantTestCase):
             f"{self.student}: {self.competency} = Proficient"
         )
 
-    def test_level_choices_validation(self):
+    def test_level__only_choices_1_to_4_validate(self):
         """ Only levels 1-4 are valid """
         for level in ProficiencyLevel.values:
             self.make_assessment(level=level).full_clean()
@@ -162,7 +162,7 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         with self.assertRaises(ValidationError):
             assessment.full_clean()
 
-    def test_generic_fk_round_trip(self):
+    def test_source_object__generic_fk_round_trip(self):
         """ The source of the evidence can be saved and retrieved via the generic FK """
         assessment = self.make_assessment()
 
@@ -178,7 +178,7 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         )
         self.assertEqual(list(qs), [assessment])
 
-    def test_quest_deletion_does_not_delete_assessments(self):
+    def test_quest_delete__keeps_assessments(self):
         """ Evidence outlives the quest: deleting a Quest cascades to its submissions,
         but assessments sourced from those submissions must survive (with a dangling,
         None-resolving source_object) """
@@ -192,14 +192,14 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         self.assertEqual(assessment.competency, self.competency)
         self.assertEqual(assessment.level, ProficiencyLevel.PROFICIENT)
 
-    def test_assessed_by_set_null_on_teacher_deletion(self):
+    def test_assessed_by__set_null_on_teacher_delete(self):
         """ Evidence also outlives the assessing teacher's account """
         assessment = self.make_assessment()
         self.teacher.delete()
         assessment.refresh_from_db()
         self.assertIsNone(assessment.assessed_by)
 
-    def test_assessed_by_nullable_for_self_or_system_assessment(self):
+    def test_assessed_by__nullable_for_self_or_system_assessment(self):
         """ assessed_by may be null, denoting a self- or system-made assessment """
         assessment = self.make_assessment(assessed_by=None)
         assessment.full_clean()
@@ -229,13 +229,13 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         self.assertIsNone(assessment.source_content_type)
         self.assertIsNone(assessment.source_object_id)
 
-    def test_student_deletion_cascades_assessments(self):
+    def test_user_delete__cascades_assessments(self):
         """ Evidence is meaningless without its student """
         self.make_assessment()
         self.student.delete()
         self.assertFalse(CompetencyAssessment.objects.exists())
 
-    def test_ordering_most_recent_first(self):
+    def test_ordering__most_recent_first(self):
         """ The default queryset ordering puts the most recent evidence first """
         first = self.make_assessment(level=ProficiencyLevel.DEVELOPING)
         second = self.make_assessment(level=ProficiencyLevel.PROFICIENT)

@@ -4,27 +4,21 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from competencies.import_export import load_bundled_set
 from competencies.models import Competency
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class CompetencyViewsFeatureFlagTest(ViewTestUtilsMixin, TenantTestCase):
+class CompetencyViewsFeatureFlagTest(ByteDeckTenantTestCase):
     """ With enable_competencies off (the default), every competencies URL 404s
     for everyone: students and staff alike see no change or difference. """
 
-    def setUp(self):
-        """ Builds the tenant client. The flag stays at its default (off). """
-        self.client = TenantClient(self.tenant)
-
-    def test_all_views_404_when_disabled(self):
+    def test_competency_views__404_when_disabled(self):
         """ Every competencies URL 404s for anonymous, student, and staff users alike """
         self.assertFalse(SiteConfig.get().enable_competencies)
 
@@ -37,7 +31,7 @@ class CompetencyViewsFeatureFlagTest(ViewTestUtilsMixin, TenantTestCase):
             self.assert404('competencies:export')
             self.client.logout()
 
-    def test_sidebar_link_hidden_when_disabled(self):
+    def test_sidebar__link_hidden_when_disabled(self):
         """ The sidebar shows no Competencies link to staff while the flag is off """
         staff = baker.make(User, is_staff=True)
         self.client.force_login(staff)
@@ -45,12 +39,11 @@ class CompetencyViewsFeatureFlagTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotContains(response, reverse('competencies:list'))
 
 
-class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
+class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
     """ Tests for the competencies views with the feature flag turned on. """
 
     def setUp(self):
-        """ Builds the tenant client, enables the feature flag, and creates a student and a staff user. """
-        self.client = TenantClient(self.tenant)
+        """ Enables the feature flag and creates a student and a staff user. """
         config = SiteConfig.get()
         config.enable_competencies = True
         config.full_clean()
@@ -59,7 +52,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.student = baker.make(User)
         self.staff = baker.make(User, is_staff=True)
 
-    def test_all_views_require_staff(self):
+    def test_competency_views__require_staff(self):
         """ With the flag on, anonymous users are sent to login and students get a 403 """
         # anonymous users are redirected to login
         self.assertRedirectsLogin('competencies:list')
@@ -72,13 +65,13 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('competencies:import_preview')
         self.assert403('competencies:export')
 
-    def test_sidebar_link_shown_to_staff(self):
+    def test_sidebar__link_shown_to_staff(self):
         """ With the flag on, staff see the Competencies link in the sidebar """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('quests:quests'))
         self.assertContains(response, reverse('competencies:list'))
 
-    def test_list_view(self):
+    def test_list_view__shows_competencies(self):
         """ The list view renders the deck's competencies for staff """
         self.client.force_login(self.staff)
         baker.make(Competency, name='Think critically')

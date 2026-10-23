@@ -2,9 +2,9 @@ import json
 
 from django.core.exceptions import ValidationError
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from competencies.import_export import (
     export_competency_set,
     export_csv,
@@ -36,7 +36,7 @@ def make_valid_set(entries, **metadata):
     return validate_competency_set(make_set(entries, **metadata))
 
 
-class ParseAndValidateTest(TenantTestCase):
+class ParseAndValidateTest(ByteDeckTenantTestCase):
     """ Tests for the JSON/CSV competency-set parsers and the set validator. """
 
     def test_parse_json_set__happy_path(self):
@@ -136,10 +136,10 @@ class ParseAndValidateTest(TenantTestCase):
             parse_csv_set("name,category\n,Thinking\n")
 
 
-class BundledSetsTest(TenantTestCase):
+class BundledSetsTest(ByteDeckTenantTestCase):
     """ Tests for the curriculum datasets bundled in the app's data/ directory. """
 
-    def test_bundled_sets_exist_and_are_valid(self):
+    def test_get_bundled_set_keys__every_set_exists_and_is_valid(self):
         """ Every dataset bundled in data/ parses and validates """
         keys = get_bundled_set_keys()
         self.assertIn('bc-core-competencies', keys)
@@ -165,7 +165,7 @@ class BundledSetsTest(TenantTestCase):
             load_bundled_set('../secrets')
 
 
-class ImportCompetencySetTest(TenantTestCase):
+class ImportCompetencySetTest(ByteDeckTenantTestCase):
     """ Tests for import_competency_set and the entry-matching rules it applies. """
 
     def test_import__happy_path(self):
@@ -259,7 +259,7 @@ class ImportCompetencySetTest(TenantTestCase):
         self.assertEqual(created, 2)
         self.assertEqual(set(Competency.objects.values_list('name', flat=True)), {'a', 'c'})
 
-    def test_preview_entry_statuses(self):
+    def test_preview_entry_statuses__marks_update_or_create(self):
         """ The preview marks entries as update or create depending on whether a match exists """
         baker.make(Competency, name='Existing', source_id='x:1')
         entries = preview_entry_statuses(make_valid_set([
@@ -269,7 +269,7 @@ class ImportCompetencySetTest(TenantTestCase):
         self.assertEqual([e['status'] for e in entries], ['update', 'create'])
 
 
-class ExportRoundTripTest(TenantTestCase):
+class ExportRoundTripTest(ByteDeckTenantTestCase):
     """ Tests for the exporters and full export-import round trips. """
 
     def test_export__active_competencies_only(self):
