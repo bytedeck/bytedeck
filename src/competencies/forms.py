@@ -1,5 +1,11 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
+
+from crispy_forms.layout import HTML
+from django_select2.forms import Select2MultipleWidget
+
+from siteconfig.models import SiteConfig
 
 from .import_export import (
     CSV_FIELDS,
@@ -7,6 +13,48 @@ from .import_export import (
     load_bundled_set,
     parse_uploaded_file,
 )
+from .models import Competency, ProficiencyLevel, QuestCompetency
+
+#: Name of the multi-select field QuestCompetenciesFormMixin adds to a quest form.
+COMPETENCIES_FIELD = 'competencies'
+
+
+def competency_level_field_name(competency_pk):
+    """ The name of a quest form's default-level field for one competency.
+
+    Args:
+        competency_pk (int): the competency's primary key.
+
+    Returns:
+        str: e.g. "competency_level_12".
+    """
+    return f'competency_level_{competency_pk}'
+
+
+def quest_competency_initial(quest):
+    """ Initial form data that starts a new quest with another quest's competencies, e.g.
+    when copying it. Deactivated competencies are left out: they aren't offered for new use.
+
+    Args:
+        quest (Quest): the quest whose competency links to carry over.
+
+    Returns:
+        dict: the competencies field's initial selection plus each one's default-level field.
+    """
+    links = quest.quest_competencies.filter(competency__active=True)
+    initial = {COMPETENCIES_FIELD: [link.competency_id for link in links]}
+    for link in links:
+        initial[competency_level_field_name(link.competency_id)] = link.default_level
+    return initial
+
+
+class QuestCompetenciesSelect2Widget(Select2MultipleWidget):
+    """ The quest form's competency chips. Its media carries the script that shows a
+    default-level picker for each selected competency, so the script only loads on pages
+    where the field exists (that is, when the deck has competencies enabled). """
+
+    class Media:
+        js = ('competencies/js/quest-competency-levels.js',)
 
 
 class CompetencyImportForm(forms.Form):
@@ -55,3 +103,114 @@ class CompetencyImportForm(forms.Form):
         cleaned_data['competency_set'] = load_bundled_set(bundled_key) if bundled_key else parse_uploaded_file(file)
 
         return cleaned_data
+
+
+class QuestCompetenciesFormMixin:
+    """ Adds a quest's competencies to a quest ModelForm, for decks with competencies enabled.
+
+    The form gets a multi-select of the deck's competencies and, for each one, a default-level
+    field (the level that completing the quest generally demonstrates). The page shows the
+    level picker only for the selected competencies; unselected ones' level fields are ignored.
+    With the feature flag off, none of these fields exist, so the form is unchanged.
+
+    The form must call ``add_competency_fields()`` from its ``__init__`` (after
+    ``super().__init__``) and place the layout objects it returns.
+    """
+
+    competencies_enabled = False
+
+    def add_competency_fields(self):
+        """ Add the competency fields, if the deck has competencies enabled.
+
+        Offered competencies are the active ones plus any deactivated ones already linked to
+        this quest, so editing a quest never silently drops a link it already has.
+
+        Returns:
+            list: crispy layout objects rendering the fields (empty when the flag is off).
+        """
+        config = SiteConfig.get()
+        if config is None or not config.enable_competencies:
+            return []
+        self.competencies_enabled = True
+
+        quest = self.instance
+        links = {link.competency_id: link for link in quest.quest_competencies.all()} if quest.pk else {}
+        queryset = Competency.objects.filter(Q(active=True) | Q(pk__in=links))
+
+        self.fields[COMPETENCIES_FIELD] = forms.ModelMultipleChoiceField(
+            queryset=queryset,
+            required=False,
+            initial=list(links),
+            widget=QuestCompetenciesSelect2Widget(attrs={'data-theme': 'bootstrap'}),
+            help_text="The competencies completing this quest gives students evidence of. "
+                      "Set the default proficiency level for each below; teachers can adjust it per student when approving.",
+        )
+
+        labels = config.get_competency_scale_labels()
+        level_choices = [(level, labels[level]) for level in ProficiencyLevel.values]
+        self.competency_level_fields = []
+        for competency in queryset:
+            name = competency_level_field_name(competency.pk)
+            link = links.get(competency.pk)
+            self.fields[name] = forms.TypedChoiceField(
+                choices=level_choices,
+                coerce=int,
+                empty_value=None,
+                required=False,
+                initial=link.default_level if link else ProficiencyLevel.PROFICIENT,
+                label=competency.name,
+                widget=forms.Select(attrs={'class': 'form-control input-sm'}),
+            )
+            self.competency_level_fields.append((competency, name))
+
+        return [COMPETENCIES_FIELD, HTML("{% include 'competencies/snippets/quest_competency_levels.html' %}")]
+
+    def competency_levels(self):
+        """ The default-level pickers for the template, marking which competencies are selected
+        (the page shows only those rows, and hides the table when none are).
+
+        Returns:
+            dict: 'rows', a list of (Competency, BoundField, selected) per offered competency,
+            and 'any_selected'.
+        """
+        selected = {str(pk) for pk in (self[COMPETENCIES_FIELD].value() or [])}
+        rows = [(competency, self[name], str(competency.pk) in selected) for competency, name in self.competency_level_fields]
+        return {'rows': rows, 'any_selected': any(row[2] for row in rows)}
+
+    def save(self, commit=True):
+        """ Save the quest and, when committing, its competency links (see save_competencies).
+
+        Args:
+            commit (bool): passed through to ``ModelForm.save``; with commit=False the caller
+                saves the quest and then calls ``save_competencies`` itself.
+
+        Returns:
+            Quest: the saved (or unsaved, with commit=False) quest.
+        """
+        quest = super().save(commit=commit)
+        if commit:
+            self.save_competencies(quest)
+        return quest
+
+    def save_competencies(self, quest):
+        """ Make the quest's competency links match the form: add links for newly selected
+        competencies, update changed default levels, and remove deselected links. Does nothing
+        when the deck has competencies disabled.
+
+        Args:
+            quest (Quest): the saved quest the links belong to.
+        """
+        if not self.competencies_enabled:
+            return
+
+        existing = {link.competency_id: link for link in quest.quest_competencies.all()}
+        for competency in self.cleaned_data[COMPETENCIES_FIELD]:
+            level = self.cleaned_data.get(competency_level_field_name(competency.pk)) or ProficiencyLevel.PROFICIENT
+            link = existing.pop(competency.pk, None) or QuestCompetency(quest=quest, competency=competency)
+            if link.pk is None or link.default_level != level:
+                link.default_level = level
+                link.full_clean()
+                link.save()
+
+        # whatever is left was deselected
+        QuestCompetency.objects.filter(pk__in=[link.pk for link in existing.values()]).delete()
