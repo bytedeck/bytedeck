@@ -175,6 +175,33 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertLess(cells[1]["x"], cells[2]["x"])
         self.assertFalse(self.page.locator(".question-answers-label").first.is_visible())
 
+    def test_layout__top_aligned_inside_a_bootstrap_table(self):
+        """On the approvals tab a submission opens in a bootstrap-table's detail row, whose own
+        rule centres every cell under it vertically, nested tables included. The answers still
+        read from the top of each cell there (#2927).
+
+        The answers table is moved into bootstrap-table's markup, with its stylesheet loaded, as
+        the tab's detail row holds it.
+        """
+        self.page.add_style_tag(path=finders.find("css/bootstrap-table-1.20.2.min.css"))
+        self.page.evaluate("""() => {
+            const answers = document.querySelector('.question-answers');
+            const holder = document.createElement('div');
+            holder.innerHTML = '<div class="bootstrap-table"><div class="fixed-table-container">' +
+                '<table class="table"><tbody><tr class="detail-view"><td></td></tr></tbody></table></div></div>';
+            answers.parentNode.insertBefore(holder, answers);
+            holder.querySelector('.detail-view td').appendChild(answers);
+        }""")
+
+        alignments = self.page.eval_on_selector_all(
+            ".bootstrap-table .question-answers td, .bootstrap-table .question-answers th",
+            "cells => cells.map(cell => getComputedStyle(cell).verticalAlign)")
+
+        self.assertTrue(alignments)
+        self.assertEqual(set(alignments), {"top"})
+        outer = self.page.eval_on_selector(".detail-view > td", "cell => getComputedStyle(cell).verticalAlign")
+        self.assertEqual(outer, "middle", "bootstrap-table's own cells keep its alignment")
+
     def test_layout__stacked_on_a_narrow_screen(self):
         """Below Bootstrap's sm breakpoint the question comes first, then the answer, then the
         solution, one under another, each under a label of its own in place of the header row."""
