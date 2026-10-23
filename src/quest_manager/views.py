@@ -2227,10 +2227,8 @@ def _submission_page_media(form, question_formset=None):
     here: each answer form builds a widget for its own question type, so a quest whose first
     question is a short answer would otherwise report no editor assets at all.
 
-    The comment form does not always carry them either. The POST path builds
-    ``SubmissionQuickReplyFormStudent``, whose ``comment_text`` is a plain textarea, so
-    without the formset's half a submission bounced back for a validation error loads no
-    summernote and every editor on the page degrades to a raw textarea (#2608).
+    Both halves are asked, so the answer editors load whatever the comment form carries; an
+    editor whose assets are missing degrades to a raw textarea showing its markup (#2608).
 
     Args:
         form: the page's comment form.
@@ -2419,13 +2417,24 @@ def complete(request, submission_id):
             followup=" Fix the problems below and submit the quest again.",
         )
 
+        # The form that validated this POST is not always the one the page shows. With no files
+        # attached it is SubmissionQuickReplyFormStudent (the quick reply on the quest list
+        # posts here too), whose comment box is a plain textarea and which has no attachments
+        # field: shown as it is, the page's comment box would hold the editor's markup as text.
+        # So the page gets its own form back, bound to the same POST: it keeps what the student
+        # wrote and reports the same errors, since it has the same fields plus an optional
+        # attachments field, which the uploads kept above have already been taken from (#2926).
+        page_form = form
+        if isinstance(form, SubmissionQuickReplyFormStudent):
+            page_form = SubmissionForm(request.POST, student=submission.user)
+
         context = {
             "heading": submission.quest.name,
             "submission": submission,
             "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
-            "submission_form": form,
+            "submission_form": page_form,
             "question_formset": question_formset,
-            "form_media": _submission_page_media(form, question_formset),
+            "form_media": _submission_page_media(page_form, question_formset),
             "anchor": "submission-form-" + str(submission.quest.id),
         }
         return render(request, "quest_manager/submission.html", context)
