@@ -26,4 +26,15 @@ cy.style()
             'background-opacity': 0,
             'border-color': '#5A5A5A',
         })
+        // The progress colours from maps.js (#2678), lightened for the dark background the
+        // same way the link blue above is (#2f70a8 -> #609dd2): the light-theme green and
+        // yellow are mixed for a white page and go muddy against #32383e.
+        .selector('node.approved')
+        .style({
+            'border-color': '#77c977',
+        })
+        .selector('node.awaiting-approval')
+        .style({
+            'border-color': '#f5c26b',
+        })
         .update()

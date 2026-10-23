@@ -15,7 +15,7 @@ from django.db import connection
 from django.urls import reverse
 from django_tenants.utils import get_public_schema_name
 
-from courses.models import Grade, Rank, Course, Block, MarkRange
+from courses.models import Grade, Rank, Course, Block, MarkRange, Semester
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
@@ -31,12 +31,18 @@ intro_tag = "intro"
 
 
 def load_initial_tenant_data():
+    """Fill a newly created tenant schema with the data a deck needs to be usable.
 
+    Order matters: the SiteConfig singleton comes first (everything else reads it), and the
+    deck's semester is created and opened before the default course and blocks, so the first
+    student to register has a semester to join.
+    """
     if connection.schema_name == get_public_schema_name():
         return
 
     create_users()
     create_site_config_object()
+    create_initial_semester()
     create_initial_course()
     create_initial_blocks()
     create_initial_markranges()
@@ -117,9 +123,28 @@ def create_site_config_object():
     config = SiteConfig.objects.create()
     name = Tenant.get().name.replace("_", " ").replace("-", " ").title()
     if name:
-        config.site_name = f"{name} Deck"
-        config.site_name_short = name
+        # Tenant.name allows up to 62 chars (the Postgres schema-name limit), but the
+        # SiteConfig display fields are shorter (site_name=50, site_name_short=20), so
+        # truncate to each field's max_length. Without this, a long deck name raised
+        # "value too long for type character varying(20)" and aborted tenant creation.
+        # Both fields remain editable by the deck owner in Site Config afterwards.
+        site_name_max = SiteConfig._meta.get_field("site_name").max_length
+        site_name_short_max = SiteConfig._meta.get_field("site_name_short").max_length
+        config.site_name = f"{name} Deck"[:site_name_max]
+        config.site_name_short = name[:site_name_short_max]
         config.save()
+
+
+def create_initial_semester():
+    """Give the new deck a semester and open it, so students can join a course right away.
+
+    Its dates are the Semester defaults (today, and 135 days later); staff can rename it and
+    adjust the dates from the semester list.
+    """
+    semester = Semester()
+    semester.full_clean()
+    semester.save()
+    SiteConfig.get().set_active_semester(semester)
 
 
 def create_initial_course():
@@ -138,19 +163,19 @@ def create_initial_markranges():
 
 
 def create_initial_ranks():
-    Rank.objects.create(name="Digital Noob", xp=0, fa_icon="fa fa-circle-o")
-    Rank.objects.create(name="Digital Novice", xp=60, fa_icon="fa fa-angle-up")
-    Rank.objects.create(name="Digital Novice II", xp=125, fa_icon="fa fa-angle-double-up")
-    Rank.objects.create(name="Digital Amateur", xp=185, fa_icon="fa fa-forward fa-rotate-270")
-    Rank.objects.create(name="Digital Amateur II", xp=250, fa_icon="fa fa-fast-forward fa-rotate-270")
-    Rank.objects.create(name="Digital Apprentice", xp=310, fa_icon="fa fa-th-large")
-    Rank.objects.create(name="Digital Apprentice II", xp=375, fa_icon="fa fa-th")
-    Rank.objects.create(name="Digital Journeyman", xp=495, fa_icon="fa fa-pause fa-rotate-90")
-    Rank.objects.create(name="Digital Journeyman II", xp=595, fa_icon="fa fa-align-center")
-    Rank.objects.create(name="Digital Journeyman III", xp=665, fa_icon="fa fa-align-justify")
-    Rank.objects.create(name="Digital Crafter", xp=725, fa_icon="fa fa-star-o")
-    Rank.objects.create(name="Expert Digital Crafter", xp=855, fa_icon="fa fa-star")
-    Rank.objects.create(name="Master Digital Crafter", xp=1000, fa_icon="fa fa-arrows-alt")
+    Rank.objects.create(name="Digital Noob", xp=0, fa_icon="circle-o")
+    Rank.objects.create(name="Digital Novice", xp=60, fa_icon="angle-up")
+    Rank.objects.create(name="Digital Novice II", xp=125, fa_icon="angle-double-up")
+    Rank.objects.create(name="Digital Amateur", xp=185, fa_icon="forward", fa_icon_modifiers="fa-rotate-270")
+    Rank.objects.create(name="Digital Amateur II", xp=250, fa_icon="fast-forward", fa_icon_modifiers="fa-rotate-270")
+    Rank.objects.create(name="Digital Apprentice", xp=310, fa_icon="th-large")
+    Rank.objects.create(name="Digital Apprentice II", xp=375, fa_icon="th")
+    Rank.objects.create(name="Digital Journeyman", xp=495, fa_icon="pause", fa_icon_modifiers="fa-rotate-90")
+    Rank.objects.create(name="Digital Journeyman II", xp=595, fa_icon="align-center")
+    Rank.objects.create(name="Digital Journeyman III", xp=665, fa_icon="align-justify")
+    Rank.objects.create(name="Digital Crafter", xp=725, fa_icon="star-o")
+    Rank.objects.create(name="Expert Digital Crafter", xp=855, fa_icon="star")
+    Rank.objects.create(name="Master Digital Crafter", xp=1000, fa_icon="arrows-alt")
 
 
 def create_initial_grades():
@@ -182,21 +207,21 @@ def create_initial_badge_types():
         sort_order=1,
         description="Talents are badges that are automatically granted by completing a specific set of prerequisites.",
         repeatable=True,
-        fa_icon="fa-hand-spock-o"
+        fa_icon="hand-spock-o"
     )
     BadgeType.objects.create(
         name="Award",
         sort_order=2,
         description="Awards are badges that are manually granted by teachers.",
         repeatable=True,
-        fa_icon="fa-diamond"
+        fa_icon="diamond"
     )
     BadgeType.objects.create(
         name="Team",
         sort_order=3,
         description="Teams categorize students into groups for collaboration on projects, access to special quests, etc.",
         repeatable=True,
-        fa_icon="fa-handshake-o"
+        fa_icon="handshake-o"
     )
 
 
@@ -205,37 +230,37 @@ def create_initial_badge_rarities():
         name="Common",
         percentile=100.0,
         color="gray",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Uncommon",
         percentile=30.0,
         color="green",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Rare",
         percentile=16.0,
         color="royalblue",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Epic",
         percentile=4.0,
         color="purple",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Legendary",
         percentile=1.0,
         color="orangered",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Mythic",
         percentile=0.25,
         color="gold",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
 
 
@@ -252,6 +277,13 @@ def create_initial_badges():
         import_id='fa3b0518-cf9c-443c-8fe4-f4a887b495a7'
     )
     bytedeck_proficiency.tags.add(intro_tag)
+
+    # the deck's new quests start out requiring this badge, so a quest the teacher hasn't given a
+    # prerequisite yet isn't open to every student; it can be changed in Site Configuration
+    config = SiteConfig.get()
+    config.default_quest_prerequisite = bytedeck_proficiency
+    config.full_clean()
+    config.save(update_fields=['default_quest_prerequisite'])
 
     # Awards
     badge_type = BadgeType.objects.get(name="Award")  # created in previous data migration
@@ -317,7 +349,10 @@ def create_initial_badges():
         ),
     ])
 
-    if not settings.TESTING:
+    # Icons are uploaded from static files only outside the test harness (settings.TESTING is
+    # always True under tests), so this call site never runs during testing -- excluded from
+    # coverage. set_initial_icons itself is covered directly in test_initialization.py.
+    if not settings.TESTING:  # pragma: no cover
         set_initial_icons(award_badges + team_badges)
 
 
@@ -422,7 +457,9 @@ def create_orientation_campaign():
     message_quest.tags.add(intro_tag)
 
     # quests with icons need to have them uploaded programmatically from static files to be displayed properly in development, same as badges.
-    if not settings.TESTING:
+    # settings.TESTING is always True under the test harness, so this call site never runs during
+    # testing -- excluded from coverage. set_initial_icons itself is covered directly in test_initialization.py.
+    if not settings.TESTING:  # pragma: no cover
         set_initial_icons([message_quest, cc_quest, avatar_quest, contract_quest, screenshots_quest])
 
     # now link them to the welcome quest with pre-requisites:

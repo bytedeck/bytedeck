@@ -1,18 +1,26 @@
-from unittest.mock import patch
+import math
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection, transaction
 from django.shortcuts import reverse
+from django.test.utils import CaptureQueriesContext
+from django_tenants.utils import get_public_schema_name
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from freezegun import freeze_time
+from kombu.exceptions import OperationalError
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
+from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrationMixin, _registration_added_message
+from quest_manager.models import Quest, QuestSubmission
+from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
+from courses.tests.utils import patch_registration_xp
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 
@@ -24,19 +32,73 @@ import json
 User = get_user_model()
 
 
-class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
+class NavbarRankTests(ByteDeckTenantTestCase):
+    """The navbar's rank control, which is a dropdown for a student in more than one course.
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    Their XP is attributed per course (issue #2440), so they hold a rank in each and the navbar
+    shows all of them rather than a single number that belongs to none of their courses (#2453).
+    """
 
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher (needed before students exist) and a student to log in as."""
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = User.objects.create_user('test_student')
+
+    def _register(self, course):
+        """Put the student in a course in the deck's semester."""
+        return baker.make(
+            CourseStudent, user=self.student, course=course, block=baker.make(Block),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def test_navbar__lists_a_rank_per_course_for_a_multicourse_student(self):
+        """Every course the student holds appears in the dropdown, named, and the icon shown
+        while it is closed is their highest rank."""
+        maths_registration = self._register(baker.make(Course, title='Maths'))
+        maths = maths_registration.course
+        art = self._register(baker.make(Course, title='Art')).course
+        quest = baker.make(Quest, xp=60, max_xp=-1)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest, registration=maths_registration,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertContains(response, 'id="ranks-menu"')
+        self.assertContains(response, str(maths))
+        self.assertContains(response, str(art))
+        # 60 XP against Maths reaches the deck's second rank there, and that is the one the
+        # closed navbar shows, not the starting rank they are still at in Art
+        self.assertContains(response, 'title="Rank: Digital Novice in Maths"')
+
+    def test_navbar__keeps_a_single_rank_for_a_student_in_one_course(self):
+        """With one course there is nothing to choose between, so the navbar stays the plain
+        link it has always been rather than growing a dropdown with one row in it."""
+        self._register(baker.make(Course, title='Maths'))
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertNotContains(response, 'id="ranks-menu"')
+        self.assertContains(response, 'title="Rank: Digital Noob"')
+
+
+class RankViewTests(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and a student for the rank view tests."""
+        # need a teacher and a student so tests can log in as each with force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
 
-    def test_all_rank_page_status_codes_for_anonymous(self):
+    def test_all_rank_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
 
         self.assertRedirectsLogin('courses:ranks')
@@ -44,7 +106,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:rank_update', args=[1])
         self.assertRedirectsLogin('courses:rank_delete', args=[1])
 
-    def test_all_rank_page_status_codes_for_students(self):
+    def test_all_rank_page_status_codes__students(self):
         ''' If logged in as student then all views except ranks list view should redirect to login page '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:ranks')
@@ -54,7 +116,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('courses:rank_update', args=[1])
         self.assert403('courses:rank_delete', args=[1])
 
-    def test_all_rank_page_status_codes_for_staff(self):
+    def test_all_rank_page_status_codes__staff(self):
         ''' If logged in as staff then all views should return code 200 for successful retrieval of page '''
         self.client.force_login(self.test_teacher)
 
@@ -63,7 +125,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:rank_update', args=[1])
         self.assert200('courses:rank_delete', args=[1])
 
-    def test_RanksList_view(self):
+    def test_RanksList_view__accessible_when_logged_in(self):
         """ Admin and students should be able to view ranks. Anonymous users should be asked to login if they attempt to view ranks. """
 
         # Anonymous user
@@ -71,24 +133,22 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # student
         self.client.force_login(self.test_student1)
-        response = self.client.get(reverse('courses:ranks'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('courses:ranks')
 
         # teacher
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('courses:ranks'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:ranks')
 
         # Should contain 13 default ranks e.g. Digital Novice, Digital Ameteur II, etc
         self.assertEqual(response.context['object_list'].count(), 13)
 
-    def test_RankCreate_view(self):
+    def test_RankCreate_view__staff_can_create(self):
         """ Admin should be able to create a rank """
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'My Sample rank',
             'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
+            'fa_icon': 'circle-o'
         }
         response = self.client.post(reverse('courses:rank_create'), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
@@ -96,13 +156,13 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         rank = Rank.objects.get(name=data['name'])
         self.assertEqual(rank.name, data['name'])
 
-    def test_RankUpdate_view(self):
+    def test_RankUpdate_view__staff_can_update(self):
         """ Admin should be able to update a rank """
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'My updated rank',
             'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
+            'fa_icon': 'circle-o'
         }
         response = self.client.post(reverse('courses:rank_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
@@ -110,7 +170,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(rank.name, data['name'])
         self.assertEqual(rank.xp, data['xp'])
 
-    def test_RankDelete_view(self):
+    def test_RankDelete_view__staff_can_delete(self):
         """ Admin should be able to delete a rank """
         self.client.force_login(self.test_teacher)
 
@@ -120,7 +180,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:ranks'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
-    def test_scape_update_message_on_update_delete(self):
+    def test_scape_update_message__on_update_and_delete(self):
         """ Checks if delete and update function gives a success message when a rank is related to map """
         # setup
         rank = baker.make(Rank, name='rank')
@@ -130,12 +190,12 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # test messages for quest_update
         response = self.client.post(reverse('courses:rank_update', args=[rank.id]), data={
-            'name': 'rank', 'xp': 0, 'fa_icon': 'fa fa-circle-o'
+            'name': 'rank', 'xp': 0, 'fa_icon': 'circle-o'
         })
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('courses:ranks')
@@ -145,33 +205,40 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
 
-class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CourseViewTestData:
+    """Shared fixtures for the Course / CourseStudent view tests: a teacher, a student, the active
+    semester plus a block/course/grade, and valid registration form data.
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    A plain mixin (not a TestCase) so the test runner doesn't collect it as an empty test class.
+    """
 
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, student, block, course and grade plus valid registration form data."""
+        # need a teacher and a student so tests can log in as each with force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
 
-        self.sem = SiteConfig.get().active_semester
-        self.block = baker.make('courses.block')
-        self.course = baker.make('courses.course')
-        self.grade = baker.make('courses.grade')
+        cls.sem = SiteConfig.get().active_semester
+        cls.block = baker.make('courses.block')
+        cls.course = baker.make('courses.course')
+        cls.grade = baker.make('courses.grade')
 
-        self.valid_form_data = {
-            'semester': self.sem.pk,
-            'block': self.block.pk,
-            'course': self.course.pk,
+        cls.valid_form_data = {
+            'semester': cls.sem.pk,
+            'block': cls.block.pk,
+            'course': cls.course.pk,
         }
 
-    def test_all_page_status_codes_for_anonymous(self):
+
+class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
+
+    def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home page '''
         self.assertRedirectsLogin('courses:create')
         self.assertRedirectsLogin('courses:join', args=[1])
@@ -179,7 +246,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:ranks')
         self.assertRedirectsLogin('courses:my_marks')
         self.assertRedirectsLogin('courses:marks', args=[1])
-        self.assertRedirectsLogin('courses:end_active_semester')
+        self.assertRedirectsLogin('courses:semester_archive', args=[1])
 
         self.assertRedirectsLogin('courses:markranges')
         self.assertRedirectsLogin('courses:markrange_create')
@@ -204,7 +271,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Refer to rank specific tests for Rank CRUD views
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
         ''' Test student access to views '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:create')
@@ -216,7 +283,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Staff access only
         self.assert403('courses:join', args=[self.test_student1.id])
-        self.assert403('courses:end_active_semester')
+        self.assert403('courses:semester_archive', args=[1])
         self.assert403('courses:coursestudent_delete', args=[1])
 
         self.assert403('courses:markranges')
@@ -241,14 +308,14 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Refer to rank specific tests for Rank CRUD views
 
-    def test_all_page_status_codes_for_staff(self):
+    def test_all_page_status_codes__staff(self):
+        """Staff get 200 on all course management views."""
         self.client.force_login(self.test_teacher)
 
         # Staff access only
         self.assert200('courses:join', args=[self.test_student1.id])
 
-        # Redirects, has own test
-        # self.assert200('courses:end_active_semester')
+        self.assert200('courses:semester_archive', args=[SiteConfig.get().active_semester.id])
 
         self.assert200('courses:markranges')
         self.assert200('courses:markrange_create')
@@ -269,7 +336,8 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:course_update', args=[1])
         self.assert200('courses:course_delete', args=[1])
 
-    def test_course_student_update_status_codes(self):
+    def test_course_student_update__status_codes(self):
+        """The CourseStudent update view is login-required, staff-only (403 for students, 200 for staff)."""
         course_student = baker.make(CourseStudent)
         # anon
         self.client.logout()
@@ -285,37 +353,208 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:update', args=[course_student.id])
         self.client.logout()
 
-    def test_end_active_semester__staff(self):
-        ''' End_active_semester view should redirect to semester list view '''
+    def test_SemesterArchive__staff_post_archives(self):
+        """POSTing the archive view closes the active semester and redirects to the semester list."""
         self.client.force_login(self.test_teacher)
         active_sem = SiteConfig.get().active_semester
-        self.assertFalse(active_sem.closed)
+        self.assertFalse(active_sem.is_archived)
         self.assertRedirects(
-            response=self.client.get(reverse('courses:end_active_semester')),
+            response=self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id])),
             expected_url=reverse('courses:semester_list'),
         )
         active_sem.refresh_from_db()
-        self.assertTrue(active_sem.closed)
+        self.assertTrue(active_sem.is_archived)
 
-    def test_SemesterActivate(self):
-        """When this view is accessed, the siteconfig's active semester should be changed
-        and the view should redirect tot he semester_list """
+    def test_SemesterArchive__get_is_a_preview_and_does_not_archive(self):
+        """GET on the archive view renders the confirmation/preview page (with the counts of
+        what archiving will do) without changing anything."""
         self.client.force_login(self.test_teacher)
-        new_semester = baker.make('courses.semester')
-        response = self.client.get(reverse('courses:semester_activate', args=[new_semester.pk]))
+        active_sem = SiteConfig.get().active_semester
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, course=baker.make(Course), semester=active_sem)
+
+        response = self.client.get(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['semester'], active_sem)
+        self.assertEqual(response.context['num_registrations'], 1)
+        self.assertEqual(response.context['num_seats_freed'], 1)
+        self.assertFalse(response.context['blocked'])
+        active_sem.refresh_from_db()
+        self.assertFalse(active_sem.is_archived)
+
+    def test_SemesterArchive__get_shows_blockers(self):
+        """The archive preview lists blockers: submissions awaiting approval and students
+        with negative XP, with the form replaced by a link back to the semester list."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        baker.make(QuestSubmission, is_completed=True, is_approved=False, semester=active_sem)
+        negative_student = baker.make(User)
+        baker.make(CourseStudent, user=negative_student, course=baker.make(Course),
+                   semester=active_sem, xp_adjustment=-10)
+
+        response = self.client.get(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['blocked'])
+        self.assertEqual(response.context['num_awaiting_approval'], 1)
+        self.assertIn(negative_student, response.context['negative_xp_users'])
+
+    def test_SemesterArchive__post_blocked_by_pending_approvals(self):
+        """POSTing the archive view while quest submissions still await approval warns
+        and leaves the semester open (the preview shows the blocker, but the POST must
+        also refuse in case the state changed after the preview was rendered)."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        baker.make(QuestSubmission, is_completed=True, is_approved=False, semester=active_sem)
+
+        response = self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertWarningMessage(response)
+        self.assertIn('awaiting approval', str(self.get_message_list(response)[0]))
+        active_sem.refresh_from_db()
+        self.assertFalse(active_sem.is_archived)
+
+    def test_SemesterArchive__already_archived(self):
+        """POSTing the archive view for an already-archived semester is refused and takes no
+        action: its final marks are recorded and must not be recalculated."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        active_sem.status = Semester.Status.ARCHIVED
+        active_sem.save()
+
+        response = self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+
+    def test_SemesterArchive__semester_not_open_get(self):
+        """A semester that isn't open has nothing to preview archiving, so staff are sent
+        back to the semester list with an error."""
+        self.client.force_login(self.test_teacher)
+        semester_id = SiteConfig.get().active_semester.id
+        Semester.objects.complete_semester()
+        self.assertIsNone(SiteConfig.get().active_semester)
+
+        response = self.client.get(reverse('courses:semester_archive', args=[semester_id]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        self.assertIn('nothing to archive', str(self.get_message_list(response)[0]))
+
+    def test_SemesterArchive__upcoming_semester_post(self):
+        """An upcoming semester is refused too: nobody has earned anything in it yet, so
+        there are no final marks to record."""
+        self.client.force_login(self.test_teacher)
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+
+        response = self.client.post(reverse('courses:semester_archive', args=[upcoming.id]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        upcoming.refresh_from_db()
+        self.assertTrue(upcoming.is_upcoming)
+
+    def test_SemesterArchive__leaves_the_deck_with_no_open_semester(self):
+        """Archiving is how a deck gets to the between-semesters state (issue #1177): the
+        semester is archived and nothing is active, so students can't join a course."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+        active_sem.refresh_from_db()
+        self.assertTrue(active_sem.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_SemesterArchive__announcements_opt_out(self):
+        """Archiving without the archive_announcements checkbox leaves announcements alone."""
+        from announcements.models import Announcement
+        announcement = baker.make(Announcement, archived=False, draft=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))  # no checkbox in POST data
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertSuccessMessage(response)
+        announcement.refresh_from_db()
+        self.assertFalse(announcement.archived)
+
+    def test_SemesterActivate__changes_active_semester(self):
+        """POSTing the activate view changes the siteconfig's active semester and
+        redirects to the semester_list. Starting an upcoming semester also opens it,
+        so students can join a course in it."""
+        self.client.force_login(self.test_teacher)
+        new_semester = baker.make('courses.semester', status=Semester.Status.UPCOMING)
+        response = self.client.post(reverse('courses:semester_activate', args=[new_semester.pk]))
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
+        new_semester.refresh_from_db()
+        self.assertTrue(new_semester.is_open)
 
-    def test_CourseList_view(self):
+    def test_SemesterActivate__already_open_semester_stays_open(self):
+        """Activating a semester that is already open just points the deck at it: the
+        status is untouched, so re-activating never rewinds an archived-or-open stage."""
+        self.client.force_login(self.test_teacher)
+        open_semester = baker.make('courses.semester', status=Semester.Status.OPEN)
+
+        response = self.client.post(reverse('courses:semester_activate', args=[open_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(SiteConfig.get().active_semester, open_semester)
+        open_semester.refresh_from_db()
+        self.assertTrue(open_semester.is_open)
+
+    def test_SemesterActivate__starts_the_next_semester_after_a_pause(self):
+        """Activating a semester is the way out of the between-semesters state: the deck has
+        an open semester again and students can join a course."""
+        self.client.force_login(self.test_teacher)
+        Semester.objects.complete_semester()
+        next_semester = baker.make('courses.semester', status=Semester.Status.UPCOMING)
+
+        response = self.client.post(reverse('courses:semester_activate', args=[next_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(SiteConfig.get().active_semester, next_semester)
+        self.assertFalse(SiteConfig.get().has_no_open_semester())
+
+    def test_SemesterActivate__archived_semester_is_refused(self):
+        """Archiving is one-way: an archived semester can't be reopened, since its students'
+        final marks have already been recorded."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make('courses.semester', status=Semester.Status.ARCHIVED)
+        original_active = SiteConfig.get().active_semester
+
+        response = self.client.post(reverse('courses:semester_activate', args=[archived.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(str(self.get_message_list(response)[0]), SemesterActivate.ARCHIVED_SEMESTER_ERROR)
+        archived.refresh_from_db()
+        self.assertTrue(archived.is_archived)
+        self.assertEqual(SiteConfig.get().active_semester, original_active)
+
+    def test_SemesterActivate__get_not_allowed(self):
+        """GET must not change the active semester (deck-wide state changes are POST-only,
+        so they can't be triggered by link prefetching or a cross-site GET): it returns
+        405 Method Not Allowed and leaves the active semester untouched."""
+        self.client.force_login(self.test_teacher)
+        original_active = SiteConfig.get().active_semester
+        new_semester = baker.make('courses.semester')
+        response = self.client.get(reverse('courses:semester_activate', args=[new_semester.pk]))
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(SiteConfig.get().active_semester, original_active)
+
+    def test_CourseList_view__staff_can_view(self):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('courses:course_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:course_list')
 
         # Should contain Default and another one via bake
         self.assertEqual(response.context['object_list'].count(), 2)
 
-    def test_CourseCreate_view(self):
+    def test_CourseCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -328,7 +567,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         course = Course.objects.get(title=data['title'])
         self.assertEqual(course.title, data['title'])
 
-    def test_CourseUpdate_view(self):
+    def test_CourseUpdate_view__staff_can_update(self):
         """ Admin should be able to update a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -356,8 +595,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
             Admin should not be able to delete course with a student registered
             Also checks if course can be deleted with a forced post method
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # register student to course
         course_student = baker.make(CourseStudent, user=self.test_student1, semester=self.sem, block=self.block, course=self.course,)
@@ -378,30 +616,9 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, dt_well_ptag)
 
 
-class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-
-        self.sem = SiteConfig.get().active_semester
-        self.block = baker.make('courses.block')
-        self.course = baker.make('courses.course')
-        self.grade = baker.make('courses.grade')
-
-        self.valid_form_data = {
-            'semester': self.sem.pk,
-            'block': self.block.pk,
-            'course': self.course.pk,
-        }
-
-    def test_CourseStudentUpdate_view(self):
+    def test_CourseStudentUpdate_view__staff_can_update(self):
         """ Staff can update a student's course """
 
         course_student = baker.make(
@@ -423,7 +640,32 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         course_student.refresh_from_db()
         self.assertEqual(course_student.course.pk, new_course.pk)
 
-    def test_CourseAddStudent_view(self):
+    def test_CourseStudentUpdate_view__staff_can_update_a_registration_in_an_archived_semester(self):
+        """A registration outlives the semester it is in, so a teacher spotting a wrong course
+        on a past one has to be able to correct it. The staff form has to keep the
+        registration's own archived semester among its choices for that: a field whose current
+        value is not on its list cannot validate, and the form is then unsaveable whatever else
+        is being changed (issue #2507)."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        course_student = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block,
+            semester=archived, active=False,
+        )
+        new_course = baker.make(Course)
+
+        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
+        form_data['course'] = new_course.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
+
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
+        course_student.refresh_from_db()
+        self.assertEqual(course_student.course.pk, new_course.pk)
+        # and it stayed in its own term rather than being dragged into a running one
+        self.assertEqual(course_student.semester, archived)
+
+    def test_CourseAddStudent_view__staff_can_add(self):
         '''Staff can add a student to a course'''
 
         # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
@@ -445,13 +687,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Now try adding them a second time, should not validate:
         response = self.client.post(add_course_url, data=self.valid_form_data)
 
-        # invalid form
         # GRADE field is depercated and no longer used within unique_together
-        # form = response.context['form']
-        # self.assertFalse(form.is_valid())
-        # self.assertEqual(response.status_code, 200)
-        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the grade, still fails cus same block in same semester
         self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
@@ -468,15 +704,14 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
         self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
 
-    def test_CourseStudentDelete_view(self):
+    def test_CourseStudentDelete_view__teacher_can_delete(self):
         """ Teacher should be able to delete a student from a course (StudentCourse object)
         and should redirect to the student's profile when complete. """
         self.client.force_login(self.test_teacher)
         course_student = baker.make(CourseStudent, user=self.test_student1)
 
         # can access the Delete View
-        response = self.client.get(reverse('courses:coursestudent_delete', args=[course_student.id]))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('courses:coursestudent_delete', args=[course_student.id])
 
         before_delete_count = CourseStudent.objects.count()
         response = self.client.post(reverse('courses:coursestudent_delete', args=[course_student.id]))
@@ -484,7 +719,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.profile.id]))
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
-    def test_CourseStudentCreate_view(self):
+    def test_CourseStudentCreate_view__student_self_registers(self):
         '''Students can register themselves in a course. Illegally accessing the registration view after registering will give an error 403'''
         self.client.force_login(self.test_student1)
 
@@ -499,6 +734,240 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Now try acessing page a second time, should give 403 permission denied:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
+
+    def test_CourseStudentCreate_view__message_names_the_course_group_and_semester(self):
+        """A deck can run several courses, groups and semesters at once, and the registration
+        form asks the student to pick all three, so the notice confirming it names all three
+        (issue #2179)."""
+        course = baker.make(Course, title='Digital Art 11')
+        block = baker.make(Block, name='Morning Block')
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(reverse('courses:create'), data={
+            'semester': self.sem.pk, 'block': block.pk, 'course': course.pk,
+        })
+
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertEqual(
+            message,
+            'You have been added to the <strong>Digital Art 11</strong> course, '
+            'in the <strong>Morning Block</strong> group, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_CourseStudentCreate_view__message_uses_the_decks_own_word_for_a_group(self):
+        """A deck renames "group" to whatever suits it, and the registration form already labels
+        the field with that name, so the notice has to agree with the form the student just
+        filled in rather than saying "group" regardless."""
+        config = SiteConfig.get()
+        config.custom_name_for_group = 'Cohort'
+        config.save()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertIn(f'in the <strong>{self.block}</strong> cohort', message)
+
+    def test_CourseStudentCreate_view__simple_registration_message_names_all_three(self):
+        """A deck with one of everything registers the student without showing them a form at all,
+        so that path builds the notice from the registration rather than from form data. It still
+        has to say the same thing the form path says."""
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+        # one active block and course left, so all three fields render hidden and the view
+        # registers the student on the GET instead of asking them anything
+        Block.objects.exclude(pk=self.block.pk).delete()
+        Course.objects.exclude(pk=self.course.pk).delete()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'in the <strong>{self.block}</strong> group, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_lock_student__selects_the_student_row_for_update(self):
+        """The refusal above only helps if the two requests actually queue up, and what makes
+        them queue is this lock. The row locked has to be the student's own: locking their
+        registrations would lock nothing for a student registering for the first time, which is
+        exactly when two requests can race.
+        """
+        view = SerializedRegistrationMixin()
+
+        with transaction.atomic(), CaptureQueriesContext(connection) as queries:
+            view.lock_student(self.test_student1.id)
+
+        locking = [q['sql'] for q in queries.captured_queries if 'FOR UPDATE' in q['sql']]
+        self.assertEqual(len(locking), 1)
+        self.assertIn('auth_user', locking[0])
+        self.assertIn(str(self.test_student1.id), locking[0])
+
+    def test_CourseAddStudent_view__refuses_a_registration_that_lost_the_race(self):
+        """Two registrations for one student submitted at the same instant both validate clean,
+        because CourseStudent.clean() reads before either has written (#2438). The loser has to
+        notice on the way out and be refused, or the student ends up in two open semesters.
+
+        The race is staged by having the lock land the other registration, which is what waiting
+        for that lock and then getting it actually looks like. Since the staged row shares this
+        request's transaction, it rolls back along with the refusal, so what this pins is the
+        half that matters: the losing request is told why and writes nothing of its own. A true
+        two-thread test needs TransactionTestCase, and this suite deliberately has none: it
+        shares one schema across classes and nothing may commit.
+        """
+        self.client.force_login(self.test_teacher)
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+
+        def land_the_other_registration(view_self, user_id):
+            """Stand in for the request that got there first while this one waited."""
+            baker.make(CourseStudent, user_id=user_id, semester=other_semester, course=baker.make(Course))
+
+        with patch.object(SerializedRegistrationMixin, 'lock_student', land_the_other_registration):
+            response = self.client.post(
+                reverse('courses:join', args=[self.test_student1.id]), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'only be in one semester at a time')
+        self.assertContains(response, str(other_semester))
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    def test_CourseStudentCreate_view__active_registration_in_old_semester_does_not_block(self):
+        """A student with an active registration left over in an old (not-yet-closed) semester can
+        still reach the registration view for the new active semester — no 403 (#1893). Previously
+        any active registration blocked registration, so an unclosed old semester locked students
+        out of joining courses in the new one."""
+        self.client.force_login(self.test_student1)
+
+        # Active registration left over in the original (now-old) semester.
+        old_semester = SiteConfig.get().active_semester
+        baker.make('courses.coursestudent', user=self.test_student1, semester=old_semester, active=True)
+
+        # A new semester becomes active while the old one stays open (not closed).
+        new_semester = baker.make('courses.semester')
+        config = SiteConfig.get()
+        config.active_semester = new_semester
+        config.full_clean()
+        config.save()
+
+        # The stale active registration is in a different, still-open semester, so it must not 403.
+        response = self.client.get(reverse('courses:create'))
+        self.assertNotEqual(response.status_code, 403)
+
+    def _close_active_semester(self):
+        """Close the deck's active semester (leaving it as the active semester), reproducing the
+        'no semester is open' state from issue #2060. Saving fires the SiteConfig cache invalidation.
+        """
+        active = SiteConfig.get().active_semester
+        active.status = Semester.Status.ARCHIVED
+        active.save()
+
+    def test_CourseStudentCreate_view__blocked_when_no_open_semester__get(self):
+        """When the active semester is closed, the join page shows a 'no semesters open' message
+        instead of the registration form (issue #2060)."""
+        self.client.force_login(self.test_student1)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No semesters are currently open')
+        self.assertNotContains(response, 'id="coursestudentform"')
+
+    def test_CourseStudentCreate_view__blocked_when_no_open_semester__post(self):
+        """A student can't register when the active semester is closed: POSTing valid data creates
+        no CourseStudent and shows the 'no semesters open' message (issue #2060)."""
+        self.client.force_login(self.test_student1)
+        self._close_active_semester()
+
+        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No semesters are currently open')
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    # the staff banner also says "No semester is open" on every page, so these assert on the
+    # refusal page's own wording rather than on anything the banner could be supplying
+    REFUSAL_TO_STAFF = 'nobody can be registered in a course until you create'
+
+    def test_CourseAddStudent_view__blocked_when_no_open_semester__get(self):
+        """Staff adding a student need a semester to add them into just as much as a student
+        joining does (issue #2506). With none open the form's semester field has no choices, so
+        the page explains the reason rather than rendering a form that could only fail."""
+        self.client.force_login(self.test_teacher)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('courses:join', args=[self.test_student1.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.REFUSAL_TO_STAFF)
+        self.assertNotContains(response, 'id="coursestudentform"')
+
+    def test_CourseAddStudent_view__blocked_when_no_open_semester__post(self):
+        """The refusal covers the POST too: the GET-side check alone would not stop a teacher
+        submitting the same URL directly (issue #2506). Without it the submission fails anyway,
+        on the semester field's empty queryset, but says only "not one of the available
+        choices"."""
+        self.client.force_login(self.test_teacher)
+        self._close_active_semester()
+
+        response = self.client.post(
+            reverse('courses:join', args=[self.test_student1.id]), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.REFUSAL_TO_STAFF)
+        self.assertNotContains(response, 'not one of the available choices')
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    def test_NoOpenSemesterMixin__refusal_is_worded_for_whoever_is_looking(self):
+        """A student is told to ask their teacher, because that is all they can do about it. The
+        teacher is the one who can fix it, so they are told what to fix instead (issue #2506)."""
+        self._close_active_semester()
+
+        self.client.force_login(self.test_teacher)
+        to_staff = self.client.get(reverse('courses:join', args=[self.test_student1.id]))
+        self.client.force_login(self.test_student1)
+        to_student = self.client.get(reverse('courses:create'))
+
+        self.assertContains(to_staff, 'Manage semesters</a> to open one, then come back')
+        self.assertNotContains(to_staff, 'Your teacher needs to open a semester')
+        self.assertContains(to_student, 'Your teacher needs to open a semester')
+        self.assertNotContains(to_student, self.REFUSAL_TO_STAFF)
+
+    def test_mark_calculations__does_not_link_to_the_join_page_with_no_open_semester(self):
+        """The marks page tells a student with no course to go and join one. With no semester
+        open that link only leads to a refusal, so it says why in place instead, the same as the
+        quests page and the profile page already do (issue #2506)."""
+        student = User.objects.create_user('markless_student')  # no CourseStudent registration
+        config = SiteConfig.get()
+        config.display_marks_calculation = True  # off by default, and the page 404s a student when off
+        config.save()
+        self._close_active_semester()
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ask your teacher to open one')
+        self.assertNotContains(response, reverse('courses:create'))
+
+    def test_no_open_semester__student_join_button_replaced_by_message(self):
+        """A student with no course sees a 'no semester open' note instead of the Join a Course
+        button when the deck has no open semester (issue #2060)."""
+        student = User.objects.create_user('no_course_student')  # no CourseStudent registration
+        self._close_active_semester()
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ask your teacher to open one')
+        self.assertNotContains(response, 'Join a Course')
 
     def test_CourseStudentCreate__simple_registration_hidden_fields(self):
         """
@@ -586,17 +1055,101 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
+    def test_CourseStudentCreate__simple_registration_reuses_existing_membership(self):
+        """When simplified auto-registration finds an existing (matching) membership, get_or_create
+        returns created=False: the view still redirects but adds no 'added to' message and creates
+        no duplicate row."""
+        self.client.force_login(self.test_student1)
 
-class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+
+        # reduce to a single active block/course so the registration fields render hidden
+        Block.objects.first().delete()
+        Course.objects.first().delete()
+
+        # a membership matching the auto-create lookup already exists; active=False so access
+        # isn't blocked by the "already registered this semester" guard
+        baker.make(
+            CourseStudent,
+            user=self.test_student1,
+            semester=SiteConfig.get().active_semester,
+            block=Block.objects.filter(active=True).first(),
+            course=Course.objects.filter(active=True).first(),
+            active=False,
+        )
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        # existing row reused, not duplicated
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any('added to' in m for m in messages))
+
+
+class RegistrationAddedMessageTests(CourseViewTestData, ByteDeckTenantTestCase):
+    """The notice a student gets when they are added to a course (issue #2179)."""
+
+    def test_registration_added_message__leaves_out_a_group_the_registration_has_not_got(self):
+        """A registration's group is nullable, and a sentence naming a group that is not there
+        reads worse than one that does not mention groups at all."""
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=None, semester=self.sem,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('group', message)
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_registration_added_message__leaves_out_a_semester_the_registration_has_not_got(self):
+        """A registration's semester is nullable too, and deleting a semester sets it to null
+        rather than deleting the registration, so a registration can outlive its term."""
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block, semester=None,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('semester', message)
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'in the <strong>{self.block}</strong> group.',
+        )
+
+    def test_registration_added_message__escapes_the_names_a_teacher_typed(self):
+        """Messages reach the page through the messages template's `|safe`, so a course named
+        with markup would otherwise be rendered as markup rather than shown as its name."""
+        course = baker.make(Course, title='<script>alert(1)</script>')
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=course, block=self.block, semester=self.sem,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('<script>', message)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', message)
+
+
+class MarkRangeViewTests(ByteDeckTenantTestCase):
     """Test module for the MarkRange model's view classes"""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and reusable MarkRange form data for create/update posts."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
-        # set form data in setUp to be used for posting to create/update forms
+        # set form data in setUpTestData to be used for posting to create/update forms
         # manytomany field in MarkRange form prevents generate_form_data from functioning properly so must be set manually
-        self.data = {
+        cls.data = {
             'name': 'TestMarkRange',
             'minimum_mark': '72.5',
             'active': True,
@@ -605,7 +1158,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
             'days': '1,2,3,4,5,6,7',
         }
 
-    def test_MarkRangeList_view(self):
+    def test_MarkRangeList_view__lists_all(self):
         """The MarkRange list view's object list should contain all MarkRange objects"""
 
         # login a teacher
@@ -615,7 +1168,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('courses:markranges'))
         self.assertQuerySetEqual(response.context['object_list'], MarkRange.objects.all())
 
-    def test_MarkRangeCreate_view(self):
+    def test_MarkRangeCreate_view__staff_can_create(self):
         """Staff users can create new MarkRange objects through the create view form"""
 
         # login a teacher
@@ -628,7 +1181,18 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:markranges'))
         self.assertTrue(MarkRange.objects.filter(name="TestMarkRange").exists())
 
-    def test_MarkRangeUpdate_view(self):
+    def test_MarkRangeCreate_view__offers_the_header_option_checked(self):
+        """A new range starts with "Use this color in student headers" checked, and the option's
+        help text names the Site Configuration setting it depends on by that setting's own label."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('courses:markrange_create'))
+
+        field = response.context['form']['color_headers']
+        self.assertTrue(field.value())
+        self.assertIn(SiteConfig._meta.get_field('color_headers_by_mark').verbose_name, field.help_text)
+
+    def test_MarkRangeUpdate_view__staff_can_update(self):
         """Staff users can edit existing MarkRange objects through the update view form"""
 
         # login a teacher
@@ -641,7 +1205,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:markranges'))
         self.assertEqual(MarkRange.objects.get(id=1).name, "TestMarkRange")
 
-    def test_MarkRangeDelete_view(self):
+    def test_MarkRangeDelete_view__staff_can_delete(self):
         """Staff users can delete MarkRange objects through the delete view"""
 
         # login a teacher
@@ -658,7 +1222,160 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(MarkRange.objects.filter(id=1).exists())
 
 
-class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
+class SemesterStatusBannerTests(ByteDeckTenantTestCase):
+    """The staff-only semester status banner rendered on every page via base.html
+    (semester_status_banner.html): nudges archiving an ended active semester (#2157)
+    and warns when no semester is open for students to join (#1177)."""
+
+    # the no-open-semester warning, of which there is only ever one
+    BANNER_ID = 'semester-status-banner'
+
+    @staticmethod
+    def ended_banner_id(semester):
+        """The id of the archive nudge for one semester.
+
+        Several can render at once, one per ended semester, so each carries its semester's id.
+
+        Returns:
+            str: the id attribute that semester's nudge is rendered with.
+        """
+        return f'semester-status-banner-{semester.id}'
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher and a student for checking who sees the banner."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+    def test_semester_status_banner__hidden_while_active_semester_is_running(self):
+        """No banner renders while the active semester is open and within its dates."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+        self.assertNotContains(response, self.BANNER_ID)
+
+    def test_semester_status_banner__active_semester_ended(self):
+        """Once the active semester's last day has passed, staff see the archive nudge
+        with a link to the archive confirmation page."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.first_day = datetime.date.today() - datetime.timedelta(days=100)
+        active_sem.last_day = datetime.date.today() - datetime.timedelta(days=10)
+        active_sem.save()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.ended_banner_id(active_sem))
+        self.assertContains(response, 'ended on')
+        self.assertContains(response, reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+    def test_semester_status_banner__nudges_each_ended_semester_on_its_own(self):
+        """With two semesters running (#1781), the nudge is per semester: the one that has
+        ended is named and linked to its own archive page, and the one still running is left
+        alone rather than being swept up with it."""
+        ended = SiteConfig.get().active_semester
+        ended.first_day = datetime.date.today() - datetime.timedelta(days=100)
+        ended.last_day = datetime.date.today() - datetime.timedelta(days=10)
+        ended.save()
+        still_running = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=datetime.date.today() - datetime.timedelta(days=10),
+            last_day=datetime.date.today() + datetime.timedelta(days=10),
+        )
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.ended_banner_id(ended))
+        self.assertContains(response, f'Semester {ended} ended on')
+        # the banner's own link, not the archive button every open row in the table already has
+        archive_url = reverse('courses:semester_archive', args=[ended.id])
+        self.assertContains(response, f'<a href="{archive_url}" class="alert-link">Archive it</a>')
+        self.assertNotContains(response, self.ended_banner_id(still_running))
+        self.assertNotContains(response, f'Semester {still_running} ended on')
+
+    def test_semester_status_banner__gives_each_ended_semester_its_own_id(self):
+        """Two ended semesters render two nudges, and each gets its own id: a page with the same
+        id twice makes anything selecting it (a script, a screen reader landmark) see only the
+        first, so one of the two nudges would effectively go missing."""
+        first = SiteConfig.get().active_semester
+        first.first_day = datetime.date.today() - datetime.timedelta(days=200)
+        first.last_day = datetime.date.today() - datetime.timedelta(days=100)
+        first.save()
+        second = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=datetime.date.today() - datetime.timedelta(days=90),
+            last_day=datetime.date.today() - datetime.timedelta(days=10),
+        )
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.ended_banner_id(first))
+        self.assertContains(response, self.ended_banner_id(second))
+        self.assertNotEqual(self.ended_banner_id(first), self.ended_banner_id(second))
+
+    def test_semester_status_banner__no_open_semester(self):
+        """When the active semester is archived (the no-open-semester state, #1177),
+        staff see the students-can't-join warning linking to the semester list."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.status = Semester.Status.ARCHIVED
+        active_sem.save()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.BANNER_ID)
+        self.assertContains(response, 'No semester is open')
+
+    def test_semester_status_banner__hidden_from_students(self):
+        """Students never see the semester status banner, even in the states that show
+        it to staff."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.status = Semester.Status.ARCHIVED
+        active_sem.save()
+
+        self.client.force_login(self.test_student)
+        # any student-accessible page renders base.html; the quest list is the landing page
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.BANNER_ID)
+
+    def test_semester_status_banner__hidden_when_no_config(self):
+        """On schemas without a SiteConfig (the config context processor supplies None on
+        the public tenant), the banner renders nothing even for a staff user."""
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+
+        request = RequestFactory().get('/')
+        request.user = self.test_teacher
+        html = render_to_string('semester_status_banner.html', {'config': None, 'request': request})
+
+        self.assertNotIn(self.BANNER_ID, html)
+
+    def test_semester_status_banner__hidden_on_suspended_deck(self):
+        """A suspended deck shows only the suspension banner: the semester nudges are
+        suppressed, since students can't sign in there anyway. Uses the deck owner because
+        the suspension middleware signs everyone else out (#1734)."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.status = Semester.Status.ARCHIVED
+        active_sem.save()
+
+        # both clocks lapsed = suspended (tenant.is_suspended)
+        self.tenant.trial_end_date = datetime.date(2020, 1, 1)
+        self.tenant.paid_until = None
+        self.tenant.save()
+
+        self.client.force_login(SiteConfig.get().deck_owner)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.BANNER_ID)
+        # the suspension banner is the one warning that must remain
+        self.assertContains(response, 'This deck is suspended')
+
+
+class SemesterViewTests(ByteDeckTenantTestCase):
 
     def generate_dates(quantity, dates=None):
         """
@@ -680,15 +1397,16 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         leftover = quantity - len(dates)
         return SemesterViewTests.generate_dates(leftover, dates)
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher for the class tests."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
-    def test_SemesterList_view(self):
+    def test_SemesterList_view__lists_semesters(self):
+        """The semester list view renders each semester with its day counts and excluded-date counts."""
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('courses:semester_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:semester_list')
         self.assertEqual(response.context['object_list'].count(), 1)
 
         for obj in response.context['object_list']:
@@ -696,7 +1414,18 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertContains(response, obj.num_days())
             self.assertContains(response, obj.excludeddate_set.count())
 
+    def test_SemesterList_view__semester_without_dates(self):
+        """The semester list page renders without errors when a semester has a blank
+        name and no first/last day. Regression test for issue #912.
+        """
+        self.client.force_login(self.test_teacher)
+
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        response = self.assert200('courses:semester_list')
+        self.assertContains(response, str(semester))
+
     def test_SemesterCreate__without_ExcludedDates__view(self):
+        """Creating a semester with no excluded dates saves it and redirects to the list."""
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -727,11 +1456,13 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # check if data was added to db
         self.assertEqual(Semester.objects.count(), 2)
-        semester = Semester.objects.get(pk=2)
+        # The just-created semester is the most recent one; don't assume an
+        # absolute pk (sequences aren't reset between reused-schema test classes).
+        semester = Semester.objects.latest('id')
 
         self.assertTrue(semester.excludeddate_set.exists())
         for ed in semester.excludeddate_set.all():
-            self.assertTrue(ed.date in exclude_dates)
+            self.assertIn(ed.date, exclude_dates)
 
     def test_SemesterCreate__add_without_required_fields__view(self):
         """
@@ -748,7 +1479,8 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertFalse(response.context['formset'].is_valid())
 
-    def test_SemesterUpdate_view(self):
+    def test_SemesterUpdate_view__updates_dates(self):
+        """Posting new dates to the update view saves them to the semester."""
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -759,6 +1491,145 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('courses:semester_update', args=[1]), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), post_data['first_day'])
+
+    def test_SemesterUpdate_view__archived_semester_is_blocked(self):
+        """An archived semester's dates are what its students' final marks were calculated
+        from, so the edit view refuses it (GET and POST alike) rather than rewriting a
+        finished record. The list hides the button, but the URL is still reachable."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(
+            Semester, status=Semester.Status.ARCHIVED,
+            first_day=datetime.date(2020, 1, 1), last_day=datetime.date(2020, 6, 1),
+        )
+        post_data = {
+            'first_day': '2021-10-16',
+            'last_day': '2021-12-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+
+        get_response = self.client.get(reverse('courses:semester_update', args=[archived.pk]))
+        self.assertRedirects(get_response, reverse('courses:semester_list'))
+        self.assertErrorMessage(get_response)
+
+        post_response = self.client.post(reverse('courses:semester_update', args=[archived.pk]), data=post_data)
+        self.assertRedirects(post_response, reverse('courses:semester_list'))
+        self.assertIn(SemesterUpdate.ARCHIVED_SEMESTER_ERROR,
+                      [str(message) for message in self.get_message_list(post_response)])
+
+        archived.refresh_from_db()
+        self.assertEqual(archived.first_day, datetime.date(2020, 1, 1))
+        self.assertEqual(archived.last_day, datetime.date(2020, 6, 1))
+
+    def test_SemesterUpdate_view__archive_race_does_not_modify_archived_semester(self):
+        """A semester archived while an edit was open can't be written by that edit.
+
+        The form carries the semester as it was when the page loaded, so saving it would write
+        the whole row back, dates and the stale open status alike. The re-read under a row lock
+        catches the archive that committed first; here the view is handed that stale instance
+        to stand in for the race.
+        """
+        self.client.force_login(self.test_teacher)
+        semester = baker.make(
+            Semester, status=Semester.Status.ARCHIVED,
+            first_day=datetime.date(2020, 1, 1), last_day=datetime.date(2020, 6, 1),
+        )
+        # what the view loaded before the archive committed
+        stale = Semester.objects.get(pk=semester.pk)
+        stale.status = Semester.Status.OPEN
+        post_data = {
+            'first_day': '2021-10-16',
+            'last_day': '2021-12-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+
+        with patch.object(SemesterUpdate, 'get_object', return_value=stale):
+            response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        semester.refresh_from_db()
+        self.assertTrue(semester.is_archived)
+        self.assertEqual(semester.first_day, datetime.date(2020, 1, 1))
+        self.assertEqual(semester.last_day, datetime.date(2020, 6, 1))
+
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_SemesterUpdate_view__public_schema_is_404(self, mock_connection):
+        """The semester views are tenant-only, so a public-schema request gets the
+        NonPublicOnlyViewMixin's 404. The archived check has to run after that mixin, or it
+        would query a tenant-only table on a schema that doesn't have it."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        self.assert404('courses:semester_update', args=[archived.pk])
+        self.assert404('courses:semester_delete', args=[archived.pk])
+
+    def test_SemesterList_view__status_column_names_each_lifecycle_stage(self):
+        """The status column shows the semester's own lifecycle stage, so a semester being set
+        up reads as Upcoming instead of being lumped in with everything that isn't active."""
+        self.client.force_login(self.test_teacher)
+        baker.make(Semester, status=Semester.Status.UPCOMING)
+        baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, '>Upcoming<')
+        self.assertContains(response, '>Open<')
+        self.assertContains(response, '>Archived<')
+
+    def test_SemesterList_view__open_semester_past_its_last_day_is_flagged(self):
+        """An open semester whose last day has passed reads as Open - ended, the nudge to
+        archive it and free the students' seats."""
+        self.client.force_login(self.test_teacher)
+        open_semester = SiteConfig.get().open_semester
+        open_semester.last_day = datetime.date.today() - datetime.timedelta(days=1)
+        open_semester.save()
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, '>Open - ended<')
+
+    def test_SemesterList_view__names_the_single_open_semester(self):
+        """With one semester running, the heading names it, so staff can see at a glance which
+        one their students are in."""
+        self.client.force_login(self.test_teacher)
+        open_semester = SiteConfig.get().open_semester
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(list(response.context['open_semesters']), [open_semester])
+        self.assertContains(response, f'Open semester: {open_semester}')
+
+    def test_SemesterList_view__names_every_open_semester(self):
+        """A deck running course groups on different calendars has more than one semester open
+        at once (#1781), so the heading lists them all rather than naming only the one the deck
+        happens to point at."""
+        self.client.force_login(self.test_teacher)
+        running = SiteConfig.get().open_semester
+        next_term = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=running.first_day + datetime.timedelta(days=200),
+            last_day=running.last_day + datetime.timedelta(days=200),
+        )
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        # newest term first, the order the list itself is in
+        self.assertEqual(list(response.context['open_semesters']), [next_term, running])
+        self.assertContains(response, 'Open semesters:')
+        self.assertContains(response, str(next_term))
+
+    def test_SemesterList_view__says_so_when_nothing_is_open(self):
+        """Between semesters the heading says nobody can join or earn XP, instead of leaving a
+        blank where the open semester's name would be."""
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        semester.status = Semester.Status.ARCHIVED
+        semester.save()
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(list(response.context['open_semesters']), [])
+        self.assertContains(response, 'No semester is open')
 
     def test_SemesterUpdate__add_data__view(self):
         """
@@ -781,7 +1652,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertTrue(semester.excludeddate_set.exists())
         for ed in semester.excludeddate_set.all():
-            self.assertTrue(ed.date in exclude_dates)
+            self.assertIn(ed.date, exclude_dates)
 
     def test_SemesterUpdate__update_data__view(self):
         """
@@ -814,7 +1685,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # assert data is correct
         for ed in semester.excludeddate_set.all():
-            self.assertTrue(ed.date in updated_exclude_dates)
+            self.assertIn(ed.date, updated_exclude_dates)
 
     def test_SemesterUpdate__delete_data__view(self):
         """
@@ -845,13 +1716,163 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_SemesterDCloses__student_with_negative_xp__view(self, xp_per_course):
+    def test_SemesterUpdate__offers_the_other_semesters_excluded_dates_to_copy(self):
+        """The form carries the deck's other excluded dates, and the button that copies them in.
+
+        The dates are read by the page's JavaScript, which decides which of them fall inside
+        this semester, so they are rendered to the page rather than filtered here (#2648).
         """
-            Test if SemesterClose returns a warning when there is a course student with
+        self.client.force_login(self.test_teacher)
+        night_school = baker.make(Semester)
+        baker.make(ExcludedDate, semester=night_school, date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        semester = SiteConfig.get().active_semester
+        response = self.assert200('courses:semester_update', args=[semester.pk])
+
+        self.assertEqual(
+            response.context['other_excluded_dates'],
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+        self.assertContains(response, 'id="copy-excluded-dates"')
+        self.assertContains(response, '2019-11-11')
+
+    def test_SemesterUpdate__no_copy_button_when_the_other_semesters_exclude_nothing(self):
+        """A deck with nothing to copy is not shown a button that could never do anything."""
+        self.client.force_login(self.test_teacher)
+        baker.make(Semester)
+
+        semester = SiteConfig.get().active_semester
+        baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 11, 11))
+        response = self.assert200('courses:semester_update', args=[semester.pk])
+
+        self.assertEqual(response.context['other_excluded_dates'], [])
+        self.assertNotContains(response, 'id="copy-excluded-dates"')
+
+    def test_SemesterCreate__offers_every_excluded_date_on_the_deck_to_copy(self):
+        """A semester being created is offered all of them: it owns none of them yet."""
+        self.client.force_login(self.test_teacher)
+        baker.make(ExcludedDate, semester=SiteConfig.get().active_semester,
+                   date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        response = self.assert200('courses:semester_create')
+
+        self.assertEqual(
+            response.context['other_excluded_dates'],
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+        self.assertContains(response, 'id="copy-excluded-dates"')
+
+    def test_SemesterUpdate__a_date_another_semester_already_excludes_is_accepted(self):
+        """A holiday another semester excludes can be excluded from this one too.
+
+        A deck can run two semesters at once, and each counts its class days off its own
+        excluded dates, so the same day has to be recordable in both. Excluded dates used to be
+        unique deck-wide, which refused the second semester's copy outright (#2647).
+        """
+        self.client.force_login(self.test_teacher)
+        remembrance_day = datetime.date(2019, 11, 11)
+
+        night_school = baker.make(Semester)
+        baker.make(ExcludedDate, semester=night_school, date=remembrance_day)
+
+        semester = SiteConfig.get().active_semester
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '1', 'form-INITIAL_FORMS': '0',
+            'form-0-date': remembrance_day.isoformat(), 'form-0-label': 'Remembrance Day',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(list(semester.excluded_days()), [remembrance_day])
+        # The other semester keeps its own row: this adds a date, it does not move one.
+        self.assertEqual(list(night_school.excluded_days()), [remembrance_day])
+
+    def test_SemesterUpdate__the_same_date_twice_is_refused(self):
+        """Two rows naming one day are refused on the form rather than reaching the database.
+
+        The date is unique within its semester, and `semester` is not a field on these forms,
+        so the formset checks the rows against each other; without that the second row raises
+        IntegrityError and the teacher gets a 500 instead of an error beside the field.
+        """
+        self.client.force_login(self.test_teacher)
+        remembrance_day = datetime.date(2019, 11, 11)
+
+        semester = SiteConfig.get().active_semester
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '0',
+            'form-0-date': remembrance_day.isoformat(), 'form-0-label': 'Remembrance Day',
+            'form-1-date': remembrance_day.isoformat(), 'form-1-label': 'Remembrance Day again',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This semester already excludes this date.')
+        # Nothing is saved: the formset is invalid as a whole, so neither row is written.
+        self.assertFalse(ExcludedDate.objects.exists())
+
+    def test_SemesterUpdate__an_existing_row_can_take_the_date_of_a_later_row_being_deleted(self):
+        """Moving a date onto a day a row further down the form is giving up is accepted.
+
+        The formset is ordered by date, and Django saves the rows it edits in that order,
+        deleting or writing each as it comes. So the earlier row is written while the later
+        one still holds the day, and only the state at the end of the request has to satisfy
+        the constraint.
+        """
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        earlier = baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 10, 14), label='typo')
+        later = baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '2',
+            'form-0-id': earlier.id, 'form-0-date': '2019-11-11', 'form-0-label': 'Remembrance Day',
+            'form-1-id': later.id, 'form-1-date': '2019-11-11', 'form-1-label': 'Remembrance Day',
+            'form-1-DELETE': 'on',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(
+            list(semester.excludeddate_set.values_list('date', 'label')),
+            [(datetime.date(2019, 11, 11), 'Remembrance Day')],
+        )
+
+    def test_SemesterUpdate__a_date_is_free_to_reuse_when_the_row_holding_it_is_deleted(self):
+        """Retyping a date on a new row while deleting the row that held it is accepted.
+
+        The duplicate check has to ignore rows on their way out, or moving a holiday's label to
+        a fresh row would look like a collision with the row being removed.
+        """
+        self.client.force_login(self.test_teacher)
+        remembrance_day = datetime.date(2019, 11, 11)
+
+        semester = SiteConfig.get().active_semester
+        existing = baker.make(ExcludedDate, semester=semester, date=remembrance_day, label='typo')
+
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '1',
+            'form-0-id': existing.id, 'form-0-date': remembrance_day.isoformat(),
+            'form-0-label': 'typo', 'form-0-DELETE': 'on',
+            'form-1-date': remembrance_day.isoformat(), 'form-1-label': 'Remembrance Day',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(
+            list(semester.excludeddate_set.values_list('date', 'label')),
+            [(remembrance_day, 'Remembrance Day')],
+        )
+
+    @patch_registration_xp(-10)
+    def test_SemesterArchive__student_with_negative_xp__view(self, registration_split):
+        """
+            Test if SemesterArchive returns a warning when there is a course student with
             a negative xp.
         """
-        xp_per_course.return_value = -10
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -867,13 +1888,13 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         course = baker.make(Course)
         baker.make(CourseStudent, user=student, course=course, semester=semester)
 
-        response = self.client.post(reverse('courses:end_active_semester'))
+        response = self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
         self.assertWarningMessage(response)
         self.assertRedirects(response, reverse('courses:semester_list'))
         message = self.get_message_list(response)[0]
         self.assertIn('There are some students with negative XP', str(message))
 
-    def test_SemesterDelete_view(self):
+    def test_SemesterDelete_view__deletes_semester(self):
         """ Admin should be able to delete a semester, as long as:
             - it is not the active semester
             - it has no coursesstudent objects (students registered in a course in the semester)
@@ -887,23 +1908,267 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
 
+    def test_SemesterDelete_view__active_semester_is_blocked(self):
+        """Deleting the active semester redirects with an error message and leaves it in
+        place. The delete button is hidden in the template, but the URL used to be
+        unguarded and a direct request 500'd on the SiteConfig PROTECT constraint."""
+        self.client.force_login(self.test_teacher)
+        active_semester = SiteConfig.get().active_semester
 
-class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
+        response = self.client.post(reverse('courses:semester_delete', args=[active_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        self.assertTrue(Semester.objects.filter(pk=active_semester.pk).exists())
+
+    def test_SemesterDelete_view__archived_semester_is_blocked(self):
+        """An archived semester holds its students' final marks, and nothing points at it once
+        the deck moves on, so the view refuses to delete it (GET and POST alike)."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        for response in (self.client.get(reverse('courses:semester_delete', args=[archived.pk])),
+                         self.client.post(reverse('courses:semester_delete', args=[archived.pk]))):
+            self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertTrue(Semester.objects.filter(pk=archived.pk).exists())
+
+    def test_SemesterDelete_view__concurrent_activation_still_blocked(self):
+        """If the semester becomes active between dispatch's pre-check and the deletion
+        (a concurrent activation request), the PROTECT constraint error from the delete
+        itself is caught and turned into the same redirect + error message, not a 500."""
+        self.client.force_login(self.test_teacher)
+        active_semester = SiteConfig.get().active_semester
+
+        # Simulate the race: the dispatch pre-check sees a different semester as active,
+        # while the database still protects the truly active one.
+        mock_config = MagicMock()
+        mock_config.active_semester = baker.make(Semester)
+        with patch('courses.views.SiteConfig.get', return_value=mock_config):
+            response = self.client.post(reverse('courses:semester_delete', args=[active_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'), fetch_redirect_response=False)
+        self.assertErrorMessage(response)
+        self.assertTrue(Semester.objects.filter(pk=active_semester.pk).exists())
+
+    def test_SemesterDelete_view__lists_registrations_in_context(self):
+        """The delete confirmation page lists the students registered in the semester."""
+        self.client.force_login(self.test_teacher)
+        semester = baker.make(Semester)
+        registration = baker.make(CourseStudent, user=baker.make(User), course=baker.make(Course), semester=semester)
+
+        response = self.client.get(reverse('courses:semester_delete', args=[semester.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(registration, response.context['registrations'])
+
+
+@freeze_time('2026-10-01')  # a Thursday, 19 class days into the semester set up below
+class SemesterClassDaysCachedMarkTests(ByteDeckTenantTestCase):
+    """Saving an open semester's class days works its students' cached marks out again (#2899).
+
+    A mark is a student's XP over the share of the semester's class days that has passed, so an
+    excluded date or a moved first or last day changes it. The header color, the student list and
+    the Mark Distribution chart read Profile.mark_cached, which has to follow straight away rather
+    than at the nightly recalculation.
+    """
 
     def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+        """Give the open semester 40 class days, Monday 7 September to Friday 30 October 2026, and
+        register a student whose 95 XP, in a course out of 1000, is a mark of 20.0% today."""
+        self.semester = SiteConfig.get().active_semester
+        self.semester.first_day = datetime.date(2026, 9, 7)
+        self.semester.last_day = datetime.date(2026, 10, 30)
+        self.semester.save()
 
-    def test_BlockList_view(self):
+        self.student = baker.make(User)
+        baker.make(
+            CourseStudent, user=self.student, semester=self.semester, block=baker.make(Block),
+            course=baker.make(Course, xp_for_100_percent=1000), xp_adjustment=95,
+        )
+        self.assertEqual(self._cached_mark(), 20.0)
+
+    def _admin_login(self):
+        """Log in as a superuser, who may change a semester from the admin."""
+        self.client.force_login(User.objects.create_superuser('semester_admin', password='password'))
+
+    def _cached_mark(self):
+        """Return the student's mark as cached on their profile.
+
+        Returns:
+            Decimal: their mark_cached.
+        """
+        self.student.profile.refresh_from_db()
+        return self.student.profile.mark_cached
+
+    def _post(self, url, data, queueing=None):
+        """Post to url, running any recalculation it queues in place once the save commits, as the
+        worker would.
+
+        Args:
+            url (str): where to post.
+            data (dict): the form data.
+            queueing: what queueing the recalculation does instead, e.g. an exception to raise.
+
+        Returns:
+            tuple: the response, and the mock standing in for queueing the recalculation.
+        """
+        from profile_manager.tasks import invalidate_profile_xp_cache_on_schema
+
+        if queueing is None:
+            def queueing(**kwargs):
+                return invalidate_profile_xp_cache_on_schema()
+
+        with patch.object(invalidate_profile_xp_cache_on_schema, 'apply_async', side_effect=queueing) as queue, \
+                self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(url, data=data)
+        return response, queue
+
+    def _form_data(self, semester, excluded_dates=(), **changes):
+        """Return the semester form's data for semester, with changes and new excluded dates.
+
+        The first and last day default to date.today, a callable, so the page also sends each
+        one's value as it was loaded, in a hidden initial-* input, and Django compares the posted
+        date with that to tell whether it changed. The browser posts them, so this does too.
+
+        Args:
+            semester (Semester): the semester being edited.
+            excluded_dates (iterable of date): excluded dates to add.
+            **changes: the semester's own fields to change, e.g. last_day='2026-10-29'.
+
+        Returns:
+            dict: the form and formset data to post.
+        """
+        excluded_dates = list(excluded_dates)
+        return {
+            'name': semester.name, 'first_day': semester.first_day.isoformat(), 'last_day': semester.last_day.isoformat(),
+            'initial-first_day': semester.first_day.isoformat(), 'initial-last_day': semester.last_day.isoformat(),
+            **changes,
+            **generate_formset_data(ExcludedDateFormset, quantity=len(excluded_dates), date=itertools.cycle(excluded_dates)),
+        }
+
+    def test_SemesterUpdate__excluded_date__recalculates_cached_marks(self):
+        """Excluding Friday 30 October leaves 39 class days, 19 of them passed, so the student's
+        cached mark drops from 20.0% to 19.5%, as Mark Calculations already shows it."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[self.semester.pk]),
+            self._form_data(self.semester, excluded_dates=[datetime.date(2026, 10, 30)]),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterUpdate__last_day_moved__recalculates_cached_marks(self):
+        """Ending the semester a day sooner leaves 39 class days, the same as excluding one."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[self.semester.pk]),
+            self._form_data(self.semester, last_day='2026-10-29'),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterUpdate__task_queue_unavailable__still_saves(self):
+        """A task queue that can't take the recalculation is logged, and the save it follows
+        still succeeds: the excluded date is kept, and the cached mark waits for the nightly
+        recalculation."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        with self.assertLogs('django.test', level='ERROR') as logs:
+            response, queue = self._post(
+                reverse('courses:semester_update', args=[self.semester.pk]),
+                self._form_data(self.semester, excluded_dates=[datetime.date(2026, 10, 30)]),
+                queueing=OperationalError('the broker is down'),
+            )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertIn('the broker is down', logs.output[0])
+        self.assertTrue(self.semester.excludeddate_set.filter(date=datetime.date(2026, 10, 30)).exists())
+        self.assertEqual(self._cached_mark(), Decimal('20.0'))
+
+    def test_SemesterUpdate__name_only__recalculates_nothing(self):
+        """Renaming the semester leaves its class days, and so every mark, as they were, so no
+        recalculation is queued."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[self.semester.pk]),
+            self._form_data(self.semester, name='Fall 2026'),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_not_called()
+
+    def test_SemesterUpdate__upcoming_semester__recalculates_nothing(self):
+        """No cached mark comes from a semester that isn't open yet, so excluding one of its dates
+        queues nothing."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+        upcoming = baker.make(Semester, first_day=datetime.date(2027, 2, 1), last_day=datetime.date(2027, 6, 25))
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[upcoming.pk]),
+            self._form_data(upcoming, excluded_dates=[datetime.date(2027, 2, 15)]),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_not_called()
+
+    def test_SemesterAdmin__excluded_date__recalculates_cached_marks(self):
+        """Excluding a date from the semester's admin page recalculates the cached marks too."""
+        self._admin_login()
+        data = {
+            'name': self.semester.name, 'first_day': '2026-09-07', 'last_day': '2026-10-30',
+            'initial-first_day': '2026-09-07', 'initial-last_day': '2026-10-30', 'status': self.semester.status,
+            'excludeddate_set-TOTAL_FORMS': 1, 'excludeddate_set-INITIAL_FORMS': 0,
+            'excludeddate_set-MIN_NUM_FORMS': 0, 'excludeddate_set-MAX_NUM_FORMS': 1000,
+            'excludeddate_set-0-date': '2026-10-30', 'excludeddate_set-0-label': '',
+            'excludeddate_set-0-semester': self.semester.pk,
+        }
+
+        response, queue = self._post(reverse('admin:courses_semester_change', args=[self.semester.pk]), data)
+
+        self.assertRedirects(response, reverse('admin:courses_semester_changelist'))
+        queue.assert_called_once_with(queue='default')
+        self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterAdmin__name_only__recalculates_nothing(self):
+        """Renaming the semester from its admin page queues no recalculation."""
+        self._admin_login()
+        data = {
+            'name': 'Fall 2026', 'first_day': '2026-09-07', 'last_day': '2026-10-30',
+            'initial-first_day': '2026-09-07', 'initial-last_day': '2026-10-30', 'status': self.semester.status,
+            'excludeddate_set-TOTAL_FORMS': 0, 'excludeddate_set-INITIAL_FORMS': 0,
+            'excludeddate_set-MIN_NUM_FORMS': 0, 'excludeddate_set-MAX_NUM_FORMS': 1000,
+        }
+
+        response, queue = self._post(reverse('admin:courses_semester_change', args=[self.semester.pk]), data)
+
+        self.assertRedirects(response, reverse('admin:courses_semester_changelist'))
+        queue.assert_not_called()
+
+
+class BlockViewTests(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher for the class tests."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
+    def test_BlockList_view__staff_can_view(self):
         """ Admin should be able to view block list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('courses:block_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:block_list')
 
         # Should contain one block
         self.assertEqual(response.context['object_list'].count(), 1)
 
-    def test_BlockCreate_view(self):
+    def test_BlockCreate_view__staff_can_create(self):
         """ Admin should be able to create a block """
         self.client.force_login(self.test_teacher)
         data = {
@@ -916,7 +2181,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         block = Block.objects.get(name=data['name'])
         self.assertEqual(block.name, data['name'])
 
-    def test_BlockUpdate_view(self):
+    def test_BlockUpdate_view__staff_can_update(self):
         """ Admin should be able to update a block """
         self.client.force_login(self.test_teacher)
         data = {
@@ -945,8 +2210,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         student = baker.make(User)
         block = baker.make(Block)
 
-        success = self.client.login(username=self.test_teacher.username, password='password')
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # register student to block
         course_student = baker.make(CourseStudent, user=student, block=block)
@@ -954,7 +2218,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(CourseStudent.objects.first().pk, course_student.pk)
 
         # confirm block existence
-        self.assertTrue(Block.objects.filter(id=block.pk).first() is not None)
+        self.assertIsNotNone(Block.objects.filter(id=block.pk).first())
 
         # confirm deletion prevention text shows up
         response = self.client.get(reverse('courses:block_delete', args=[block.pk]))
@@ -966,7 +2230,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, dt_atag_link)
         self.assertContains(response, dt_well_ptag)
 
-    def test_BlockForm_initial_values(self):
+    def test_BlockForm__initial_values(self):
         """
             Test if the form passed through context has correct initial values
         """
@@ -977,16 +2241,17 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(form['current_teacher'].value(), SiteConfig.get().deck_owner.pk)
 
 
-class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
+class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.teacher = baker.make(User, is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, block, course and active/inactive semesters for the chart tests."""
+        cls.teacher = baker.make(User, is_staff=True)
 
-        self.block = baker.make(Block)
-        self.course = baker.make(Course)
-        self.semester = SiteConfig.get().active_semester
-        self.inactive_semester = baker.make(Semester)
+        cls.block = baker.make(Block)
+        cls.course = baker.make(Course)
+        cls.semester = SiteConfig.get().active_semester
+        cls.inactive_semester = baker.make(Semester)
 
     def create_student_course(self, xp):
         """
@@ -1005,28 +2270,53 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
 
         return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
 
-    def test_non_ajax_status_code(self):
+    def test_get_student_mark_list__query_count_flat_as_students_grow(self):
+        """get_student_mark_list select_relates each student's profile, so its
+        query count does not grow with the number of students (it reads
+        student.profile.mark_cached for every student)."""
+        self.create_student_course(50)
+        self.create_student_course(60)
+        # warm SiteConfig/content-type caches so only the student marks matter
+        self.semester.get_student_mark_list(students_only=True)
+
+        with CaptureQueriesContext(connection) as few_queries:
+            self.semester.get_student_mark_list(students_only=True)
+
+        for _ in range(4):
+            self.create_student_course(70)
+
+        with CaptureQueriesContext(connection) as many_queries:
+            self.semester.get_student_mark_list(students_only=True)
+
+        # without select_related('profile') each extra student adds a query
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def test_non_ajax_status_code__forbidden(self):
+        """A non-ajax request to the mark distribution chart is forbidden (403)."""
         self.assert403('courses:mark_distribution_chart', args=[self.teacher.pk])
 
-    def test_ajax_status_code_for_anonymous(self):
-        # checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
-        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+    def test_ajax_status_code__anonymous_redirected(self):
+        """An anonymous ajax request to the mark distribution chart is sent to the login page."""
+        # an ajax request clears the 403 the non-ajax test covers, so this reaches LoginRequiredMixin
+        url = reverse('courses:mark_distribution_chart', args=[self.teacher.pk])
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
-    def test_ajax_status_code_for_students(self):
+    def test_ajax_status_code__students(self):
+        """A logged-in student's ajax request to the mark distribution chart succeeds (200)."""
         user = baker.make(User)
         self.client.force_login(user)
 
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_ajax_status_code_for_teachers(self):
+    def test_ajax_status_code__teachers(self):
+        """A logged-in teacher's ajax request to the mark distribution chart succeeds (200)."""
         self.client.force_login(self.teacher)
 
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_no_users_outside_active_semester_in_histogram_values(self):
+    def test_histogram_values__exclude_users_outside_active_semester(self):
         """ histogram values should only belong to users who belong in the active semester"""
         # create inactive semester students
         inactive_sem_students = [self.create_student_course(100) for i in range(5)]
@@ -1051,7 +2341,160 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotEqual(total_students, len(inactive_sem_students))
         self.assertEqual(total_students, len(active_sem_students))
 
-    def test_no_test_users_in_histogram_values(self):
+    def test_histogram_values__compare_against_the_students_own_semester(self):
+        """A student is charted against their own classmates rather than every current
+        student on the deck (issue #2157 Phase 3), so two cohorts on different calendars
+        each see their own distribution."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        [self.create_student_course(100) for _ in range(7)]  # the deck's other cohort
+        cohort = [self.create_student_course(100) for _ in range(3)]
+        for course_student in cohort:
+            course_student.semester = other_semester
+            course_student.save()
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[cohort[0].user.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        json_response = json.loads(response.content)
+        # their 2 classmates plus their own bar, which is added back into this histogram.
+        # Charting against the whole deck instead would add the other cohort's 7 as well.
+        self.assertEqual(sum(json_response['data']['students']), len(cohort))
+
+    def test_histogram_values__unmarked_classmate_does_not_break_the_chart(self):
+        """A classmate who has never had a mark calculated has mark_cached None, and numpy
+        can't clip None against a number, so leaving it in returned a 500 to everyone in
+        that semester. Unmarked classmates are left out of the distribution instead."""
+        marked = self.create_student_course(100)
+        marked.user.profile.mark_cached = 60
+        marked.user.profile.save()
+        unmarked = self.create_student_course(50)
+        unmarked.user.profile.mark_cached = None
+        unmarked.user.profile.save()
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[marked.user.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # the marked student's own bar; the unmarked classmate contributes nothing
+        self.assertEqual(sum(json.loads(response.content)['data']['students']), 1)
+
+    def test_histogram_values__empty_class_between_semesters(self):
+        """Between semesters an unregistered viewer has no semester at all to be charted
+        against, so there are no classmates rather than a crash on the missing semester."""
+        self.create_student_course(100)
+        stranger = baker.make(User)
+        Semester.objects.complete_semester()
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[stranger.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # only the viewer's own bar, which is always added into this histogram
+        self.assertEqual(sum(json.loads(response.content)['data']['students']), 1)
+
+    def chart_user_bin(self, student, course=None):
+        """Ask the chart for this student and give back the bin its user marker landed in.
+
+        Args:
+            student: the student being charted.
+            course (Course): the course to chart them in, or None to ask for no course at all.
+
+        Returns:
+            int: the index of the histogram bin holding their own bar, in tens of a percent.
+        """
+        url = reverse('courses:mark_distribution_chart', args=[student.id])
+        data = {'course': course.id} if course else {}
+        response = self.client.get(url, data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        return json.loads(response.content)['data']['user_id']
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__mark_out_the_course_the_chart_is_asked_for(self, fraction_complete):
+        """A student in two courses has a mark in each (issue #2440), and reads the chart inside
+        that course's tab (issue #2743), so the bar drawn as theirs follows the course asked
+        for rather than being their first course's mark in both."""
+        student = baker.make(User)
+        maths = baker.make(Course, xp_for_100_percent=100)
+        art = baker.make(Course, xp_for_100_percent=100)
+        baker.make(
+            CourseStudent, user=student, semester=self.semester, course=maths,
+            block=self.block, xp_adjustment=60,
+        )
+        baker.make(CourseStudent, user=student, semester=self.semester, course=art, block=baker.make(Block))
+
+        self.client.force_login(student)
+
+        # the adjustment belongs to the maths registration, so all 60 of their XP counts
+        # toward it: 60% of the 100 XP that course is out of, and nothing toward art
+        self.assertEqual(self.chart_user_bin(student, maths), 6)
+        self.assertEqual(self.chart_user_bin(student, art), 0)
+
+    def registered_with_a_stale_cached_mark(self):
+        """A student whose cached mark says something other than the live mark of their course.
+
+        Returns:
+            tuple: the student and their course. They are 60% in it on the numbers, while the
+            mark cached on their profile, which is what their classmates' bars are drawn from,
+            says 30%.
+        """
+        student = baker.make(User)
+        course = baker.make(Course, xp_for_100_percent=100)
+        baker.make(
+            CourseStudent, user=student, semester=self.semester, course=course,
+            block=self.block, xp_adjustment=60,
+        )
+        student.profile.mark_cached = 30
+        student.profile.save()
+        return student, course
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__no_course_asked_for_stands_at_the_cached_mark(self, fraction_complete):
+        """A request naming no course is answered with the deck's one number for the student,
+        the mark cached on their profile, rather than with whichever of their courses comes
+        first: it is what every other bar on the chart is drawn from."""
+        student, course = self.registered_with_a_stale_cached_mark()
+        self.client.force_login(student)
+
+        self.assertEqual(self.chart_user_bin(student), 3)
+        # their course's own mark is only read when the request asks for that course
+        self.assertEqual(self.chart_user_bin(student, course), 6)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__a_course_the_student_is_not_in_stands_at_the_cached_mark(self, fraction_complete):
+        """A course the student is not registered in has no mark of theirs to read, so they
+        stand at their cached mark rather than at a course they were not asked about."""
+        student, _ = self.registered_with_a_stale_cached_mark()
+        self.client.force_login(student)
+
+        self.assertEqual(self.chart_user_bin(student, baker.make(Course, xp_for_100_percent=100)), 3)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__a_course_run_on_xp_alone_has_no_mark_to_stand_at(self, fraction_complete):
+        """A course can be run on XP alone (issue #403), and has no mark at all rather than a
+        mark of zero, so there is nothing to mark out on a distribution of marks."""
+        student = baker.make(User)
+        for_joy = baker.make(Course, xp_for_100_percent=100, uses_marks=False)
+        baker.make(
+            CourseStudent, user=student, semester=self.semester, course=for_joy,
+            block=self.block, xp_adjustment=60,
+        )
+
+        self.client.force_login(student)
+
+        self.assertEqual(self.chart_user_bin(student, for_joy), 0)
+
+    def test_histogram_values__exclude_test_users(self):
         """ test users should not show up in histogram values """
         # create test users students
         test_account_students = [self.create_student_course(100) for i in range(5)]
@@ -1077,34 +2520,144 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(total_students, len(active_sem_students))
 
 
-class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
+class TestAjax_TagChart(ByteDeckTenantTestCase):
+    """Tests for the Ajax_TagChart view (courses:ajax_tag_progress_chart), which returns
+    per-tag quest/badge XP datasets for chart.js."""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
+        """Create the target user whose tag chart is requested, registered in the deck's
+        semester so their work counts toward it, and cache that semester."""
+        cls.user = baker.make(User)
+        cls.semester = SiteConfig.get().active_semester
+        baker.make(CourseStudent, user=cls.user, course=baker.make(Course), semester=cls.semester)
 
-        self.student = baker.make(User)
-        self.block = baker.make(Block)
-        self.course = baker.make(Course)
+    def _tagged_quest_with_submissions(self, tag, xp, max_xp, quantity):
+        """Make a tagged quest and `quantity` approved, active-semester submissions for self.user.
+
+        xp_requested is pinned to 0 so each submission's earned xp is deterministically the
+        quest's xp (Greatest(quest.xp, xp_requested)).
+        """
+        quest = baker.make(Quest, xp=xp, max_xp=max_xp)
+        quest.tags.add(tag)
+        baker.make(
+            QuestSubmission, quest=quest, user=self.user,
+            is_completed=True, is_approved=True, do_not_grant_xp=False,
+            xp_requested=0, semester=self.semester, _quantity=quantity,
+        )
+        return quest
+
+    def _tagged_badge_with_assertions(self, tag, xp, quantity):
+        """Make a tagged badge and `quantity` active-semester assertions for self.user."""
+        badge = baker.make(Badge, xp=xp)
+        badge.tags.add(tag)
+        baker.make(
+            BadgeAssertion, badge=badge, user=self.user,
+            do_not_grant_xp=False, semester=self.semester, _quantity=quantity,
+        )
+        return badge
+
+    def test_non_ajax_status_code__forbidden(self):
+        """A non-ajax request to the tag chart is forbidden (403)."""
+        self.assert403('courses:ajax_tag_progress_chart', args=[self.user.pk])
+
+    def test_ajax_status_code__anonymous_redirected(self):
+        """An anonymous ajax request to the tag chart is sent to the login page."""
+        url = reverse('courses:ajax_tag_progress_chart', args=[self.user.pk])
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
+
+    def test_ajax__no_tag_data_returns_empty_datasets(self):
+        """With no tagged quests/badges, the chart returns 200 with empty quest/badge datasets."""
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)['data']
+        self.assertEqual(data['quest_dataset'], [])
+        self.assertEqual(data['badge_dataset'], [])
+
+    def test_ajax__builds_quest_and_badge_datasets(self):
+        """The chart builds per-tag datasets from the user's tagged quest submissions and badge assertions.
+
+        The capped quest (max_xp set) with two submissions exercises the max-xp cutoff loop and the
+        ordinal-in-name path; the uncapped quest (max_xp = -1) exercises the keep-everything branch;
+        the badge with two assertions exercises the badge loop and its ordinal-in-name path.
+        """
+        self._tagged_quest_with_submissions('alpha', xp=50, max_xp=60, quantity=2)
+        self._tagged_quest_with_submissions('beta', xp=20, max_xp=-1, quantity=1)
+        self._tagged_badge_with_assertions('alpha', xp=30, quantity=2)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertIn('alpha', payload['labels'])
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
+        badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # the two-submission quest and two-assertion badge get an ordinal appended to their name
+        self.assertTrue(any('(' in name for name in quest_names), quest_names)
+        self.assertTrue(any('(' in name for name in badge_names), badge_names)
+
+    def test_ajax__under_cap_keeps_all_and_single_assertion_has_no_ordinal(self):
+        """A capped quest whose submissions stay under max_xp keeps every submission (the max-xp
+        cutoff loop finishes without breaking), and a badge with a single assertion gets no
+        ordinal suffix on its name."""
+        # xp 10 x2 = 20, well under max_xp 100, so the cutoff loop never breaks
+        quest = self._tagged_quest_with_submissions('gamma', xp=10, max_xp=100, quantity=2)
+        # a single assertion -> count() == 1 -> no "(ordinal)" appended
+        self._tagged_badge_with_assertions('gamma', xp=15, quantity=1)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
+        badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # both under-cap submissions are kept (the cutoff loop never dropped one)
+        self.assertEqual(
+            sum(name == quest.name or name.startswith(f'{quest.name} (') for name in quest_names),
+            2,
+        )
+        self.assertTrue(badge_names)
+        self.assertTrue(all('(' not in name for name in badge_names), badge_names)
+
+
+class TestAjax_ProgressChart(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student registered in a course with a fixed-date active semester for the progress chart tests."""
+        cls.student = baker.make(User)
+        cls.block = baker.make(Block)
+        cls.course = baker.make(Course)
 
         # freeze_time doesnt affect "SiteConfig.get().active_semester"
         # we have to manually set the dates
-        self.semester = SiteConfig.get().active_semester
-        self.semester.first_day = datetime.date(2024, 1, 1)  # keep in mind this is in localtime
-        self.semester.last_day = self.semester.first_day + datetime.timedelta(days=135)
-        self.semester.save()
+        cls.semester = SiteConfig.get().active_semester
+        cls.semester.first_day = datetime.date(2024, 1, 1)  # keep in mind this is in localtime
+        cls.semester.last_day = cls.semester.first_day + datetime.timedelta(days=135)
+        cls.semester.save()
 
-        self.student_course = baker.make(
+        cls.student_course = baker.make(
             CourseStudent,
-            user=self.student,
-            semester=self.semester,
-            course=self.course,
-            block=self.block
+            user=cls.student,
+            semester=cls.semester,
+            course=cls.course,
+            block=cls.block
         )
 
         # use this to make aware datetime objects
         # (UTC-8) for datetime.date(2024, 1, 1)
-        self.tz = timezone.get_default_timezone()
-        self.base_xp = 1
+        cls.tz = timezone.get_default_timezone()
+        cls.base_xp = 1
 
     def create_quest_and_submissions(self, xp, quest_submission_date, quest_submission_quantity=1):
         """
@@ -1133,22 +2686,19 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
 
         return quest, quest_submissions
 
-    def test_non_ajax_status_code(self):
+    def test_non_ajax_status_code__forbidden(self):
         """ 403 unless verified ajax POST request """
         self.assert403('courses:ajax_progress_chart', args=[self.student.pk])
 
-    def test_ajax_status_code_for_anonymous(self):
-        """ checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
-        redirects because of LoginRequiredMixin
-        """
-        # post
-        response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
-        # get
-        response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+    def test_ajax_status_code__anonymous_redirected(self):
+        """An anonymous ajax request to the progress chart is sent to the login page, POST or GET."""
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
 
-    def test_ajax_status_code_for_student(self):
+        self.assertLoginRedirect(self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
+
+    def test_ajax_status_code__student(self):
+        """A student's ajax POST to the progress chart succeeds (200) while a GET returns 404."""
         self.client.force_login(self.student)
 
         # post
@@ -1158,6 +2708,190 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
         # get
         response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 404)
+
+    def test_ajax_status_code__user_id_zero_uses_request_user(self):
+        """user_id=0 resolves to the logged-in user (request.user), so a student's own POST succeeds (200)."""
+        self.client.force_login(self.student)
+        response = self.client.post(reverse('courses:ajax_progress_chart', args=[0]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    @freeze_time('2024-01-06')  # a Saturday
+    def test_ajax_xp_data__empty_for_a_semester_with_no_class_days_yet(self):
+        """A semester with no dates set has no class days behind it, so there are no points to
+        plot. The weekend adjustment reads the last point, so an empty chart has to short
+        circuit before it rather than raising IndexError."""
+        self.semester.first_day = None
+        self.semester.last_day = None
+        self.semester.save()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        # no points to plot, but the chart is still told the charted course's scale so its axis
+        # and mark lines set up correctly (issue #403): the response shape is the same either way
+        self.assertEqual(json.loads(response.content), {
+            'days_in_semester': 0,
+            'xp_data': [],
+            'mark_lines': [],
+            'xp_for_100_percent': self.course.xp_for_100_percent,
+            'uses_marks': self.course.uses_marks,
+        })
+
+    def test_ajax_xp_data__empty_with_no_open_semester(self):
+        """Between semesters there is no semester to chart progress through, so the chart gets
+        an empty dataset instead of the page failing."""
+        Semester.objects.complete_semester()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        # with no open semester there is no course to chart, so the scale falls back to no marks
+        self.assertEqual(json.loads(response.content), {
+            'days_in_semester': 0,
+            'xp_data': [],
+            'mark_lines': [],
+            'xp_for_100_percent': 0,
+            'uses_marks': False,
+        })
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__charts_the_students_own_semester(self):
+        """A deck can run two cohorts on different calendars (#1781), and the chart is drawn over
+        the semester's class days. Charting a student against the deck's default semester would
+        give the other cohort someone else's term: the wrong length, and the wrong first day to
+        count their XP from."""
+        their_semester = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=datetime.date(2024, 1, 15), last_day=datetime.date(2024, 3, 15),
+        )
+        their_student = baker.make(User)
+        baker.make(
+            CourseStudent, user=their_student, semester=their_semester,
+            course=baker.make(Course), block=baker.make(Block),
+        )
+        self.client.force_login(their_student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[their_student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        data = json.loads(response.content)
+        self.assertEqual(data['days_in_semester'], their_semester.num_days())
+        self.assertNotEqual(their_semester.num_days(), self.semester.num_days())
+        # their term started Jan 15, so only its class days are plotted, not the deck semester's
+        self.assertEqual(len(data['xp_data']), their_semester.days_so_far())
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__charts_the_named_courses_own_xp(self):
+        """A student in two courses has a different amount of XP in each (#2440), so each course
+        gets its own line: the course named in the request, not an even share of everything."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=500)
+        baker.make(CourseStudent, user=self.student, semester=self.semester, course=art, block=baker.make(Block))
+        quest = baker.make(Quest, xp=40, max_xp=-1)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest, registration=self.student_course, semester=self.semester,
+            is_completed=True, is_approved=True, time_approved=datetime.datetime(2024, 1, 3, tzinfo=self.tz),
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        assigned = self.client.post(url, {'course': self.course.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        other = self.client.post(url, {'course': art.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # all 40 XP went to the first course, so its line ends at 40 and the other's at 0
+        self.assertEqual(json.loads(assigned.content)['xp_data'][-1]['y'], 40)
+        self.assertEqual(json.loads(other.content)['xp_data'][-1]['y'], 0)
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__scales_to_the_charted_courses_own_total(self):
+        """Courses can be out of different amounts of XP, so the chart is told which total to
+        draw its axis and mark lines against."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=500)
+        baker.make(CourseStudent, user=self.student, semester=self.semester, course=art, block=baker.make(Block))
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        response = self.client.post(url, {'course': art.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(json.loads(response.content)['xp_for_100_percent'], 500)
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__draws_each_mark_range_at_the_xp_that_reaches_it(self):
+        """Each of the charted course's mark ranges comes with its line: the XP that reaches it on
+        each class day, worked out on the server so it rounds a mark as the XP listed for the
+        range does. On today's date the line is at that listed XP (#2826). A range for another
+        course, or an inactive one, has no line."""
+        MarkRange.objects.all().delete()
+        everyone = baker.make(MarkRange, minimum_mark=49.5)
+        this_course = baker.make(MarkRange, minimum_mark=72.5, courses=[self.course])
+        baker.make(MarkRange, minimum_mark=60, courses=[baker.make(Course)])
+        baker.make(MarkRange, minimum_mark=85.5, active=False)
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        xp_for_100_percent = self.course.xp_for_100_percent
+        days = self.semester.num_days()
+        mark_lines = json.loads(response.content)['mark_lines']
+        self.assertEqual(mark_lines, [
+            {'mark': 49.5, 'xp': everyone.xp_to_reach_by_day(xp_for_100_percent, days)},
+            {'mark': 72.5, 'xp': this_course.xp_to_reach_by_day(xp_for_100_percent, days)},
+        ])
+        today = mark_lines[1]['xp'][self.semester.days_so_far() - 1]
+        self.assertEqual(today, this_course.xp_to_reach(xp_for_100_percent, self.semester.fraction_complete()))
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__falls_back_to_a_course_the_student_is_in(self):
+        """A request naming no course, or one the student is not registered in, charts one of
+        their own courses rather than failing or charting somebody else's."""
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+        someone_elses = baker.make(Course, xp_for_100_percent=999)
+
+        unnamed = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        not_theirs = self.client.post(url, {'course': someone_elses.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        # the page asks for no course when the student has one, which posts an empty value,
+        # and nothing stops a request naming something that is not an id at all
+        empty = self.client.post(url, {'course': ''}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        nonsense = self.client.post(url, {'course': 'undefined'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        for response in (unnamed, not_theirs, empty, nonsense):
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(json.loads(response.content)['xp_for_100_percent'], self.course.xp_for_100_percent)
+
+    def test_ajax_progress_chart__costs_the_same_however_many_class_days(self):
+        """The chart is drawn from one pass over the student's work rather than a query per
+        class day (issue #2459), so a term a month in costs no more to draw than one four days
+        in. Pinned as a comparison rather than an absolute count, so the guard survives any
+        unrelated change to what the page asks for."""
+        self.client.force_login(self.student)
+        self.create_quest_and_submissions(self.base_xp, datetime.datetime(2024, 1, 2, tzinfo=self.tz))
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        def cost_at(when):
+            """What one chart POST costs with the clock at `when`, and what it drew."""
+            with freeze_time(when):
+                # a request neither capture counts: OwnerOnlyWhenSuspendedMiddleware asks
+                # get_current_deck() for the deck's status, which reads it from the database on
+                # a cache miss. That entry expires an hour after it is written and these two
+                # calls are a month apart on a frozen clock, so each needs its own warm-up.
+                self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+            return len(queries), json.loads(response.content)
+
+        # 2024-1-5 is a Friday, four class days in; 2024-2-1 is a Thursday, twenty-four
+        first_week, _ = cost_at(datetime.datetime(2024, 1, 5, 6, tzinfo=self.tz))
+        fifth_week, later_chart = cost_at(datetime.datetime(2024, 2, 1, 6, tzinfo=self.tz))
+
+        # the later chart really does plot more days, so the counts are of unequal work
+        self.assertGreater(len(later_chart['xp_data']), 4)
+        self.assertEqual(fifth_week, first_week)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
@@ -1230,6 +2964,31 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
             total_xp = json.loads(response.content)['xp_data'][-1]['y']
             self.assertEqual(total_xp, initial_xp + saturday_xp + sunday_xp)
 
+    def test_ajax_xp_data__weekend_with_nothing_earned_leaves_the_last_day_alone(self):
+        """A weekend where the student earned nothing leaves the last plotted day's total as it was.
+
+        The weekend branch rolls XP earned on a Saturday or Sunday back onto the last class day,
+        because work done then does not get its own point on the chart. This is the other side of
+        that: with nothing earned there is nothing to roll back, and the Friday total stands.
+        """
+        self.client.force_login(self.student)
+
+        # submissions Monday to Friday, and nothing over the weekend that follows
+        starting_date = datetime.datetime(2024, 1, 1, tzinfo=self.tz)
+        for i in range(5):
+            self.create_quest_and_submissions(self.base_xp, starting_date + datetime.timedelta(days=i))
+        weekday_xp = self.base_xp * 5
+
+        # 2024-1-6 (Saturday)
+        with freeze_time(datetime.datetime(2024, 1, 6, 6, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 5)  # 5 == Saturday
+            response = self.client.post(
+                reverse('courses:ajax_progress_chart', args=[self.student.pk]),
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+
+        self.assertEqual(json.loads(response.content)['xp_data'][-1]['y'], weekday_xp)
+
     def test_ajax_xp_data__equals_xp_cache_on_weekend(self):
         """ test if the xp_data equals xp on weekend """
         self.client.force_login(self.student)
@@ -1290,93 +3049,409 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
             self.assertEqual(valid_days, 10)
 
 
-class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
+class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.student = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student registered in a course worth 1000 XP for 100% for the mark calculation tests."""
+        cls.student = baker.make(User)
 
-        self.block = baker.make(Block)
-        self.course = baker.make(Course, xp_for_100_percent=1000)
+        cls.block = baker.make(Block)
+        cls.course = baker.make(Course, xp_for_100_percent=1000)
 
-        self.stu_course = baker.make(
+        cls.stu_course = baker.make(
             CourseStudent,
-            user=self.student,
+            user=cls.student,
             semester=SiteConfig.get().active_semester,
-            block=self.block,
-            course=self.course,
+            block=cls.block,
+            course=cls.course,
         )
 
+    def setUp(self):
+        """Turn on mark-calculation display so the page is reachable."""
         # to show mark calculation page without 404 you need to turn this on
+        # (stays in setUp: SiteConfig writes populate cross-test caches)
         siteconfig = SiteConfig.get()
         siteconfig.display_marks_calculation = True
         siteconfig.save()
 
-    @patch('courses.models.Semester.fraction_complete')
-    def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
-        """
-        tests the markranges displayed under "Current Mark Ranges by XP" are correct based on the percentage of the semester completed.
-        specifically tests when semester is 0%, 50%, 75%, 100%, and 125% done.
-        """
+    def test_mark_calculations__shows_xp_instead_of_a_percentage_for_a_course_run_on_xp_alone(self):
+        """A course can be told to skip marks entirely (issue #403). Its row on the marks page
+        says what the student earned rather than a percentage, and the arithmetic that would end
+        in one is dropped: there is no mark to explain."""
+        self.stu_course.course.uses_marks = False
+        self.stu_course.course.save()
         self.client.force_login(self.student)
 
-        # default markranges from initialization
-        # pass.minimum_mark = 0.495
-        # B.minimum_mark = 0.725
-        # A.minimum_mark = 0.855
-
-        # Check if markranges show 0% of 1000 xp
-        mock_sem_fraction_complete.return_value = 0
-        response = self.client.get(reverse('courses:my_marks'))
-        self.assertContains(response, '0')  # XP should be 0 for all ranges
-
-        # Check if markranges show as 50% of 1000 xp
-        mock_sem_fraction_complete.return_value = 0.5
-        response = self.client.get(reverse('courses:my_marks'))
-        self.assertTrue(mock_sem_fraction_complete.called)
-
-        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 500)
-        self.assertContains(response, '247')  # 500 * 0.495 = 247.5
-        self.assertContains(response, '362')  # 500 * 0.725 = 362.5
-        self.assertContains(response, '427')  # 500 * 0.855 = 427.5
-
-        # Check if markranges show as 75% of 1000 xp
-        mock_sem_fraction_complete.return_value = 0.75
         response = self.client.get(reverse('courses:my_marks'))
 
-        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 750)
-        self.assertContains(response, '371')  # 750 * 0.495 = 371.25
-        self.assertContains(response, '543')  # 750 * 0.725 = 543.75
-        self.assertContains(response, '641')  # 750 * 0.855 = 641.25
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'no percentage')
+        self.assertContains(response, 'runs on XP alone, so')
+        self.assertNotContains(response, 'Here is an explanation of how I calculated your mark')
 
-        # Check if markranges show as 100% of 1000 xp
-        mock_sem_fraction_complete.return_value = 1
+    def test_mark_calculations__explains_a_graded_course_when_another_is_run_on_xp_alone(self):
+        """A student can hold one of each. The explanation is arithmetic ending in a percentage,
+        so the tab for a course run on XP alone says so instead of calculating one."""
+        for_joy = baker.make(Course, title='For Joy', uses_marks=False)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=for_joy,
+        )
+        self.client.force_login(self.student)
+
         response = self.client.get(reverse('courses:my_marks'))
 
-        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 1000)
-        self.assertContains(response, '495')  # 1000 * 0.495 = 495
-        self.assertContains(response, '725')  # 1000 * 0.725 = 725
-        self.assertContains(response, '855')  # 1000 * 0.855 = 855
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Here is an explanation of how I calculated your mark')
+        # the graded course is explained, the other one says why it is not
+        panes = {pane['course']: pane['uses_marks'] for pane in response.context['course_panes']}
+        self.assertTrue(panes[self.course])
+        self.assertFalse(panes[for_joy])
+        self.assertContains(response, 'runs on XP alone, so there is no percentage')
+        # and the course with no mark still gets its row, saying what it is worth in XP
+        self.assertContains(response, 'no percentage')
 
-        # Test for over 100% completion
-        mock_sem_fraction_complete.return_value = 1.25
+    def test_mark_calculations__does_not_claim_the_other_courses_are_run_on_xp_alone(self):
+        """Each course is explained in its own tab, so nothing on the page speaks for the rest:
+        with two graded courses and one ungraded, "your other courses run on XP alone" would be
+        wrong about one of them (issue #403)."""
+        # ordered by block name, so the XP-only course sorts first and the page is about another
+        for_joy = baker.make(Course, title='For Joy', uses_marks=False)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block, name='A block'), course=for_joy,
+        )
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block, name='C block'), course=baker.make(Course, title='Also Graded'),
+        )
+        self.client.force_login(self.student)
+
         response = self.client.get(reverse('courses:my_marks'))
-        self.assertContains(response, '618')  # 1250 * 0.495 = 618.75
-        self.assertContains(response, '906')  # 1250 * 0.725 = 906.25
-        self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
+
+        self.assertEqual(response.status_code, 200)
+        # "since your other course(s) run on XP alone" was the claim; assert on its lead-in,
+        # since the phrase itself also appears in a javascript comment in the chart template
+        self.assertNotContains(response, 'since your other')
+        # one tab per course, each graded one carrying its own explanation
+        panes = response.context['course_panes']
+        self.assertEqual(len(panes), 3)
+        self.assertEqual(response.content.decode().count('Here is an explanation of how I calculated your mark'), 2)
+        self.assertEqual(response.content.decode().count('runs on XP alone, so there is no percentage'), 1)
+
+    def test_mark_calculations__drops_the_mark_distribution_chart_with_no_marks_to_distribute(self):
+        """The distribution compares a student's mark against their classmates'. A student with
+        no mark in any of their courses has nothing to place on it (issue #403)."""
+        self.stu_course.course.uses_marks = False
+        self.stu_course.course.save()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertNotContains(response, 'Mark Distribution')
+
+    def test_ajax_progress_chart__reports_whether_the_charted_course_uses_marks(self):
+        """The chart draws its mark lines and its percent axis from the course's total. A course
+        run on XP alone has no percentage, so the chart is told to leave both off (issue #403),
+        and is given no mark lines."""
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        graded = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.stu_course.course.uses_marks = False
+        self.stu_course.course.save()
+        for_joy = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertTrue(json.loads(graded.content)['uses_marks'])
+        self.assertFalse(json.loads(for_joy.content)['uses_marks'])
+        self.assertEqual(json.loads(for_joy.content)['mark_lines'], [])
+
+    def test_mark_calculations__reports_each_courses_own_xp(self):
+        """Every course gets a tab reporting how much of the student's XP counts toward it.
+        Before #2440 the two courses always held the same even share, so the page could talk
+        about "per course" without naming one; now they differ, and each tab has to show its
+        own course's number (#2743)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        art_registration = baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertContains(response, 'registered in 2 courses')
+        panes = {pane['course']: pane['xp'] for pane in response.context['course_panes']}
+        # the whole point: the two courses no longer hold the same number, and the page shows
+        # each of them its own rather than one of them twice
+        self.assertNotEqual(self.stu_course.xp(), art_registration.xp())
+        self.assertEqual(panes[self.course], 50)
+        self.assertEqual(panes[art], 0)
+        self.assertContains(response, str(self.course))
+        self.assertContains(response, str(art))
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__table_lists_each_course_its_own_mark(self, fraction_complete):
+        """The table of the student's courses shows a mark per row. A student who put their work
+        against one of their two courses is at 10% there and 0% in the other, rather than the
+        same number repeated down the table (issue #2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertContains(response, '<strong>10%</strong>', html=True)
+        self.assertContains(response, '<strong>0%</strong>', html=True)
+
+    def test_mark_calculations__offers_a_chart_per_course_to_a_multicourse_student(self):
+        """Each course holds its own XP, so each gets its own progress chart, chosen with a
+        tab per course (issue #2453, #2743)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(len(response.context['course_panes']), 2)
+        self.assertContains(response, f'data-course="{self.course.id}"')
+        self.assertContains(response, f'data-course="{art.id}"')
+
+    def test_mark_calculations__still_charts_per_course_with_the_setting_off(self):
+        """Turning the per-course setting off stops students being asked where new XP goes; it
+        does not un-assign the XP already put against a course. Those courses still hold
+        different amounts, which the marks table on this page shows, so the charts stay per
+        course rather than collapsing into one line that could only be one of them."""
+        siteconfig = SiteConfig.get()
+        siteconfig.students_choose_xp_course = False
+        siteconfig.save()
+        self.addCleanup(self._restore_course_choice)
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        art_registration = baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(len(response.context['course_panes']), 2)
+        self.assertContains(response, f'data-course="{self.course.id}"')
+        self.assertContains(response, f'data-course="{art.id}"')
+        # the courses really do still differ, which is why one chart would not do
+        self.assertEqual(self.stu_course.xp(), 50)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_mark_calculations__offers_one_chart_to_a_student_in_one_course(self):
+        """One course means one chart and one set of calculations, with no tabs to choose
+        between: there is nothing to choose."""
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(len(response.context['course_panes']), 1)
+        # the one course still gets its pane, which is what the charts are drawn from; what a
+        # single course does not get is a strip of tabs over it
+        self.assertContains(response, f'data-course="{self.course.id}"', count=1)
+        self.assertNotContains(response, 'nav-tabs course-tabs')
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__works_the_mark_ranges_out_per_course(self, fraction_complete):
+        """The XP a grade calls for is a fraction of that course's own total, so a student in two
+        courses out of different amounts has a different number to reach in each (#2743)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        # the deck ships with mark ranges of its own; this is about which course's total each
+        # one is worked out against, so there is one to follow
+        MarkRange.objects.all().delete()
+        baker.make(MarkRange, name='Pass', minimum_mark=50, active=True)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        ranges = {pane['course']: pane['markranges'] for pane in response.context['course_panes']}
+        # half of the course's total, halfway through the semester
+        self.assertEqual([markrange.xp_needed for markrange in ranges[art]], [250])
+        self.assertEqual(
+            [markrange.xp_needed for markrange in ranges[self.course]],
+            [math.floor(self.course.xp_for_100_percent * 0.5 * 0.5)],
+        )
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.1)
+    def test_mark_calculations__a_student_holding_the_xp_listed_for_a_range_is_at_it(self, fraction_complete):
+        """The XP listed for a range is the XP whose mark is first shown as its minimum, so a
+        student holding it is at the range and their header takes its colour, and one point less
+        leaves them in the range below. Out of 1000 XP a tenth of the way through, the 72.5%
+        Chillax Line lists 73 XP: 72 XP is 72%, short of it (#2826)."""
+        MarkRange.objects.all().delete()
+        baker.make(MarkRange, name='Pass', minimum_mark=49.5, color_light='#FFB3B3', color_dark='#FFB3B3')
+        baker.make(MarkRange, name='Chillax Line', minimum_mark=72.5, color_light='#BEFFFA', color_dark='#BEFFFA')
+        config = SiteConfig.get()
+        config.color_headers_by_mark = True
+        config.save()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+        listed = {markrange.name: markrange.xp_needed for markrange in response.context['course_panes'][0]['markranges']}
+        self.assertEqual(listed['Chillax Line'], 73)
+
+        for xp, color in ((listed['Chillax Line'], '#BEFFFA'), (listed['Chillax Line'] - 1, '#FFB3B3')):
+            with self.subTest(xp=xp), patch_registration_xp(xp):
+                self.student.profile.xp_invalidate_cache()
+                response = self.client.get(reverse('courses:my_marks'))
+                self.assertContains(response, f'background-color: {color} !important;')
+
+    def test_mark_calculations__a_range_kept_out_of_headers_is_still_drawn(self):
+        """Keeping a range out of student headers leaves it on the graph: it only changes whether
+        its color reaches the header."""
+        MarkRange.objects.all().delete()
+        baker.make(MarkRange, name='Graph Only', minimum_mark=50, active=True, color_headers=False)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        names = [markrange.name for pane in response.context['course_panes'] for markrange in pane['markranges']]
+        self.assertIn('Graph Only', names)
+
+    def test_mark_calculations__a_courses_own_mark_range_stays_in_its_own_tab(self):
+        """A mark range can be assigned to particular courses. With each course explained in its
+        own tab, a range belonging to one of them has no business in another's (#2743)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        MarkRange.objects.all().delete()
+        everywhere = baker.make(MarkRange, name='Pass', minimum_mark=50, active=True)
+        art_only = baker.make(MarkRange, name='Art Only', minimum_mark=80, active=True)
+        art_only.courses.add(art)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        names = {
+            pane['course']: [markrange.name for markrange in pane['markranges']]
+            for pane in response.context['course_panes']
+        }
+        self.assertEqual(names[art], [everywhere.name, art_only.name])
+        self.assertEqual(names[self.course], [everywhere.name])
+
+    @patch('courses.models.Semester.days_so_far', return_value=10)
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__averages_each_courses_own_xp_per_day(self, fraction_complete, days_so_far):
+        """The page shows the average beside the XP counting toward that course, and says it
+        divided one by the days so far. A deck-wide average would not be that sum (#2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        averages = {pane['course']: pane['xp_per_day_ave'] for pane in response.context['course_panes']}
+        # all 50 XP counts toward one course, so the other one has averaged nothing
+        self.assertEqual(averages[self.course], 5)
+        self.assertEqual(averages[art], 0)
+
+    def _restore_course_choice(self):
+        """Put the shared deck's per-course XP setting back on, for the test that turns it off."""
+        siteconfig = SiteConfig.get()
+        siteconfig.students_choose_xp_course = True
+        siteconfig.save()
+
+    def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
+        """When mark-calculation display is turned off, staff get the 'deactivated' notice page
+        (students get a 404 instead, since they shouldn't reach this URL)."""
+        siteconfig = SiteConfig.get()
+        siteconfig.display_marks_calculation = False
+        siteconfig.save()
+
+        self.client.force_login(baker.make(User, is_staff=True))
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'courses/mark_calculations_deactivated.html')
+
+    def test_mark_calculations__staff_can_view_another_students_marks(self):
+        """Staff can view a specific student's mark page via the user_id URL."""
+        self.client.force_login(baker.make(User, is_staff=True))
+        self.assert200('courses:marks', args=[self.student.pk])
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
+        """The XP listed under "Current Mark Ranges by XP" for the deck's default ranges (Pass
+        49.5%, B 72.5%, A 85.5%) when the semester is 0%, 50%, 75%, 100% and 125% done, in a
+        course out of 1000 XP. Each is the first whole XP whose mark is shown as the range's
+        minimum: halfway through, 247 XP is 49.4%, so Pass lists 248 (#2826)."""
+        self.client.force_login(self.student)
+        expected = {
+            0: [0, 0, 0],
+            0.5: [248, 363, 428],
+            0.75: [371, 544, 641],
+            1: [495, 725, 855],
+            1.25: [619, 906, 1069],
+        }
+        for fraction_complete, xp_needed in expected.items():
+            with self.subTest(fraction_complete=fraction_complete):
+                mock_sem_fraction_complete.return_value = fraction_complete
+                response = self.client.get(reverse('courses:my_marks'))
+
+                markranges = response.context['course_panes'][0]['markranges']
+                self.assertEqual([markrange.minimum_mark for markrange in markranges], [49.5, 72.5, 85.5])
+                self.assertEqual([markrange.xp_needed for markrange in markranges], xp_needed)
+                for markrange in markranges:
+                    self.assertContains(response, f'{markrange.name} ({markrange.minimum_mark}%): {markrange.xp_needed} XP')
 
 
-class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
+class AjaxRankPopupTests(ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_ranked_popup/
     + ajax/on_close_ranked_popup/
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.student = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student for the rank popup tests."""
+        cls.student = baker.make(User)
 
-    def test_status_codes(self):
+    def test_status_codes__ranked_popup_endpoints(self):
         ''' tests correct status codes for `on_show_ranked_popup` and `on_close_ranked_popup`
         403 - because not ajax
         302 - because of not logged in (LoginRequiredMixin)
@@ -1386,13 +3461,13 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
         # test anon
         # ajax_on_show_ranked_popup
         self.assert403('courses:ajax_on_show_ranked_popup')
-        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('courses:ajax_on_show_ranked_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # ajax_on_close_ranked_popup
         self.assert403('courses:ajax_on_close_ranked_popup')
-        response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('courses:ajax_on_close_ranked_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # test student
         self.client.force_login(self.student)
@@ -1407,7 +3482,7 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_on_show_ranked_popup(self):
+    def test_on_show_ranked_popup__correct_ranks(self):
         """ Checks if earned_rank and next_rank are correct when requesting json from ranked popups
         """
         # make sure theres enough initial ranks for test
@@ -1494,7 +3569,7 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotEqual(context['earned_rank'], previous_rank)
         self.assertEqual(context['next_rank'], next_rank)
 
-    def test_on_close_ranked_popup(self):
+    def test_on_close_ranked_popup__marks_latest_read(self):
         """ Check if 'courses:ajax_on_show_ranked_popup' closes only the latest ranked notification
         """
         # create 2 rank up notifications
@@ -1509,3 +3584,94 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
 
         # check if it was marked as read
         self.assertEqual(Notification.objects.all_unread(self.student).count(), 1)
+
+
+class DeckCapacityEnforcementTests(ByteDeckTenantTestCase):
+    """Enforcement of the deck's current-student cap at the registration choke points
+    (#1729 PR 4; closes the 'trial mode (max 5 users)' checkbox of #1730)."""
+
+    def setUp(self):
+        """Give the deck a subscribed cap of 1, fill that seat, and log nobody in yet.
+
+        The deck cache is cleared because the cache backend outlives each test's
+        transaction.
+        """
+        from django.core.cache import cache
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.tenant.paid_until = timezone.localdate() + datetime.timedelta(days=30)
+        self.tenant.max_active_users = 1
+        self.tenant.save()
+
+        self.occupant = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.occupant, active=True, semester=SiteConfig.get().active_semester)
+        self.newcomer = baker.make(User)
+        self.staff = baker.make(User, is_staff=True)
+
+    def test_student_registration__refused_at_cap(self):
+        """A student hitting the join page on a full deck sees the student-facing
+        refusal instead of the form, on both GET and POST, and no registration happens."""
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertContains(response, 'reached its limit of current students')
+
+        response = self.client.post(reverse('courses:create'), data={})
+        self.assertContains(response, 'reached its limit of current students')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_student_registration__allowed_below_cap(self):
+        """With a free seat, the join page renders the normal registration form."""
+        self.tenant.max_active_users = 2
+        self.tenant.save()
+        self.client.force_login(self.newcomer)
+
+        response = self.assert200('courses:create')
+        self.assertNotContains(response, 'reached its limit of current students')
+
+    def test_student_registration__simplified_auto_create_blocked_at_cap(self):
+        """The simplified-registration auto-create shortcut cannot bypass the cap: the
+        guard runs before it, so the student sees the refusal and no row is created."""
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertContains(response, 'reached its limit of current students')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_staff_add_student__refused_at_cap_with_helpful_links(self):
+        """Staff adding a student to a full deck see the staff-facing refusal with the
+        archive-help and subscription-page links, on both GET and POST."""
+        self.client.force_login(self.staff)
+        url = reverse('courses:join', args=[self.newcomer.id])
+
+        response = self.client.get(url)
+        self.assertContains(response, 'Current-student limit reached')
+        self.assertContains(response, reverse('courses:archive_students_help'))
+        # PR 6: the upgrade link now goes to the deck's own subscription page
+        self.assertContains(response, reverse('decks:subscription'))
+
+        response = self.client.post(url, data={})
+        self.assertContains(response, 'Current-student limit reached')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_staff_add_student__staff_target_allowed_at_cap(self):
+        """Adding a STAFF member to a course is always allowed -- staff never consume seats."""
+        other_staff = baker.make(User, is_staff=True)
+        self.client.force_login(self.staff)
+
+        response = self.assert200('courses:join', args=[other_staff.id])
+        self.assertNotContains(response, 'Current-student limit reached')
+
+    def test_archive_students_help__staff_only(self):
+        """The archive-students help page renders for staff and is blocked for students."""
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('courses:archive_students_help'))
+        self.assertContains(response, 'Freeing up student seats')
+
+        self.client.force_login(self.newcomer)
+        self.assert403('courses:archive_students_help')

@@ -59,7 +59,11 @@ cy.style()
         "text-rotation": "-90deg",
         "text-halign": "left",
         "text-margin-x": -10,
-        "text-margin-y": -40
+        "text-margin-y": -40,
+        // Campaign labels run vertically along the node's edge, so the generic node
+        // `text-max-width` wraps long names onto stacked lines (see issue #1289).
+        // Disable wrapping here to keep each campaign name on a single line.
+        "text-wrap": "none"
       })
     .selector('edge.repeat-edge')
       .style({
@@ -107,6 +111,22 @@ cy.style()
         "text-halign": "center",
         "text-margin-x": 0,
       })
+    // A student's own progress on their map (#2678). Bootstrap's brand-success and
+    // brand-warning, the same green and yellow the submission lists already use for
+    // approved and awaiting-approval work, so the map reads the same way as the rest of
+    // the site. Declared last so the status outline wins over .link's blue border: a quest
+    // that leads to another map keeps its blue LABEL, which is what marks it as a link, and
+    // the outline is free to report whether the student has done it.
+    .selector('node.approved')
+      .style({
+        "border-color": "#5cb85c",
+        "border-width": 3,
+      })
+    .selector('node.awaiting-approval')
+      .style({
+        "border-color": "#f0ad4e",
+        "border-width": 3,
+      })
     .update()
 ;
 
@@ -116,6 +136,41 @@ cy.style()
  * https://js.cytoscape.org/#core/layout
  *
 /**************************************/
+
+// #1787: Keep a campaign's quests vertically stacked even when one of them is also a
+// prerequisite for a quest OUTSIDE the campaign.
+//
+// dagre positions each node horizontally (Brandes-Köpf) by aligning it under the
+// *median* of its neighbours, and it ignores edge weight when doing so. So a quest that
+// is a prereq for both its in-campaign successor and an out-of-campaign quest gets
+// centred between the two, dragging the in-campaign successor sideways instead of
+// keeping it directly below.
+//
+// dagre counts each parallel edge as a separate neighbour (its graph is a multigraph),
+// so temporarily adding a hidden duplicate of every intra-campaign edge — one whose
+// source and target share the same compound/campaign parent — pulls the median back
+// onto the in-campaign successor. The chain stacks vertically and the out-of-campaign
+// branch is pushed off to the side. When a quest branches to two quests that are BOTH
+// in the campaign, both edges are duplicated equally, so they still spread apart as
+// before (matching the issue's "unless both subsequent quests are within the same
+// campaign"). The duplicates only bias the layout; they're removed right after
+// positioning (dagre runs synchronously here since animation is off), so they never
+// render or affect interaction.
+var campaignLayoutEdges = [];
+cy.edges().forEach(function (edge) {
+    var sourceParent = edge.source().parent();
+    // nonempty() guards the top-level case: two parent-less nodes both have an empty
+    // parent collection, and empty.same(empty) is true, which would wrongly match
+    // every edge between quests that aren't in any campaign.
+    if (sourceParent.nonempty() && sourceParent.same(edge.target().parent())) {
+        campaignLayoutEdges.push({
+            group: 'edges',
+            data: { source: edge.source().id(), target: edge.target().id() },
+            classes: 'hidden',
+        });
+    }
+});
+var addedCampaignLayoutEdges = cy.add(campaignLayoutEdges);
 
 var layout = cy.layout({
 
@@ -133,6 +188,10 @@ var layout = cy.layout({
     "rankSep": 15,  // vertical seperation of nodes // try 24 for taxi?
 });
 layout.run()
+
+// Remove the layout-only helper edges now that every node has its position.
+addedCampaignLayoutEdges.remove();
+
 
 /***************************************
  *

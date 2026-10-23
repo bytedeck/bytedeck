@@ -1,14 +1,39 @@
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
+from django.utils.datastructures import MultiValueDict
 
-from django_tenants.test.cases import TenantTestCase
+from crispy_forms.utils import render_crispy_form
+from django_select2.forms import Select2Widget
 
-from quest_manager.forms import QuestForm
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+
+from model_bakery import baker
+
+from courses.models import Block, Course, CourseStudent, Grade
+from siteconfig.models import SiteConfig
+from quest_manager.forms import (
+    TA_RESTRICTED_QUEST_FIELDS,
+    QuestForm,
+    SubmissionForm,
+    SubmissionFormCustomXP,
+    SubmissionFormStaff,
+    SubmissionQuickReplyForm,
+    SubmissionQuickReplyFormStudent,
+    SubmissionReplyForm,
+    TAQuestForm,
+)
+from quest_manager.models import Category, CommonData, Quest
+
+User = get_user_model()
 
 
-class QuestFormTest(TenantTestCase):
+class QuestFormTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.minimal_valid_data = {
+    @classmethod
+    def setUpTestData(cls):
+        """Provide a minimal set of valid QuestForm data shared across tests."""
+        cls.minimal_valid_data = {
             "name": "Test Quest",
             "xp": 0,
             "max_repeats": 0,
@@ -20,12 +45,28 @@ class QuestFormTest(TenantTestCase):
             "tags": "",
         }
 
-    def test_minimal_valid_data(self):
+    def test_QuestForm__minimal_valid_data_is_valid(self):
         """The minimal_valid_data provided in the setup method should be valid!"""
         form = QuestForm(data=self.minimal_valid_data)
         self.assertTrue(form.is_valid())
 
-    def test_hideable_blocking_both_true(self):
+    def test_QuestForm__saves_quick_reply(self):
+        """QuestForm exposes the quest-specific quick_reply field and saves it on the quest (#161)."""
+        form_data = dict(self.minimal_valid_data)
+        form_data["quick_reply"] = "See the rubric — you're missing the reflection paragraph."
+        form = QuestForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertEqual(quest.quick_reply, "See the rubric — you're missing the reflection paragraph.")
+
+    def test_QuestForm__quick_reply_is_optional(self):
+        """quick_reply is optional — a quest without it is still valid and defaults to empty (#161)."""
+        form = QuestForm(data=self.minimal_valid_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertEqual(quest.quick_reply, "")
+
+    def test_QuestForm__hideable_and_blocking_both_true_is_invalid(self):
         """If a quest is Blocking then it should not validate if it is also Hideable"""
         form_data = self.minimal_valid_data
 
@@ -35,3 +76,401 @@ class QuestFormTest(TenantTestCase):
         form = QuestForm(data=form_data)
         self.assertFalse(form.is_valid())
         self.assertIn("Blocking quests cannot be Hideable.", form.errors['__all__'][0])
+
+    def test_QuestForm__repeat_per_semester_with_unlimited_repeats_is_invalid(self):
+        """A quest with unlimited repeats (max_repeats=-1) should not validate if it
+        also has repeat_per_semester: unlimited repeats never run out, so there is
+        nothing for a new semester to reset, and the combination previously caused
+        404 errors for returning students (issue #1531).
+        """
+        form_data = self.minimal_valid_data
+
+        form_data["max_repeats"] = -1
+        form_data["repeat_per_semester"] = True
+
+        form = QuestForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("unlimited repeats", form.errors['__all__'][0])
+
+    def test_QuestForm__repeat_per_semester_with_limited_repeats_is_valid(self):
+        """A quest with a limited number of repeats can use repeat_per_semester."""
+        form_data = self.minimal_valid_data
+
+        form_data["max_repeats"] = 2
+        form_data["repeat_per_semester"] = True
+
+        form = QuestForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_QuestForm__unlimited_repeats_without_repeat_per_semester_is_valid(self):
+        """A quest with unlimited repeats is valid as long as repeat_per_semester is off."""
+        form_data = self.minimal_valid_data
+
+        form_data["max_repeats"] = -1
+
+        form = QuestForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_QuestForm__still_binds_the_TA_restricted_fields(self):
+        """A teacher's quest form keeps the fields TAQuestForm drops: restricting a TA
+        must not take those settings away from the teachers who are meant to have them."""
+        form = QuestForm()
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(field=field_name):
+                self.assertIn(field_name, form.fields)
+
+    def test_QuestForm__campaign_common_info_and_teacher_are_searchable_dropdowns(self):
+        """Campaign, Common Quest Info and the teacher to notify are select2 dropdowns, so a long
+        list of campaigns, info blocks or teachers can be searched by typing (#1076)."""
+        form = QuestForm()
+        for field_name in ('campaign', 'common_data', 'specific_teacher_to_notify'):
+            with self.subTest(field=field_name):
+                self.assertIsInstance(form.fields[field_name].widget, Select2Widget)
+                self.assertIn('django-select2', str(form[field_name]))
+
+    def test_QuestForm__searchable_dropdowns_offer_the_same_choices(self):
+        """The searchable dropdowns offer only what the plain ones did: published campaigns,
+        active Common Quest Info and staff."""
+        baker.make(Category, title="Published Campaign", published=True)
+        baker.make(Category, title="Draft Campaign", published=False)
+        baker.make(CommonData, title="Active Info", active=True)
+        baker.make(CommonData, title="Retired Info", active=False)
+        baker.make(User, username="teacher_one", is_staff=True)
+        baker.make(User, username="student_one", is_staff=False)
+
+        form = QuestForm()
+
+        campaign_html = str(form['campaign'])
+        self.assertIn("Published Campaign", campaign_html)
+        self.assertNotIn("Draft Campaign", campaign_html)
+        common_data_html = str(form['common_data'])
+        self.assertIn("Active Info", common_data_html)
+        self.assertNotIn("Retired Info", common_data_html)
+        teacher_html = str(form['specific_teacher_to_notify'])
+        self.assertIn("teacher_one", teacher_html)
+        self.assertNotIn("student_one", teacher_html)
+
+
+class TAQuestFormTest(ByteDeckTenantTestCase):
+    """A student TA's quest form must not carry the fields only a teacher may set (#2384)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Provide minimal valid quest form data and the users a TA form needs."""
+        cls.minimal_valid_data = {
+            "name": "Test Quest",
+            "xp": 0,
+            "max_repeats": 0,
+            "max_xp": -1,
+            "hours_between_repeats": 0,
+            "sort_order": 0,
+            "date_available": str(timezone.now().date()),
+            "time_available": "0:00:00",
+            "tags": "",
+        }
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.ta = User.objects.create_user('test_ta')
+        cls.ta.profile.is_TA = True
+        cls.ta.profile.save()
+
+    def test_TAQuestForm__does_not_bind_the_restricted_fields(self):
+        """The restricted fields are absent from the form, not merely hidden: a hidden widget
+        still binds whatever is posted, so hiding them only removed the control from the page."""
+        form = TAQuestForm()
+        rendered = str(form)
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(field=field_name):
+                self.assertNotIn(field_name, form.fields)
+                self.assertNotIn(f'name="{field_name}"', rendered)
+
+    def test_TAQuestForm__crispy_layout_drops_the_restricted_fields_and_keeps_the_rest(self):
+        """The form renders through its crispy layout, which QuestForm builds naming fields this
+        form no longer has. Those are taken back out, and everything a TA may edit still renders."""
+        rendered = render_crispy_form(TAQuestForm())
+
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(dropped=field_name):
+                self.assertNotIn(f'name="{field_name}"', rendered)
+
+        # fields from the layout's top level and from inside its Advanced accordion, so a
+        # too-eager removal that emptied a nested group would be caught
+        for field_name in ('name', 'xp', 'instructions', 'sort_order', 'blocking'):
+            with self.subTest(kept=field_name):
+                self.assertIn(f'name="{field_name}"', rendered)
+
+    def test_TAQuestForm__posted_restricted_fields_cannot_change_a_quest(self):
+        """A TA's POST claiming every restricted field leaves all of them as the teacher set
+        them: an unbound field is one a ModelForm never writes to its instance."""
+        quest = Quest.objects.create(
+            name="Teacher's Quest",
+            published=False,
+            archived=True,
+            available_outside_course=True,
+            editor=self.ta,
+        )
+
+        form = TAQuestForm(
+            data={
+                **self.minimal_valid_data,
+                'published': True,
+                'archived': False,
+                'available_outside_course': False,
+                'editor': self.teacher.id,
+            },
+            instance=quest,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+
+        self.assertFalse(saved.published)
+        self.assertTrue(saved.archived)
+        self.assertTrue(saved.available_outside_course)
+        self.assertEqual(saved.editor, self.ta)
+
+    def test_TAQuestForm__saves_the_editable_fields(self):
+        """The restrictions don't stop a TA from doing their job: an ordinary edit still saves."""
+        quest = Quest.objects.create(name="Draft", published=False, editor=self.ta)
+
+        form = TAQuestForm(data={**self.minimal_valid_data, 'name': "Renamed by the TA"}, instance=quest)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+
+        self.assertEqual(saved.name, "Renamed by the TA")
+
+
+class QuickReplyFormsSanitizeHTMLTest(ByteDeckTenantTestCase):
+    """The plain-text (non-wysiwyg) reply forms are accessible to all users and
+    rendered with |safe. They carry rich HTML from the Summernote editor, so their
+    `comment_text` is sanitized with an allow-list on cleaning: legitimate
+    formatting is preserved (issue #2113) while scripts and event handlers are
+    stripped so they can't execute (regression tests for issue #1343).
+    """
+
+    xss_payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+    formatting_payload = '<p>hello <b>bold</b> <a href="http://example.com">link</a></p>'
+
+    forms_under_test = (
+        ('student quick reply', SubmissionQuickReplyFormStudent),
+        ('staff quick reply', SubmissionQuickReplyForm),
+        ('reply', SubmissionReplyForm),
+    )
+
+    def test_reply_forms__strip_scripts_and_event_handlers(self):
+        """Scripts and inline event handlers are removed from every reply form so a
+        crafted comment can't run JavaScript when rendered (issue #1343)."""
+        for label, form_class in self.forms_under_test:
+            with self.subTest(form=label):
+                form = form_class(data={'comment_text': self.xss_payload})
+                self.assertTrue(form.is_valid())
+                cleaned = form.cleaned_data['comment_text']
+                # the <script> tag is neutralized (escaped, not a live tag)...
+                self.assertNotIn('<script>', cleaned)
+                self.assertIn('&lt;script&gt;', cleaned)
+                # ...and the onerror event handler is stripped off the surviving <img>
+                self.assertNotIn('onerror', cleaned)
+
+    def test_reply_forms__preserve_legitimate_formatting(self):
+        """Ordinary formatting HTML survives sanitizing so rich comments render
+        instead of showing their literal tags (issue #2113)."""
+        for label, form_class in self.forms_under_test:
+            with self.subTest(form=label):
+                form = form_class(data={'comment_text': self.formatting_payload})
+                self.assertTrue(form.is_valid())
+                cleaned = form.cleaned_data['comment_text']
+                self.assertIn('<b>bold</b>', cleaned)
+                self.assertIn('<a href="http://example.com">link</a>', cleaned)
+                self.assertIn('<p>', cleaned)
+
+
+class XPCourseChoiceTest(ByteDeckTenantTestCase):
+    """Whether a student is asked which course a submission's XP counts toward (issue #2440)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A student in two courses, which is the only situation where the question arises."""
+        cls.student = baker.make(User)
+        cls.semester = SiteConfig.get().active_semester
+        cls.maths = baker.make(Course, title='Maths')
+        cls.art = baker.make(Course, title='Art')
+        cls.maths_registration, cls.art_registration = (
+            baker.make(CourseStudent, user=cls.student, course=course, block=baker.make(Block), semester=cls.semester)
+            for course in (cls.maths, cls.art)
+        )
+
+    def test_registration_field__offers_the_students_own_registrations(self):
+        """The choices are the courses this student is actually taking, as their registrations,
+        not anyone else's: assigning XP to a course they are not in would be meaningless."""
+        someone_elses = baker.make(
+            CourseStudent, user=baker.make(User), course=baker.make(Course, title='Woodwork'),
+            block=baker.make(Block), semester=self.semester,
+        )
+
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertCountEqual(form.fields['registration'].queryset, [self.maths_registration, self.art_registration])
+        self.assertNotIn(someone_elses, form.fields['registration'].queryset)
+
+    def test_registration_field__shows_each_registration_as_its_course(self):
+        """The student is asked about courses, so each choice reads as the course it is for."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertEqual(form.fields['registration'].label_from_instance(self.maths_registration), 'Maths')
+
+    def test_registration_field__names_the_group_of_a_course_held_twice(self):
+        """A student registered in the same course twice (in two groups) would otherwise see two
+        identical choices, so each names its group; a course held once is shown as it is."""
+        student = baker.make(User)
+        for name, grade in (('A block', None), ('B block', baker.make(Grade))):
+            baker.make(
+                CourseStudent, user=student, course=self.maths, block=baker.make(Block, name=name),
+                semester=self.semester, grade_fk=grade,
+            )
+        baker.make(CourseStudent, user=student, course=self.art, block=baker.make(Block, name='C block'), semester=self.semester)
+
+        field = SubmissionQuickReplyFormStudent(student=student).fields['registration']
+
+        self.assertCountEqual(
+            [field.label_from_instance(registration) for registration in field.queryset],
+            ['Maths (A block)', 'Maths (B block)', 'Art'],
+        )
+
+    def test_registration_field__leaves_out_a_registration_with_no_course(self):
+        """A registration with no course has nothing to show the student, so it is not offered,
+        and a student whose other registration has none has only one course to choose from, so
+        is not asked at all."""
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, course=self.maths, block=baker.make(Block), semester=self.semester)
+        baker.make(CourseStudent, user=student, course=None, block=baker.make(Block), semester=self.semester)
+
+        form = SubmissionQuickReplyFormStudent(student=student)
+
+        self.assertNotIn('registration', form.fields)
+
+    def test_registration_field__offers_splitting_evenly_and_defaults_to_it(self):
+        """A student can decline to pick, and that is the default: someone who ignores the
+        question gets the even split every submission used to get, rather than having their
+        work silently land in whichever course happened to sort first."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertEqual(form.fields['registration'].empty_label, 'Split evenly between my courses')
+        self.assertIsNone(form['registration'].value())
+        self.assertFalse(form.fields['registration'].required)
+
+    def test_registration_field__is_dropped_for_a_student_with_one_course(self):
+        """With a single course there is nothing to ask, so the student is not asked. Their
+        submission stays unassigned, which for one course amounts to the same thing."""
+        one_course_student = baker.make(User)
+        baker.make(
+            CourseStudent, user=one_course_student, course=self.maths,
+            block=baker.make(Block), semester=self.semester,
+        )
+
+        form = SubmissionQuickReplyFormStudent(student=one_course_student)
+
+        self.assertNotIn('registration', form.fields)
+
+    def test_registration_field__is_dropped_when_the_deck_turns_the_setting_off(self):
+        """Staff can switch the question off, and then every student's XP goes back to being
+        shared evenly, so there is nothing to ask even in two courses."""
+        config = SiteConfig.get()
+        config.students_choose_xp_course = False
+        config.save()
+
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertNotIn('registration', form.fields)
+
+    def test_registration_field__is_dropped_when_no_student_is_filling_the_form_in(self):
+        """A staff member commenting on someone's submission is not choosing where that
+        student's XP goes."""
+        form = SubmissionQuickReplyFormStudent()
+
+        self.assertNotIn('registration', form.fields)
+
+    def test_registration_field__is_offered_on_the_full_submission_form_too(self):
+        """The submission page renders SubmissionForm, so the picker has to be there and filled
+        in on that one as well: it is the form most students actually see."""
+        form = SubmissionForm(student=self.student)
+
+        self.assertCountEqual(form.fields['registration'].queryset, [self.maths_registration, self.art_registration])
+        self.assertEqual(form.fields['registration'].empty_label, 'Split evenly between my courses')
+
+    def test_registration_field__is_dropped_on_the_staff_form(self):
+        """SubmissionFormStaff extends the same base, and a teacher commenting is not choosing
+        where this student's XP goes, so the field must not follow it up the inheritance chain."""
+        form = SubmissionFormStaff()
+
+        self.assertNotIn('registration', form.fields)
+
+    def test_registration_field__is_offered_on_the_custom_xp_form_too(self):
+        """A quest where the student enters their own XP asks the same question: which form
+        they get depends on the quest and whether they attached a file, not on the choice."""
+        form = SubmissionFormCustomXP(student=self.student)
+
+        self.assertCountEqual(form.fields['registration'].queryset, [self.maths_registration, self.art_registration])
+
+
+class SubmissionAttachmentTypesTest(ByteDeckTenantTestCase):
+    """What the submission comment's "Attach files" box takes.
+
+    It is the general "hand in your work" box, so whole cohorts of existing quests ask for a
+    page or a drawing through it and it has to take web files. A question that asks for one
+    type rather than any is where the narrower rule belongs (#2559).
+    """
+
+    def bound_form(self, upload, form_class=SubmissionForm):
+        """Bind a submission form to one chosen file, the way the submit view binds it.
+
+        Args:
+            upload: the file to attach.
+            form_class: the submission form to bind, for the variants that share the field.
+
+        Returns:
+            Form: the bound form, already validated.
+        """
+        form = form_class(
+            data={"comment_text": "here is my work"},
+            files=MultiValueDict({"attachments": [upload]}),
+        )
+        form.is_valid()
+        return form
+
+    def test_attachments__accepts_an_svg(self):
+        """A drawing handed in as an SVG is accepted: a vector graphic is the work on plenty of
+        quests, and refusing it leaves the student with nothing to hand in."""
+        upload = SimpleUploadedFile("drawing.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>",
+                                    content_type="image/svg+xml")
+
+        form = self.bound_form(upload)
+
+        self.assertNotIn("attachments", form.errors)
+        self.assertEqual([f.name for f in form.cleaned_data["attachments"]], ["drawing.svg"])
+
+    def test_attachments__accepts_a_web_page(self):
+        """A web design quest asks for the page itself, so HTML is accepted here."""
+        upload = SimpleUploadedFile("index.html", b"<!doctype html><title>my page</title>",
+                                    content_type="text/html")
+
+        form = self.bound_form(upload)
+
+        self.assertNotIn("attachments", form.errors)
+        self.assertEqual([f.name for f in form.cleaned_data["attachments"]], ["index.html"])
+
+    def test_attachments__still_enforces_the_size_limit(self):
+        """Taking web files widens which types are accepted, nothing else: the 16MB per-file
+        limit applies to them like any other upload."""
+        too_big = SimpleUploadedFile("huge.svg", b"x" * (16777216 + 1), content_type="image/svg+xml")
+
+        form = self.bound_form(too_big)
+
+        self.assertIn("attachments", form.errors)
+
+    def test_attachments__the_staff_form_takes_the_same_types(self):
+        """A teacher attaching an example page to their comment is doing the same thing the
+        student did, through the same field."""
+        upload = SimpleUploadedFile("example.html", b"<!doctype html><title>example</title>",
+                                    content_type="text/html")
+
+        form = self.bound_form(upload, form_class=SubmissionFormStaff)
+
+        self.assertNotIn("attachments", form.errors)

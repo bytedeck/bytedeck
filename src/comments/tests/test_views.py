@@ -1,31 +1,37 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 from comments.models import Comment
 from bs4 import BeautifulSoup
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
 
-class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CommentViewTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User)
-        self.teacher = baker.make(User, is_staff=True)
-        self.announcement = baker.make('announcements.Announcement')
-        # create a test comment on the test announcement
-        self.comment = baker.make('comments.Comment', user=self.student, path=self.announcement.get_absolute_url())
-        self.comment_decoy = baker.make('comments.Comment')
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
+        """Create users, an announcement, and comments shared across the test methods."""
+        cls.student = baker.make(User)
+        cls.teacher = baker.make(User, is_staff=True)
+        cls.announcement = baker.make('announcements.Announcement')
+        # create a test comment on the test announcement. Null the GFK explicitly
+        # (these comments are attached by path, not a target object) so baker
+        # doesn't fill target_content_type with a random -- possibly table-less --
+        # model, which would make str()/rendering non-deterministic under a
+        # reused schema.
+        cls.comment = baker.make(
+            'comments.Comment', user=cls.student, path=cls.announcement.get_absolute_url(),
+            target_content_type=None,
+        )
+        cls.comment_decoy = baker.make('comments.Comment', target_content_type=None)
 
     @patch('comments.models.Comment.unflag')
-    def test_unflag(self, mock_unflag):
+    def test_unflag__staff_only_calls_unflag(self, mock_unflag):
         """Test that unflag view is only accessible to staff users,
         and that it calls the unflag method on the comment and redirects to the comment's path
         """
@@ -46,7 +52,7 @@ class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
         mock_unflag.assert_called_once()
 
     @patch('comments.models.Comment.flag')
-    def test_flag(self, mock_flag):
+    def test_flag__staff_only_calls_flag(self, mock_flag):
         """Test that unflag view is only accessible to staff users,
         and that it calls the flag method on the comment and redirects to the comment's path
         """
@@ -67,7 +73,7 @@ class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
         mock_flag.assert_called_once()
 
     @patch('comments.models.Comment.flag')
-    def test_delete(self, mock_flag):
+    def test_delete__staff_only_removes_comment(self, mock_flag):
         """Test that delete view is only accessible to staff users,
         and that deletes the comment and redirects tot he comments (former) path
         """
@@ -97,7 +103,25 @@ class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, path)
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
 
-    def test_delete_comment_path(self):
+    def test_comment_content__has_user_content_class(self):
+        """Rendered comment bodies carry the `user-content` class (#1388).
+
+        Comments live inside a Bootstrap `.list-group`, which is itself a `<ul>`, so a
+        bullet/number list typed into a comment would otherwise be treated as a *nested*
+        list and marked with the hollow level-2 style. The `.user-content` class re-establishes
+        depth-correct markers (solid disc at the first level) via custom_common.css.
+        """
+        Comment.objects.create_comment(
+            user=self.teacher,
+            text="<ul><li>a bullet</li></ul>",
+            path=self.announcement.get_absolute_url(),
+            target=self.announcement,
+        )
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('announcements:list'))
+        self.assertContains(response, 'comment-content user-content')
+
+    def test_delete_comment__cancel_button_path(self):
         ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
         correctly contains the `comment.path` as its href attribute.
         '''

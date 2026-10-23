@@ -1,6 +1,7 @@
 import functools
 
 from django import template
+from django.conf import settings
 from django.db import connection
 
 from django_tenants.utils import get_public_schema_name
@@ -54,7 +55,18 @@ def group_name():
     return SiteConfig.get().custom_name_for_group
 
 
-# https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags
+@register.simple_tag
+def max_upload_request_size():
+    """The most the files chosen in one form may add up to, in bytes, for the browser's check
+    of a file's size before it is uploaded (js/upload-size-check.js, #783).
+
+    Returns:
+        int: settings.MAX_UPLOAD_REQUEST_SIZE.
+    """
+    return settings.MAX_UPLOAD_REQUEST_SIZE
+
+
+# https://docs.djangoproject.com/en/5.2/howto/custom-template-tags/#inclusion-tags
 
 @register.inclusion_tag('utilities/list_of_links.html')
 def menu_list():
@@ -72,3 +84,20 @@ def checkcross(value):
         return 'fa fa-check'
     elif value is False:
         return 'fa fa-times'
+
+
+@register.simple_tag
+def public_email_logo_url():
+    """The absolute URL of the ByteDeck wordmark used in platform emails.
+
+    Emails the PLATFORM sends (deck lifecycle and billing notices, the
+    deck-request verification, the new-deck welcome) are signed by ByteDeck and
+    carry ByteDeck branding; a deck's own mail to its users (announcements,
+    notifications) carries that deck's logo through ``site_logo_url``. Reading
+    the URL from settings keeps this usable on the public schema, which has no
+    SiteConfig, and keeps it absolute, which mail clients require.
+
+    Returns:
+        str: settings.PUBLIC_EMAIL_LOGO_URL.
+    """
+    return settings.PUBLIC_EMAIL_LOGO_URL

@@ -6,8 +6,11 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import strip_tags
-from bs4 import BeautifulSoup
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+
+from comments.sanitize import sanitize_comment_html
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 from tenant.utils import get_root_url
 
@@ -48,14 +51,16 @@ class NotificationQuerySet(models.query.QuerySet):
     #         qs_no_target.update(unread=False)
 
     def mark_all_read(self, recipient):
-        qs = self.get_unread().get_user(recipient)
-        qs.update(unread=False)
-        qs.update(time_read=timezone.now())
+        # Update unread and time_read in a single query. This must be one
+        # update: doing it as two (update(unread=False) then
+        # update(time_read=...)) makes the second update re-evaluate the
+        # unread=True filter, which now matches nothing, so time_read never
+        # gets set.
+        self.get_unread().get_user(recipient).update(unread=False, time_read=timezone.now())
 
     def mark_all_unread(self, recipient):
-        qs = self.get_read().get_user(recipient)
-        qs.update(unread=True)
-        qs.update(time_read=None)
+        # Single update for the same reason as mark_all_read above.
+        self.get_read().get_user(recipient).update(unread=True, time_read=None)
 
     def get_unread(self):
         return self.filter(unread=True)
@@ -117,6 +122,15 @@ class Notification(models.Model):
 
     font_icon = models.CharField(max_length=255, default="<i class='fa fa-info-circle'></i>")
 
+    # explicit link destination (a URL path), for notifications about something that
+    # has no natural target model, e.g. a deck's subscription status: when set, the
+    # notification links here instead of to target_object.get_absolute_url()
+    target_url = models.CharField(max_length=255, blank=True, default='')
+    # the anchor text for target_url, e.g. "subscription details page." -- keeps the
+    # notification body plain text with one small link at the end (maintainer
+    # request, 2026-08-08); when blank, the whole verb becomes the link text
+    target_link_text = models.CharField(max_length=255, blank=True, default='')
+
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='notifications', on_delete=models.CASCADE)
 
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -127,85 +141,102 @@ class Notification(models.Model):
     objects = NotificationManager()
 
     def html_strip(string, char_limit=50, tag_size=1, resize_image=True, image_height=20, **kwargs) -> str:
-        """
-            Strips all html tags except img tags and imposes a length limit. Returns the input text without html tags save for img tag
+        """Return a short, dropdown-safe preview of ``string``.
 
-            tag_size: how many letters an image should count as
+        Strips every HTML tag except ``<img>`` (keeping the text of the stripped tags)
+        and truncates to ``char_limit`` visible characters, where each surviving image
+        counts as ``tag_size`` characters. Surviving images are resized to a fixed
+        height so a notification's content can't blow out the notification dropdown's
+        layout. A trailing ``"..."`` is added when the text was truncated.
 
-            resize_image: enables image resizing
-            image_height: image height after resizing in pixels
+        tag_size: how many characters an image counts as toward the limit
+        resize_image: enables image resizing
+        image_height: image height after resizing, in pixels
+
+        The document is walked in order rather than having image tags reinserted by
+        character index: the old index-based approach mangled the markup (splicing one
+        image tag into the middle of another, and dropping the resize) whenever a
+        notification contained more than one image, which is what broke the dropdown
+        (issue #1761).
         """
         if not string:
             return ""
-        if type(string) is not str:
+        if not isinstance(string, str):
             string = str(string)
 
-        limit_imposed = False
-        HTML_tags = []
-        tag_index = []
+        soup = BeautifulSoup(string, "html.parser")
 
-        # store HTML tags and index to lists
-        cache_open_index = None
-        for index in range(len(string)):
-            char = string[index]
+        # Drop every tag except <img>, keeping its text. find_all() returns a static list
+        # in document order (parents before children), and unwrap() promotes a tag's
+        # children in place, so this flattens the tree to a run of text nodes and <img>
+        # tags without disturbing their order.
+        for tag in soup.find_all(True):
+            if tag.name != "img":
+                tag.unwrap()
 
-            # check for open img
-            if char == "<" and string[index:].startswith("<img"):
-                cache_open_index = index
+        result = BeautifulSoup("", "html.parser")
+        remaining = char_limit
+        truncated = False
 
-            # check for closed if open already found
-            elif cache_open_index is not None and char == ">":
-                # position img tag would be without html tags
-                offset = cache_open_index - len(strip_tags(string[:cache_open_index]))
+        for node in list(soup.contents):
+            if remaining <= 0:
+                truncated = True
+                break
+            # Comment is a NavigableString subclass that survives unwrap(); skip it so a
+            # pasted HTML comment never leaks into the preview or eats into the limit.
+            if isinstance(node, Comment):
+                continue
+            if isinstance(node, Tag) and node.name == "img":
+                if resize_image:
+                    node["style"] = ""  # drop width/height styles that would overflow the dropdown
+                    node["height"] = f"{image_height}px"
+                    node["width"] = "auto"
+                result.append(node)
+                remaining -= tag_size
+            else:
+                text = str(node)
+                if len(text) > remaining:
+                    result.append(NavigableString(text[:remaining]))
+                    remaining = 0
+                    truncated = True
+                else:
+                    result.append(NavigableString(text))
+                    remaining -= len(text)
 
-                start = cache_open_index
-                end = index + 1
+        return str(result) + ("..." if truncated else "")
 
-                # save the html tag and index to list
-                HTML_tags.append(string[start:end])
-                tag_index.append(cache_open_index - offset)
+    def get_sender_display(self):
+        """The actor name rendered at the start of the notification text.
 
-                cache_open_index = None
-
-        # dict of html tag and its position in the string
-        html_index = {HTML_tags[i]: tag_index[i] for i in range(len(HTML_tags))}
-
-        # index count of images that will be shown
-        shown_tag_count = len([index for _, index in html_index.items() if index < char_limit])
-        # tags should count towards the character limit
-        char_limit -= shown_tag_count * tag_size
-
-        # strip all the tags and apply char limit to TEXT
-        stripped = strip_tags(string)
-        text = stripped[:char_limit]
-        limit_imposed = len(stripped) > char_limit
-
-        # reinsert tags with new stripped text
-        for tag, index in html_index.items():
-            if index < char_limit:
-                text = text[:index] + tag + text[index:]
-
-        # resizes all images in string
-        if resize_image:
-            soup = BeautifulSoup(text, features="html.parser")
-            for img in soup.findAll('img'):
-                img['style'] = ""  # remove style as it always comes with width/height modifiers
-                img['height'] = f"{image_height}px"
-                img['width'] = "auto"
-
-            text = str(soup)
-
-        return text + ("..." if limit_imposed else "")
+        The deck's ByteDeck support account (settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        displays as "Bytedeck": it sends the automated deck status notices, and its
+        raw username reads like any other user (maintainer request, 2026-07-31).
+        Every other sender keeps its normal string form.
+        """
+        sender = self.sender_object
+        if getattr(sender, 'username', None) == settings.TENANT_DEFAULT_ADMIN_USERNAME:
+            return "Bytedeck"
+        return sender
 
     def __str__(self):
-        try:
-            target_url = self.target_object.get_absolute_url()
+        """Render the notification as the sentence shown to its recipient.
 
-            # Is this the right place to do this?
-            if 'commented on' in self.verb:
-                target_url += f'#comment-{self.action_object_id}'
-        except AttributeError:
-            target_url = None
+        Built with `format_html`, so every name it mentions is escaped: these are names
+        people choose, and the result is rendered with `|safe` in the notification list,
+        the navbar dropdown and the digest email.
+
+        Returns:
+            SafeString: the notification's HTML. The only markup that survives unescaped
+            is the image preview of the action, which is sanitized first.
+        """
+        if self.target_url:
+            # an explicit destination always wins over the target object's own page
+            target_url = self.target_url
+        else:
+            try:
+                target_url = self.target_object.get_absolute_url() + self.get_comment_anchor()
+            except AttributeError:
+                target_url = None
 
         action = self.action_object
 
@@ -215,23 +246,68 @@ class Notification(models.Model):
         # absolute url needed for when notifications are sent via email
         root_url = get_root_url()
         context = {
-            "sender": self.sender_object,
+            "sender": self.get_sender_display(),
             "verb": self.verb,
             "action": action,  # notif text
             "target": self.target_object,  # basically quest name
+            "link_text": self.target_link_text,
             "verify_read": "{}{}".format(root_url, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
 
-        url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
+        # format_html, so every value above is escaped as it goes in. This string is
+        # rendered with |safe (notifications/list.html, the dropdown, the digest email),
+        # and the values are names people choose: a student's own preferred_name reaches
+        # it through Profile.__str__, and a quest name through the target.
+        #
+        # `action` is the exception, because html_strip keeps <img> on purpose so an image
+        # in a comment previews in the dropdown, and escaping would show the tag instead.
+        # It is sanitized rather than trusted: the action is not always a comment (the
+        # Library push sends the quest or campaign, and prerequisites/tasks.py sends a
+        # badge assertion), so what html_strip returns can be any model's __str__ with
+        # whatever the person who named it typed. The sanitizer keeps the image and drops
+        # the event handlers, which is the only part that has to go.
+        safe_action = mark_safe(sanitize_comment_html(context["action"]))
+
+        url_common_part = format_html(
+            "{} {} <a href='{}?next={}'>",
+            context["sender"], context["verb"], context["verify_read"], context["target_url"],
+        )
         if self.target_object:
             if self.action_object:
-                url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
+                url = format_html('{} <em>{}</em> with "{}"</a>', url_common_part, context["target"], safe_action)
             else:
-                url = url_common_part + " <em>%(target)s</em></a>" % context
+                url = format_html("{} <em>{}</em></a>", url_common_part, context["target"])
+        elif self.target_url:
+            if self.target_link_text:
+                # plain verb, one small link at the end (maintainer request, 2026-08-08)
+                url = format_html("{}{}</a>", url_common_part, context["link_text"])
+            else:
+                # no link text given, so the verb itself is the link text: without
+                # this the anchor would render empty and the destination be unreachable
+                url = format_html(
+                    "{} <a href='{}?next={}'>{}</a>",
+                    context["sender"], context["verify_read"], context["target_url"], context["verb"],
+                )
         else:
-            url = url_common_part + "</a>"  # this is for 'teacher returned/approved ...'
+            url = format_html("{}</a>", url_common_part)  # this is for 'teacher returned/approved ...'
         return url
+
+    def get_comment_anchor(self):
+        """The anchor that takes the notification's link straight to the comment it carries.
+
+        A notification whose action is a comment previews that comment ("... with "Nice work""):
+        a reply on a submission or an announcement, or the comment a teacher left with an
+        approval or a return (#2848). Its link then scrolls the target's page to that comment,
+        which the comment thread renders with the id ``comment-<id>``.
+
+        Returns:
+            str: ``"#comment-<id>"``, or ``""`` when the notification carries no comment.
+        """
+        comment_type = ContentType.objects.get_by_natural_key("comments", "comment")
+        if self.action_object_id is not None and self.action_content_type_id == comment_type.id:
+            return f"#comment-{self.action_object_id}"
+        return ""
 
     def mark_read(self):
         self.unread = False
@@ -240,14 +316,16 @@ class Notification(models.Model):
 
     def get_url(self):
         # print("***** NOTIFICATION.get_url **********")
-        try:
-            target_url = self.target_object.get_absolute_url()
-
-            if 'commented on' in self.verb:
-                target_url += f'#comment-{self.action_object_id}'
-        except:  # noqa
-            # TODO make this except explicit, don't remember what it's doing
-            target_url = reverse('notifications:list')
+        if self.target_url:
+            # an explicit destination always wins over the target object's own page
+            target_url = self.target_url
+        else:
+            try:
+                target_url = self.target_object.get_absolute_url() + self.get_comment_anchor()
+            except Exception:
+                # no target object, or one without a resolvable page (AttributeError /
+                # NoReverseMatch): fall back to the notifications list
+                target_url = reverse('notifications:list')
 
         context = {
             "verify_read": reverse('notifications:read', kwargs={"id": self.id}),
@@ -273,10 +351,11 @@ class Notification(models.Model):
         action = Notification.html_strip(str(self.action_object))
 
         context = {
-            "sender": self.sender_object,
+            "sender": self.get_sender_display(),
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
+            "link_text": self.target_link_text,
             # "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             # "target_url": target_url,
             "url": self.get_url(),
@@ -289,6 +368,10 @@ class Notification(models.Model):
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
                 url = url_common_part + " <em>%(target)s</em></a>" % context
+        elif self.target_link_text:
+            # the dropdown row is one big anchor, so the link text just completes
+            # the sentence the verb starts
+            url = url_common_part + " %(link_text)s</a>" % context
         else:
             url = url_common_part + "</a>"
 
@@ -305,6 +388,12 @@ def new_notification(sender, **kwargs):
         recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
         affected_users (list of Users): everyone who should receive the notification
         verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
+        url (string): explicit URL path the notification links to, for notices about
+            something with no natural target model (e.g. a deck's subscription status);
+            overrides the target's get_absolute_url()
+        link_text (string): anchor text for `url`, e.g. "subscription details page." --
+            keeps the notification body plain with one small link at the end; without
+            it the whole verb becomes the link text
         icon (html string): e.g.:
             "<span class='fa-stack'>" + \
                "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
@@ -317,6 +406,8 @@ def new_notification(sender, **kwargs):
     recipient = kwargs.pop('recipient')  # required
     verb = kwargs.pop('verb')  # required
     icon = kwargs.pop('icon', "<i class='fa fa-info-circle'></i>")
+    target_url = kwargs.pop('url', '')
+    target_link_text = kwargs.pop('link_text', '')
     affected_users = kwargs.pop('affected_users', [recipient, ])
 
     # try:
@@ -327,30 +418,38 @@ def new_notification(sender, **kwargs):
     if affected_users is None:
         affected_users = [recipient, ]
 
+    notes = []
     for u in affected_users:
         # don't send a notification to yourself/themself
         if u == sender:
-            pass
-        else:
-            new_note = Notification(
-                recipient=u,
-                verb=verb,
-                sender_content_type=ContentType.objects.get_for_model(sender),
-                sender_object_id=sender.id,
-                font_icon=icon,
-            )
-            # Set the target if provided.
-            for option in ("target", "action"):
-                # obj = kwargs.pop(option, None) #don't want to remove option with pop
-                try:
-                    obj = kwargs[option]
-                    if obj is not None:
-                        setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
-                        setattr(new_note, "%s_object_id" % option, obj.id)
-                except:  # noqa
-                    # TODO make this except explicit, don't remember what it's doing
-                    pass
-            new_note.save()
+            continue
+
+        new_note = Notification(
+            recipient=u,
+            verb=verb,
+            sender_content_type=ContentType.objects.get_for_model(sender),
+            sender_object_id=sender.id,
+            font_icon=icon,
+            target_url=target_url,
+            target_link_text=target_link_text,
+        )
+        # Set the target if provided.
+        for option in ("target", "action"):
+            # obj = kwargs.pop(option, None) #don't want to remove option with pop
+            try:
+                obj = kwargs[option]
+                if obj is not None:
+                    setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
+                    setattr(new_note, "%s_object_id" % option, obj.id)
+            except:  # noqa
+                # TODO make this except explicit, don't remember what it's doing
+                pass
+        notes.append(new_note)
+
+    # Create every recipient's notification in a single bulk INSERT rather
+    # than one save() per user (a class-wide notification was N INSERTs).
+    # Safe: nothing is connected to Notification's post_save signal.
+    Notification.objects.bulk_create(notes)
 
 
 notify.connect(new_notification)
@@ -367,8 +466,17 @@ def deleted_object_receiver(sender, **kwargs):
 
 
 def notify_rank_up(notified_user, old_xp, new_xp):
-    """ notifies user if they've ranked up.
-    Mainly used alongside other notify.send
+    """Send a notification when a change in XP crosses into a new rank.
+
+    Compares the rank at ``old_xp`` with the rank at ``new_xp`` and, if they
+    differ, sends the user a "promoted you to <rank>" notification whose icon is
+    the new rank's Font Awesome icon. Typically called alongside the ``notify.send``
+    that awards the XP.
+
+    :param notified_user: the user to notify (and the notification's recipient).
+    :param old_xp: the user's XP before the change.
+    :param new_xp: the user's XP after the change.
+    :return: ``None``. Does nothing when both XP values fall in the same rank.
     """
     # cant import because of circular imports
     SiteConfig = apps.get_model('siteconfig.SiteConfig')
@@ -381,8 +489,10 @@ def notify_rank_up(notified_user, old_xp, new_xp):
     if old_rank.xp == new_rank.xp:
         return
 
-    fa_icon = new_rank.fa_icon or "fa-star"
-    icon = f"<i class='text-warning fa fa-lg fa-fw {fa_icon}'></i>"
+    # `fa_icon_class` already yields the full "fa fa-<name> <modifiers>" list, so
+    # the wrapper only adds colour/sizing (adding another "fa fa-" here would double it).
+    fa_classes = new_rank.fa_icon_class or "fa fa-star"
+    icon = f"<i class='text-warning fa-lg fa-fw {fa_classes}'></i>"
 
     #
     notify.send(

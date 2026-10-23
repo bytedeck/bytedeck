@@ -1,59 +1,162 @@
+from collections import Counter
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.db.utils import IntegrityError
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
+from django.template.defaultfilters import floatformat
 
-from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_public_schema_name
 from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent, ExcludedDate, MarkRange, Rank, Semester
+from badges.models import Badge, BadgeAssertion
+from courses.models import (
+    Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester, mark_as_shown, mark_for_xp,
+)
+from courses.tests.utils import patch_registration_xp
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class MarkRangeModelTest(TenantTestCase):
+class MarkRangeModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a MarkRange with a 50% minimum for the class tests."""
+        cls.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
-    def test_mark_range_creation(self):
+    def test_mark_range__creation(self):
+        """A MarkRange is created as the expected model instance."""
         self.assertIsInstance(self.mr_50, MarkRange)
 
     def test_mark_range__str__(self):
+        """str(MarkRange) is the name followed by its minimum mark percentage."""
         expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
         self.assertEqual(str(self.mr_50), expected_str)
 
+    def test_color_headers__the_database_fills_it_in(self):
+        """A range inserted without the column still colors headers, and the insert doesn't fail.
 
-class MarkRangeManagerTest(TenantTestCase):
-    def setUp(self):
-        # clear default mark range variables
+        During a deploy the outgoing version, which doesn't know the column, is still creating
+        ranges, so the database itself has to supply the value.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO courses_markrange (name, minimum_mark, active, color_light, color_dark, days) "
+                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                ["From the outgoing version", 60.0, True, "#FFFFFF", "#000000", "1,2,3,4,5,6,7"],
+            )
+            pk = cursor.fetchone()[0]
+
+        self.assertTrue(MarkRange.objects.get(pk=pk).color_headers)
+
+
+class MarkRangeAsShownTest(ByteDeckTenantTestCase):
+    """A mark range is reached by a mark shown as its minimum or more, and the XP listed for it is
+    the XP that first gives that mark (#2826)."""
+
+    def test_mark_as_shown__one_decimal_place_with_a_half_rounded_up(self):
+        """A mark is shown to one decimal place with a half rounded up, the way the floatformat
+        filter shows it on the Mark Calculations page."""
+        self.assertEqual(mark_as_shown(72.45), Decimal('72.5'))
+        self.assertEqual(mark_as_shown(72.44996), Decimal('72.4'))
+        self.assertEqual(mark_as_shown(Decimal('72.5')), Decimal('72.5'))
+        for mark in (72.45, 72.44996, 49.95, 85.549, 100):
+            with self.subTest(mark=mark):
+                self.assertEqual(str(mark_as_shown(mark)), floatformat(mark, 1))
+
+    def test_reached_from__the_lowest_mark_shown_as_reaching_the_range(self):
+        """72.45% is shown as 72.5%, so it is the lowest mark that reaches a 72.5% range, and a
+        72.45% or 72.41% one too, since no shown mark lies between them and 72.5%."""
+        for minimum, lowest in ((72.5, 72.45), (72.45, 72.45), (72.41, 72.45), (72.0, 71.95)):
+            with self.subTest(minimum=minimum):
+                self.assertEqual(MarkRange(minimum_mark=minimum).reached_from, lowest)
+
+    def test_xp_to_reach__the_xp_whose_mark_is_first_shown_as_the_minimum(self):
+        """A student holding the XP listed for a range is at it, and one point less is not."""
+        chillax = MarkRange(minimum_mark=72.5)
+        # out of 1000 XP a tenth of the way through, exactly 72.5% takes 72.5 XP. 72 XP is 72%,
+        # short of the range, so the first whole XP that reaches it is 73
+        self.assertEqual(chillax.xp_to_reach(1000, 0.1), 73)
+        # out of 10000 XP at the end, 7245 XP is 72.45%, shown as 72.5%
+        self.assertEqual(chillax.xp_to_reach(10000, 1.0), 7245)
+        # nothing to reach before the first class day, nor in a course out of 0 XP
+        self.assertEqual(chillax.xp_to_reach(1000, 0), 0)
+        self.assertEqual(chillax.xp_to_reach(0, 0.5), 0)
+        # floating point can put the first estimate a point out either way. 33 class days into 61,
+        # 627 XP of 2000 is 57.95%, shown as 58%, one under the estimate. 50 days into 60, 643 XP
+        # of 800 works out to 96.44999...%, shown as 96.4%, so a 96.5% range takes one over it
+        self.assertEqual(MarkRange(minimum_mark=58).xp_to_reach(2000, 33 / 61), 627)
+        self.assertEqual(MarkRange(minimum_mark=96.5).xp_to_reach(800, 50 / 60), 644)
+        # and so for any course total, point in the semester and range
+        for xp_for_100_percent in (100, 999, 1000, 1234, 10000):
+            for fraction_complete in (0.07, 0.1, 1 / 3, 0.5, 0.9, 1.0):
+                for minimum in (0, 49.5, 50, 72.5, 85.5, 100):
+                    with self.subTest(xp_for_100_percent=xp_for_100_percent, fraction_complete=fraction_complete, minimum=minimum):
+                        xp = MarkRange(minimum_mark=minimum).xp_to_reach(xp_for_100_percent, fraction_complete)
+                        shown = mark_as_shown(mark_for_xp(xp, fraction_complete, xp_for_100_percent))
+                        self.assertGreaterEqual(shown, Decimal(str(minimum)))
+                        if xp > 0:
+                            shown_one_less = mark_as_shown(mark_for_xp(xp - 1, fraction_complete, xp_for_100_percent))
+                            self.assertLess(shown_one_less, Decimal(str(minimum)))
+
+    def test_xp_to_reach_by_day__the_xp_to_reach_on_each_class_day(self):
+        """A range's line on the XP Progress chart is the XP that reaches it on each class day, so
+        on any day it is at the XP listed for the range that day. It rounds a mark as the rest of
+        the app does: 100 class days into 130, 3477 XP of 7800 works out to 57.94999...%, shown as
+        57.9%, so a 58% range takes 3478 XP that day."""
+        range_58 = MarkRange(minimum_mark=58)
+
+        line = range_58.xp_to_reach_by_day(7800, 130)
+
+        self.assertEqual(len(line), 130)
+        self.assertEqual(mark_as_shown(mark_for_xp(3477, 100 / 130, 7800)), Decimal('57.9'))
+        self.assertEqual(line[99], 3478)
+        self.assertEqual(line[99], range_58.xp_to_reach(7800, 100 / 130))
+        # a semester with no class days has no line
+        self.assertEqual(range_58.xp_to_reach_by_day(7800, 0), [])
+
+
+class MarkRangeManagerTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Clear the default mark ranges and create ranges at 50% and 75% minimums."""
+        # clear default mark range variables (every test in this class expects the defaults gone)
         MarkRange.objects.all().delete()
 
-        self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
-        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
+        cls.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
+        cls.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
 
-    def test_get_range(self):
+    def test_get_range__by_mark(self):
+        """get_range() returns the highest range whose minimum the mark meets."""
         mr_100 = baker.make(MarkRange, minimum_mark=100.0)
 
-        self.assertEqual(MarkRange.objects.get_range(25.0), None)
+        self.assertIsNone(MarkRange.objects.get_range(25.0))
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(74.9), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0), mr_100)
 
-    def test_get_range_with_course(self):
+    def test_get_range__with_course(self):
+        """get_range() honours course-specific ranges when courses are passed."""
         c1 = baker.make(Course)
         c2 = baker.make(Course)
         mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
         mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
         mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
 
-        self.assertEqual(MarkRange.objects.get_range(25.0), None)
+        self.assertIsNone(MarkRange.objects.get_range(25.0))
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(50.0, [c1]), mr_50_c1)
         self.assertEqual(MarkRange.objects.get_range(74.9, [c2]), mr_50_c2)
@@ -63,7 +166,51 @@ class MarkRangeManagerTest(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
 
-    def test_get_range_for_user(self):
+    def test_get_range__a_mark_shown_as_the_minimum_reaches_the_range(self):
+        """A mark that is shown as a range's minimum is at that range (#2826): 74.95% is shown as
+        75%, so it reaches the 75% range, and 74.94% is shown as 74.9% and doesn't."""
+        self.assertEqual(MarkRange.objects.get_range(74.95), self.mr_75)
+        self.assertEqual(MarkRange.objects.get_range(74.94), self.mr_50)
+
+    def test_get_range__headers_only_passes_over_ranges_kept_out_of_headers(self):
+        """With headers_only, a mark in a range kept out of student headers finds the next range
+        below it that colors them, or none when no such range is below it."""
+        self.mr_75.color_headers = False
+        self.mr_75.save()
+
+        self.assertEqual(MarkRange.objects.get_range(80.0), self.mr_75)
+        self.assertEqual(MarkRange.objects.get_range(80.0, headers_only=True), self.mr_50)
+        self.assertIsNone(MarkRange.objects.get_range(40.0, headers_only=True))
+
+    def test_get_range_for_user__none_when_the_student_has_no_mark(self):
+        """A student can hold a course and still have no mark: a course run on XP alone has
+        none (issue #403), and a mark is only cached once something recalculates it. Asking the
+        database to compare a range's minimum against NULL raises, so the lookup stops first."""
+        user = baker.make(User)
+        baker.make(
+            CourseStudent, user=user, course=baker.make(Course, uses_marks=False),
+            semester=SiteConfig.get().active_semester, block=baker.make(Block),
+        )
+        user.profile.xp_invalidate_cache()
+
+        self.assertIsNone(user.profile.mark_cached)
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+
+    def test_get_range_for_user__none_when_the_student_is_in_no_course(self):
+        """A cached mark outlives the registration it was worked out from: archiving a semester
+        leaves it alone until something recalculates it. A range is matched against the courses
+        the student is in, and they are in none, so there is no range for them even though they
+        still carry a number."""
+        user = baker.make(User)
+        profile = user.profile
+        profile.mark_cached = 60.0
+        profile.save()
+
+        # past the "no mark" guard, so it is the missing course that decides this one
+        self.assertIsNotNone(user.profile.mark_cached)
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+
+    def test_get_range_for_user__by_cached_mark(self):
         """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
         """
         user = baker.make(User)
@@ -84,11 +231,11 @@ class MarkRangeManagerTest(TenantTestCase):
             self.assertIsNone(MarkRange.objects.get_range_for_user(user))
 
 
-class BlockModelManagerTest(TenantTestCase):
+class BlockModelManagerTest(ByteDeckTenantTestCase):
 
-    def test_grouped_teachers_blocks_equals_one(self):
+    def test_grouped_teachers_blocks__single_teacher(self):
         """
-            Should only return 1 group of teachers if regardless of the number of Blocks
+            Should only return 1 group of teachers regardless of the number of Blocks
         """
 
         teacher_owner = User.objects.get(username='owner')
@@ -100,7 +247,7 @@ class BlockModelManagerTest(TenantTestCase):
 
         self.assertEqual(len(group.keys()), 1)
 
-    def test_grouped_teachers_blocks_more_than_one(self):
+    def test_grouped_teachers_blocks__multiple_teachers(self):
         """ Should return 3 group of teachers teaching Default, [AB] and [CD] blocks"""
 
         teacher_owner = User.objects.get(username='owner')
@@ -126,65 +273,302 @@ class BlockModelManagerTest(TenantTestCase):
         self.assertListEqual(group[teacher2.id], [block_c.name, block_d.name])
 
 
-class SemesterModelManagerTest(TenantTestCase):
-    def setUp(self):
-        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
-        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
-        self.semester1 = baker.make(Semester, first_day=self.semester_start, last_day=self.semester_end)
+class SemesterModelManagerTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Create a September 2019 semester for the manager tests."""
+        cls.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        cls.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        cls.semester1 = baker.make(Semester, first_day=cls.semester_start, last_day=cls.semester_end)
 
-    def test_get_current(self):
-        """ Get's the current semester as defined by SiteConfig """
+    def test_get_current__returns_active_semester(self):
+        """ Gets the current semester as defined by SiteConfig """
         self.assertEqual(Semester.objects.get_current(), SiteConfig.get().active_semester)
 
-    def test_get_current_as_queryset(self):
-        """ Get's the current semester object in a quesryset  """
+    def test_get_current__as_queryset(self):
+        """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
-    def test_complete_active_semester(self):
-        """ set current semester to closed and do lots of stuff..  """
-        # TODO
+    def test_complete_semester__returns_sentinel_when_pointed_at_archived_semester(self):
+        """A config left pointing at an archived semester has nothing to archive either."""
+        active_sem = Semester.objects.get_current()
+        active_sem.status = Semester.Status.ARCHIVED
+        active_sem.save()
+
+        self.assertEqual(Semester.objects.complete_semester(), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_semester__returns_sentinel_when_no_semester_is_open(self):
+        """With no active semester (the state archiving leaves behind), there is nothing to
+        archive and the sentinel comes back instead of an error."""
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        self.assertEqual(Semester.objects.complete_semester(), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_semester__leaves_the_deck_with_no_open_semester(self):
+        """Archiving clears the active semester, so the deck sits between semesters
+        (issue #1177) instead of pointing at an archived one."""
+        archived = Semester.objects.complete_semester()
+
+        self.assertTrue(archived.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_complete_semester__leaves_the_other_open_semester_alone(self):
+        """Archiving one semester is scoped to it (issue #2157 Phase 3): the other cohort's
+        registrations stay active, their in-progress quests survive, and the deck's pointer
+        is left alone because it named the semester still running."""
+        config = SiteConfig.get()
+        archiving = config.active_semester
+        keeping = baker.make(Semester, status=Semester.Status.OPEN)
+        config.active_semester = keeping
+        config.save()
+
+        student_here = baker.make(User)
+        baker.make(CourseStudent, user=student_here, course=baker.make(Course), semester=archiving)
+        student_there = baker.make(User)
+        registration_there = baker.make(CourseStudent, user=student_there, course=baker.make(Course), semester=keeping)
+        in_progress_there = baker.make(QuestSubmission, user=student_there, semester=keeping, is_completed=False)
+
+        self.assertEqual(Semester.objects.complete_semester(archiving), archiving)
+
+        keeping.refresh_from_db()
+        self.assertTrue(keeping.is_open)
+        registration_there.refresh_from_db()
+        self.assertTrue(registration_there.active)  # their seat is not freed
+        self.assertTrue(QuestSubmission.objects.filter(pk=in_progress_there.pk).exists())
+        self.assertEqual(SiteConfig.get().active_semester, keeping)
+
+    def test_complete_semester__moves_the_pointer_onto_the_semester_still_running(self):
+        """Archiving the semester the deck points at while another is open re-points the deck at
+        that one, so the default a student joins is never an archived semester. Leaving it unset
+        while a semester runs would put simplified registration, which registers straight into
+        the default, into a state with nowhere to register."""
+        config = SiteConfig.get()
+        pointed_at = config.active_semester
+        still_running = baker.make(Semester, status=Semester.Status.OPEN)
+
+        self.assertEqual(Semester.objects.complete_semester(pointed_at), pointed_at)
+
+        self.assertEqual(SiteConfig.get().active_semester, still_running)
+        self.assertEqual(SiteConfig.get().open_semester, still_running)
+
+    def test_complete_semester__is_not_blocked_by_another_semesters_approvals(self):
+        """Quests awaiting approval in the other open semester are that semester's business,
+        so they don't stand in the way of archiving this one."""
+        archiving = SiteConfig.get().active_semester
+        other = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(QuestSubmission, semester=other, is_completed=True, is_approved=False)
+
+        self.assertEqual(Semester.objects.complete_semester(archiving), archiving)
+
+    def test_complete_semester__returns_awaiting_approval_with_pending_submissions(self):
+        """A semester can't be closed while quests are still awaiting approval."""
+        baker.make(
+            QuestSubmission,
+            is_completed=True,
+            is_approved=False,
+            semester=SiteConfig.get().active_semester,
+        )
+        self.assertEqual(Semester.objects.complete_semester(), Semester.QUEST_AWAITING_APPROVAL)
+
+    def test_complete_semester__clamp_records_negative_xp_as_zero(self):
+        """With clamp_negative_xp on (the deck-suspension auto-close, #1734 B2), a
+        student's negative balance is recorded as zero final XP and the semester
+        closes; without it the STUDENTS_WITH_NEGATIVE_XP refusal stands."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
+
+        with patch_registration_xp(-50):
+            self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+            result = Semester.objects.complete_semester(clamp_negative_xp=True)
+
+        self.assertTrue(result.is_archived)
+        registration.refresh_from_db()
+        self.assertEqual(registration.final_xp, 0)
+        self.assertFalse(registration.active)
 
 
-class SemesterModelTest(TenantTestCase):
+    def test_calc_semester_grades__refusal_rolls_back_all_registrations(self):
+        """A negative-XP refusal (clamp off) rolls back every registration
+        deactivated earlier in the same call: no student is left deactivated
+        while the semester stays open."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        students = [baker.make(User) for _ in range(2)]
+        for student in students:
+            baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester, active=True)
 
-    def setUp(self):
-        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
-        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
-        self.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
-        self.semester = baker.make(Semester,
-                                   first_day=self.semester_start,
-                                   last_day=self.semester_end
-                                   )
+        # keyed on the registration rather than a list of return values: saving a registration
+        # recalculates the student's mark, which asks for its XP again, so how many times xp()
+        # is called is an implementation detail this test should not depend on
+        negative = students[1].coursestudent_set.get().pk
 
-    def test_semester_creation(self):
+        with patch_registration_xp(lambda registration: -50 if registration.pk == negative else 10):
+            with self.assertRaises(ValueError):
+                CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        self.assertFalse(
+            CourseStudent.objects.filter(semester=SiteConfig.get().active_semester, active=False).exists())
+
+    def test_complete_semester__rolls_back_grades_when_a_student_has_negative_xp(self):
+        """A negative-XP student aborts the close atomically: registrations finalized before
+        the bad student was reached are rolled back and the semester stays open. Regression
+        test for the pre-transaction behavior, where those students kept their recorded
+        final_xp and active=False while the close itself failed."""
+        active_semester = SiteConfig.get().active_semester
+        course = baker.make(Course)
+
+        # calc_semester_grades() processes registrations in block-name order (CourseStudent
+        # Meta.ordering follows Block.Meta.ordering = ['name']), so the fine student in
+        # block "A" is finalized before the negative-XP student in block "B" raises.
+        fine_registration = baker.make(
+            CourseStudent, user=baker.make(User), course=course,
+            block=baker.make(Block, name='A'), semester=active_semester,
+        )
+        baker.make(
+            CourseStudent, user=baker.make(User), course=course,
+            block=baker.make(Block, name='B'), semester=active_semester,
+            xp_adjustment=-10,  # makes this student's XP negative
+        )
+
+        self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+
+        # the fine student's registration must be untouched, and the semester still open
+        fine_registration.refresh_from_db()
+        self.assertTrue(fine_registration.active)
+        self.assertIsNone(fine_registration.final_xp)
+        active_semester.refresh_from_db()
+        self.assertFalse(active_semester.is_archived)
+
+
+class SemesterModelTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a September 2019 semester used across the semester model tests."""
+        cls.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        cls.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        cls.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
+        cls.semester = baker.make(Semester,
+                                  first_day=cls.semester_start,
+                                  last_day=cls.semester_end
+                                  )
+
+    def test_semester__creation(self):
+        """A Semester is created as the expected model instance."""
         self.assertIsInstance(self.semester, Semester)
 
-    def test_is_open(self):
+    def test_str__name_set(self):
+        """`str(semester)` returns the name when one is set."""
+        semester = baker.make(Semester, name='Fall 2019', first_day=self.semester_start)
+        self.assertEqual(str(semester), 'Fall 2019')
+
+    def test_str__name_blank(self):
+        """`str(semester)` falls back to the first day formatted as mmm-YYYY when name is blank."""
+        self.assertEqual(str(self.semester), 'Sep-2019')
+
+    def test_str__name_blank_and_first_day_none(self):
+        """`str(semester)` doesn't crash when name is blank and first_day is None.
+        Regression test for issue #912 where the semester list page raised
+        `'NoneType' object has no attribute 'strftime'`.
+        """
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        self.assertEqual(str(semester), f'Semester {semester.pk}')
+
+    def test_num_days__dates_none(self):
+        """`num_days()` returns 0 instead of crashing when the semester has no
+        first or last day set. Regression test for issue #912 (the semester list
+        page renders num_days for every semester).
+        """
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        self.assertEqual(semester.num_days(), 0)
+        self.assertEqual(semester.num_days(upto_today=True), 0)
+
+    def test_is_within_dates__within_and_outside_dates(self):
+        """is_within_dates() is True on and between the first and last day, and False outside them."""
         # before semester starts: False
         before_start = self.semester_start - timedelta(days=1)
         with freeze_time(before_start, tz_offset=0):
-            self.assertFalse(self.semester.is_open())
+            self.assertFalse(self.semester.is_within_dates())
 
         # after semester ends: False
         after_end = self.semester_end + timedelta(days=1)
         with freeze_time(after_end, tz_offset=0):
-            self.assertFalse(self.semester.is_open())
+            self.assertFalse(self.semester.is_within_dates())
 
         # during semester: True
         during = self.semester_start + timedelta(days=1)
         with freeze_time(during, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
 
         # first day: True
         with freeze_time(self.semester_start, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
         # last day: True
         with freeze_time(self.semester_end, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
 
         # Timezone problems?
 
-    def test_num_days(self):
+    def test_has_ended__only_after_last_day(self):
+        """has_ended() is True only once the last day is in the past, and False when the
+        semester has no last day at all."""
+        with freeze_time(self.semester_end, tz_offset=0):
+            self.assertFalse(self.semester.has_ended())
+
+        with freeze_time(self.semester_end + timedelta(days=1), tz_offset=0):
+            self.assertTrue(self.semester.has_ended())
+
+        dateless_semester = baker.make(Semester, name='dateless', first_day=None, last_day=None)
+        self.assertFalse(dateless_semester.has_ended())
+
+    def test_status_properties__match_the_lifecycle_stage(self):
+        """Exactly one of is_upcoming/is_open/is_archived is True at each stage of the
+        lifecycle, and a semester defaults to upcoming until it is started."""
+        semester = baker.make(Semester)
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (True, False, False)
+        )
+
+        semester.status = Semester.Status.OPEN
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (False, True, False)
+        )
+
+        semester.status = Semester.Status.ARCHIVED
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (False, False, True)
+        )
+
+    def test_status_properties__is_open_ignores_the_dates(self):
+        """is_open is the lifecycle status, not a date check: a semester whose last day has
+        passed stays open until it is archived (that gap is what has_ended() flags)."""
+        ended = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=date.today() - timedelta(days=100), last_day=date.today() - timedelta(days=10),
+        )
+
+        self.assertTrue(ended.is_open)
+        self.assertFalse(ended.is_within_dates())
+        self.assertTrue(ended.has_ended())
+
+    def test_queryset_helpers__filter_by_lifecycle_stage(self):
+        """The queryset helpers select semesters by lifecycle stage."""
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        open_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        self.assertIn(upcoming, Semester.objects.upcoming())
+        self.assertIn(open_semester, Semester.objects.open())
+        self.assertIn(archived, Semester.objects.archived())
+        self.assertNotIn(archived, Semester.objects.open())
+        self.assertNotIn(upcoming, Semester.objects.archived())
+
+    def test_num_days__excludes_weekends_and_excluded_dates(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
         """
         # no excluded dates yet, so 21 weekdays in Sep 2019 (see setup)
@@ -201,7 +585,7 @@ class SemesterModelTest(TenantTestCase):
 
         self.assertIsInstance(self.semester.num_days(), int)
 
-    def test_num_days_upto_today(self):
+    def test_num_days__upto_today(self):
         """The number of classes in the semester SO FAR up to today
         """
         with freeze_time(date(2019, 9, 15), tz_offset=0):
@@ -211,7 +595,7 @@ class SemesterModelTest(TenantTestCase):
         with freeze_time(date(2019, 10, 15), tz_offset=0):
             self.assertEqual(self.semester.num_days(upto_today=True), 21)
 
-    def test_excluded_days(self):
+    def test_excluded_days__returns_excluded_dates(self):
         """ returns a list of dates excluded for this semester (holidays and other non-instructional days) """
         # add some excluded dates
         baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 1))  # Sun, shouldn't count
@@ -220,43 +604,48 @@ class SemesterModelTest(TenantTestCase):
         dates = self.semester.excluded_days()
         self.assertListEqual(list(dates), [date(2019, 9, 1), date(2019, 9, 2)])
 
-    def test_days_so_far(self):
+    def test_days_so_far__equals_num_days_upto_today(self):
+        """days_so_far() equals num_days(upto_today=True)."""
         self.assertEqual(self.semester.days_so_far(), self.semester.num_days(upto_today=True))
 
-    def test_fraction_complete(self):
+    def test_fraction_complete__partway_through(self):
         """ how far through the semester as a fraction """
         with freeze_time(date(2019, 9, 15), tz_offset=0):
             # 10 days so far (excluding weekends) / 21 days total
             fraction_complete = self.semester.fraction_complete()
             self.assertAlmostEqual(fraction_complete, 10 / 21)
 
-    def test_percent_complete(self):
+    def test_percent_complete__partway_through(self):
         """ how far through the semester as a percent """
         with freeze_time(date(2019, 9, 15), tz_offset=0):
             # 10 days so far (excluding weekends) / 21 days total * 100
             percent_complete = self.semester.percent_complete()
             self.assertAlmostEqual(percent_complete, 10 / 21 * 100)
 
-    def test_get_interim1_date(self):
+    def test_get_interim1_date__quarter_point(self):
+        """get_interim1_date() is the date a quarter of the way through the semester."""
         self.assertEqual(self.semester.get_interim1_date(), self.semester.get_date(0.25))
 
-    def test_get_term_date(self):
+    def test_get_term_date__midpoint(self):
+        """get_term_date() is the date halfway through the semester."""
         self.assertEqual(self.semester.get_term_date(), self.semester.get_date(0.5))
 
-    def test_get_interim2_date(self):
+    def test_get_interim2_date__three_quarter_point(self):
+        """get_interim2_date() is the date three quarters of the way through the semester."""
         self.assertEqual(self.semester.get_interim2_date(), self.semester.get_date(0.75))
 
-    def test_get_final_date(self):
+    def test_get_final_date__last_day(self):
+        """get_final_date() is the semester's last day."""
         self.assertEqual(self.semester.get_final_date(), self.semester.last_day)
 
-    def test_get_date(self):
+    def test_get_date__rolls_back_off_weekends(self):
         """ Gets the closest date, rolling back if it falls on a weekend or excluded
         after a fraction of the semester is over """
         self.assertEqual(self.semester.get_date(0.25), date(2019, 9, 6))
         self.assertEqual(self.semester.get_date(0.5), date(2019, 9, 13))  # lands on a weekend so roll back to the friday
         self.assertEqual(self.semester.get_date(1.0), self.semester.last_day)
 
-    def test_get_datetime_by_days_since_start(self):
+    def test_get_datetime_by_days_since_start__skips_weekends(self):
         """ 5 days since start of semester should fall on 6 Sep 2019,
         6 days should push through weekend and land on 9 Sep 2019 """
         dt = self.semester.get_datetime_by_days_since_start(5)
@@ -267,7 +656,32 @@ class SemesterModelTest(TenantTestCase):
         expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
         self.assertEqual(dt, expected)
 
-    def test_reset_students_xp_cached(self):
+    def test_get_queryset__orders_semesters_sharing_a_first_day_by_record(self):
+        """A new semester takes today as its default first day, so a deck setting up a second
+        cohort has two starting on the same date. Ordering on the date alone would let the
+        database return those two in either order, reshuffling a registration form's semester
+        list between page loads, so the oldest record comes first among them."""
+        first_day = self.semester.first_day
+        first = baker.make(Semester, first_day=first_day, last_day=self.semester.last_day)
+        second = baker.make(Semester, first_day=first_day, last_day=self.semester.last_day)
+
+        sharing_a_first_day = Semester.objects.filter(first_day=first_day)
+
+        self.assertEqual(list(sharing_a_first_day), [self.semester, first, second])
+
+    def test_get_datetimes_by_days_since_start__answers_a_run_of_days_off_one_read(self):
+        """A whole run of class days at once, each the same date asking for it singly gives,
+        and read from the semester's excluded days once however many days are wanted: the
+        progress chart asks for every class day so far (issue #2459)."""
+        with CaptureQueriesContext(connection) as one_day:
+            self.semester.get_datetimes_by_days_since_start([5])
+        with CaptureQueriesContext(connection) as twenty_days:
+            dates = self.semester.get_datetimes_by_days_since_start(range(1, 21))
+
+        self.assertEqual(dates[4:6], [self.semester.get_datetime_by_days_since_start(day) for day in (5, 6)])
+        self.assertEqual(len(twenty_days), len(one_day))
+
+    def test_reset_students_xp_cached__zeroes_xp(self):
         """Students' xp_cached should be set to 0."""
         student = baker.make(User)
         course = baker.make(Course)
@@ -282,20 +696,231 @@ class SemesterModelTest(TenantTestCase):
         self.assertEqual(student.profile.xp_cached, 0)
 
 
-class CourseModelTest(TenantTestCase):
+class NoOpenSemesterTest(ByteDeckTenantTestCase):
+    """A deck between semesters, which is what archiving now leaves behind (issue #1177).
+
+    Nothing is open, so everything scoped to the deck's semester is empty rather than
+    broken, and registrations from the semester that was archived count as past.
+    """
 
     def setUp(self):
-        self.course = baker.make(Course)
+        """Register a student, then archive the semester so the deck has none open."""
+        self.student = baker.make(User)
+        self.registration = baker.make(
+            CourseStudent, user=self.student, course=baker.make(Course),
+            semester=SiteConfig.get().active_semester,
+        )
+        self.archived_semester = Semester.objects.complete_semester()
 
-    def test_course_creation(self):
+    def test_archiving__leaves_no_active_semester(self):
+        """The state under test: the semester is archived and nothing is pointed at."""
+        self.assertTrue(self.archived_semester.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+
+    def test_get_current__returns_nothing(self):
+        """There is no current semester, and the queryset form is empty (not one row of None)."""
+        self.assertIsNone(Semester.objects.get_current())
+        self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
+
+    def test_get_current__ignores_a_pointer_at_a_semester_that_is_not_open(self):
+        """A config pointing at an upcoming semester still means no current semester: the
+        pointer alone doesn't make a semester the one students are in, and the deck must
+        agree with has_no_open_semester() about that."""
+        config = SiteConfig.get()
+        config.active_semester = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+        self.assertIsNone(Semester.objects.get_current())
+        self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
+
+    def test_complete_semester__will_not_archive_a_semester_that_is_not_open(self):
+        """An upcoming semester has no final marks to record, so archiving refuses rather
+        than skipping it straight to the terminal stage."""
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config = SiteConfig.get()
+        config.active_semester = upcoming
+        config.save()
+
+        self.assertEqual(Semester.objects.complete_semester(), Semester.NO_OPEN_SEMESTER)
+        upcoming.refresh_from_db()
+        self.assertTrue(upcoming.is_upcoming)
+
+    def test_complete_semester__refuses_a_named_semester_that_is_not_open(self):
+        """Naming the semester doesn't get round the rule: an archived one passed straight to
+        the manager is refused rather than having its students' final marks recalculated from
+        the XP the first archive already reset."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+
+        self.assertEqual(Semester.objects.complete_semester(archived), Semester.NO_OPEN_SEMESTER)
+        self.assertEqual(Semester.objects.complete_semester(upcoming), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_semester__reads_the_semesters_status_from_the_database(self):
+        """The status is re-read under the lock, so a stale in-memory instance saying "open"
+        can't push a second archive through: two requests can both load a semester while it
+        is open, and the config lock only makes them queue."""
+        semester = baker.make(Semester, status=Semester.Status.OPEN)
+        stale = Semester.objects.get(pk=semester.pk)  # loaded while it was still open
+        Semester.objects.complete_semester(semester)
+        self.assertTrue(stale.is_open)  # the caller's copy still says open
+
+        self.assertEqual(Semester.objects.complete_semester(stale), Semester.NO_OPEN_SEMESTER)
+
+    def test_current_courses__is_empty(self):
+        """Nobody is registered in a current course, so a student has none."""
+        self.assertFalse(CourseStudent.objects.current_courses(self.student).exists())
+        self.assertIsNone(CourseStudent.objects.current_course(self.student))
+
+    def test_all_users_in_open_semesters__is_empty(self):
+        """No user is in the active semester, so staff lists and task recipients come back
+        empty instead of picking up registrations whose semester was deleted."""
+        orphaned = baker.make(CourseStudent, user=baker.make(User), semester=None)
+
+        users = CourseStudent.objects.all_users_in_open_semesters()
+
+        self.assertFalse(users.exists())
+        self.assertNotIn(orphaned.user, users)
+
+    def test_has_past_courses__counts_every_registration(self):
+        """With none open, every registration the student has is in a past semester."""
+        self.assertTrue(self.student.profile.has_past_courses)
+
+    def test_reset_students_xp_cached__still_zeroes_the_archived_semesters_students(self):
+        """Archiving clears the active semester pointer, so the XP reset works off the
+        semester's own registrations: its students' cached XP still gets zeroed."""
+        self.student.profile.xp_cached = 100
+        self.student.profile.save()
+
+        self.archived_semester.reset_students_xp_cached()
+
+        self.student.profile.refresh_from_db()
+        self.assertEqual(self.student.profile.xp_cached, 0)
+
+
+class StudentOwnSemesterTest(ByteDeckTenantTestCase):
+    """A student's semester comes from their own registration, not from the deck's pointer
+    (issue #2157 Phase 3, the inversion #1781 needs).
+
+    The deck can only name one semester, so once several are open it can't say which one a
+    given student earns XP in. Their registration can, and these tests pin that: the
+    second open semester here is built directly, since starting a semester the normal way
+    still leaves only one open until concurrent semesters land.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A student registered in the deck's open semester, plus a second open semester
+        with its own student, and a teacher registered in neither."""
+        cls.deck_semester = SiteConfig.get().active_semester
+        cls.other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+
+        cls.student = baker.make(User, username='deck_semester_student')
+        baker.make(CourseStudent, user=cls.student, course=baker.make(Course), semester=cls.deck_semester)
+
+        cls.other_student = baker.make(User, username='other_semester_student')
+        baker.make(CourseStudent, user=cls.other_student, course=baker.make(Course), semester=cls.other_semester)
+
+        cls.teacher = baker.make(User, username='unregistered_teacher', is_staff=True)
+
+    def test_current_semester__is_the_students_own_registration(self):
+        """A student in the semester the deck points at gets that semester."""
+        self.assertEqual(CourseStudent.objects.current_semester(self.student), self.deck_semester)
+
+    def test_current_semester__ignores_the_deck_pointer(self):
+        """A student registered in a different open semester gets theirs, not the deck's.
+        This is the whole point of reading the registration: the deck still points at
+        deck_semester, and for this student that answer is wrong."""
+        self.assertEqual(SiteConfig.get().open_semester, self.deck_semester)
+        self.assertEqual(CourseStudent.objects.current_semester(self.other_student), self.other_semester)
+
+    def test_current_semester__unregistered_user_is_in_no_semester(self):
+        """Someone with no registration (a teacher trying a quest, a student who hasn't
+        joined a course) is in no semester, even while the deck has one open: the deck's
+        default names a term they were never in (issue #2441)."""
+        self.assertEqual(SiteConfig.get().open_semester, self.deck_semester)
+        self.assertIsNone(CourseStudent.objects.current_semester(self.teacher))
+
+    def test_current_semester__archived_registration_is_not_current(self):
+        """Archiving the semester a student was in leaves them with no current registration,
+        and so with no semester: they are not moved into the cohort still running, whose
+        roster they are absent from and whose teachers are not theirs (issue #2441). This is
+        the case that costs a student their work if it goes wrong: XP earned into a cohort's
+        semester is dropped when that semester is archived, because archiving records final
+        XP from the registrations, and a student outside that cohort holds none."""
+        Semester.objects.complete_semester(self.deck_semester)
+        self.other_semester.refresh_from_db()
+        self.assertTrue(self.other_semester.is_open)
+
+        self.assertIsNone(CourseStudent.objects.current_semester(self.student))
+
+    def test_current_semester__archived_registration_with_nothing_left_open_is_none(self):
+        """When the archived semester was the last one running, a student whose registration it
+        held has no semester at all rather than one that is over."""
+        Semester.objects.filter(pk=self.other_semester.pk).update(status=Semester.Status.ARCHIVED)
+        Semester.objects.complete_semester(self.deck_semester)
+
+        self.assertIsNone(CourseStudent.objects.current_semester(self.student))
+
+    def test_xp_totals__count_what_was_earned_in_the_students_own_semester(self):
+        """The end-to-end pairing of stamping and reading. A quest approved and a badge
+        granted for a student in the semester the deck does not point at are stamped with
+        their semester, and their XP total then counts both. Reading through the deck's
+        semester instead would leave the student looking at zero XP they can't explain."""
+        from badges.models import Badge, BadgeAssertion
+
+        quest = baker.make(Quest, xp=25, published=True)
+        submission = QuestSubmission.objects.create_submission(self.other_student, quest)
+        submission.mark_completed()
+        submission.mark_approved()
+        BadgeAssertion.objects.create_assertion(self.other_student, baker.make(Badge, xp=10))
+
+        self.assertEqual(submission.semester, self.other_semester)
+        self.assertEqual(self.other_student.profile.xp_invalidate_cache(), 35)
+
+    def test_xp_totals__ignore_xp_earned_in_a_different_semester(self):
+        """XP stays scoped: a submission stamped with someone else's open semester is not
+        added to this student's total just because both semesters are open."""
+        from badges.models import Badge, BadgeAssertion
+
+        baker.make(
+            QuestSubmission, user=self.other_student, quest__xp=100, semester=self.deck_semester,
+            is_completed=True, is_approved=True,
+        )
+        BadgeAssertion.objects.create_assertion(
+            self.other_student, baker.make(Badge, xp=50), active_semester=self.deck_semester.pk,
+        )
+
+        self.assertEqual(self.other_student.profile.xp_invalidate_cache(), 0)
+
+    def test_current_courses__covers_every_course_in_that_semester(self):
+        """A student holds registrations in several courses and groups within their one
+        semester, and all of them are current; registrations in another semester are not."""
+        second_course = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=self.deck_semester)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=baker.make(Semester))
+
+        current = CourseStudent.objects.current_courses(self.student)
+        self.assertEqual(current.count(), 2)
+        self.assertIn(second_course, current)
+
+
+class CourseModelTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a Course for the class tests."""
+        cls.course = baker.make(Course)
+
+    def test_course__creation(self):
+        """A Course is created and its str is its title."""
         self.assertIsInstance(self.course, Course)
         self.assertEqual(str(self.course), self.course.title)
 
-    def test_get_absolute_url(self):
+    def test_get_absolute_url__returns_course_list(self):
         """All courses return the course list"""
         self.assertEqual(self.course.get_absolute_url(), reverse('courses:course_list'))
 
-    def test_condition_met_as_prerequisite(self):
+    def test_condition_met_as_prerequisite__currently_registered(self):
         """ If the user is CURRENTLY registered in this course, then condition is met """
         student = baker.make(User)
         baker.make(CourseStudent, user=student, course=self.course)
@@ -304,7 +929,7 @@ class CourseModelTest(TenantTestCase):
         baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
         self.assertTrue(self.course.condition_met_as_prerequisite(student, 1))
 
-    def test_model_protection(self):
+    def test_model_protection__course_with_students(self):
         """
             Quick test to see if Course model deletion is prevented when trying to delete Course model programmatically
 
@@ -320,21 +945,23 @@ class CourseModelTest(TenantTestCase):
         self.assertRaises(ProtectedError, self.course.delete)
 
 
-class CourseStudentManagerTest(TenantTestCase):
+class CourseStudentManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User, username='test_student')
-        self.course = baker.make(Course)
-        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student registered in a course in the active semester."""
+        cls.student = baker.make(User, username='test_student')
+        cls.course = baker.make(Course)
+        cls.course_student = baker.make(CourseStudent, user=cls.student, course=cls.course, semester=SiteConfig.get().active_semester)
 
-    def test_current_course(self):
+    def test_current_course__returns_active_semester_course(self):
         """ Currently returns the first course in the active semester, if there are more than one"""
         # Add a second course to the student during active semester (+ SetUp)
         sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
-        # order doesn't matter here, as long as it's one fo the courses the student is currently registered in
+        # order doesn't matter here, as long as it's one of the courses the student is currently registered in
         self.assertIn(CourseStudent.objects.current_course(self.student), [sc2, self.course_student])
 
-    def test_all_for_user_semester(self):
+    def test_all_for_user_semester__filters_by_user_and_semester(self):
         """ Test that method returns all CourseStudent objects for a given user and semester """
         semester_to_check = baker.make(Semester)
 
@@ -354,8 +981,8 @@ class CourseStudentManagerTest(TenantTestCase):
         self.assertEqual(course_students.count(), 2)
         self.assertQuerySetEqual(course_students, [sc1, sc2], ordered=False)
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades(self, xp_per_course):
+    @patch_registration_xp(500)
+    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, registration_split):
         """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
 
         # second student in same course as setup
@@ -367,7 +994,6 @@ class CourseStudentManagerTest(TenantTestCase):
         course2 = baker.make(Course)
         course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
 
-        xp_per_course.return_value = 500
         CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
 
         self.course_student.refresh_from_db()
@@ -382,41 +1008,174 @@ class CourseStudentManagerTest(TenantTestCase):
         self.assertEqual(course_student2.final_xp, 500)
         self.assertEqual(course_student3.final_xp, 500)
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades__student_with_negative_xp(self, xp_per_course):
+    def test_calc_semester_grades__divides_a_students_xp_once_however_many_courses(self):
+        """The split is one calculation about the whole student, so archiving asks for it a
+        fixed number of times per student rather than once per course they hold (issue #2459).
+        Pinned as a comparison rather than an absolute count, so the guard survives any
+        unrelated change to how many times a student's XP is worked out."""
+        three_courses = baker.make(User, username='three_courses')
+        for _ in range(3):
+            baker.make(
+                CourseStudent, user=three_courses, course=baker.make(Course),
+                semester=SiteConfig.get().active_semester,
+            )
+
+        splits = Counter()
+        divide = CourseStudent.objects.xp_across  # bound, so the patch below can delegate to it
+
+        def counting_divide(manager, user, registrations, profile=None):
+            splits[user.pk] += 1
+            return divide(user, registrations, profile=profile)
+
+        with patch('courses.models.CourseStudentManager.xp_across', autospec=True, side_effect=counting_divide):
+            CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        self.assertEqual(splits[three_courses.pk], splits[self.student.pk])
+
+    def test_calc_semester_grades__queues_an_available_quest_rebuild_per_student(self):
+        """Deactivating a registration changes what a student can see, so their available-quest
+        cache has to be rebuilt. prerequisites.signals queues that off CourseStudent's post_save,
+        which the bulk write here does not fire, so archiving asks for it itself: once per
+        student, and for every student, not only the multicourse ones."""
+        three_courses = baker.make(User, username='three_courses')
+        for _ in range(3):
+            baker.make(
+                CourseStudent, user=three_courses, course=baker.make(Course),
+                semester=SiteConfig.get().active_semester,
+            )
+
+        with patch('prerequisites.tasks.update_quest_conditions_for_user.apply_async') as rebuild:
+            CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        rebuilt_for = Counter(call.kwargs['args'][0] for call in rebuild.call_args_list)
+        self.assertEqual(rebuilt_for[three_courses.pk], 1)
+        self.assertEqual(rebuilt_for[self.student.pk], 1)
+
+    def test_xp_across__divides_between_the_registrations_it_is_given(self):
+        """The split is over the registrations handed in, not the ones the student holds in an
+        open semester, which is what lets archiving divide a closing semester's XP (#2459)."""
+        another_semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        elsewhere = baker.make(
+            CourseStudent, user=self.student, course=baker.make(Course), semester=another_semester,
+        )
+
+        pairs = CourseStudent.objects.xp_across(self.student, [self.course_student, elsewhere])
+
+        self.assertEqual([registration for registration, _ in pairs], [self.course_student, elsewhere])
+
+    @patch_registration_xp(-10)
+    def test_calc_semester_grades__student_with_negative_xp(self, registration_split):
         """Test that an assertion error is raised when there is a student with negative xp"""
-        xp_per_course.return_value = -10
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 
-    def test_all_users_for_active_semester(self):
+    def test_all_users_in_open_semesters__is_empty_on_the_public_schema(self):
+        """The public tenant has no courses tables, and this runs there while booting, so it
+        returns an empty queryset rather than querying a table that isn't there."""
+        with patch('courses.models.connection') as mock_connection:
+            mock_connection.schema_name = get_public_schema_name()
+            result = CourseStudent.objects.all_users_in_open_semesters()
+        self.assertEqual(result.count(), 0)
 
-        # There should be 1 student in the active semester
-        self.assertEqual(CourseStudent.objects.all_users_for_active_semester().count(), 1)
+    def test_all_users_in_open_semesters__excludes_inactive(self):
+        """The deck's roster counts students in an open semester, leaving out inactive users."""
+        # There should be 1 student in the open semester
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 1)
 
-        # Makef the student inactiveo
+        # Make the student inactive
         self.student.is_active = False
         self.student.save()
 
-        self.assertEqual(CourseStudent.objects.all_users_for_active_semester(students_only=True).count(), 0)
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters(students_only=True).count(), 0)
+
+    def test_all_users_in_open_semesters__spans_every_open_semester(self):
+        """Two cohorts on different calendars are both current, so the deck's roster is the
+        union of them rather than whichever one the deck's pointer names (issue #2157 Phase 3)."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_student = baker.make(User)
+        baker.make(CourseStudent, user=other_student, course=baker.make(Course), semester=other_semester)
+
+        users = CourseStudent.objects.all_users_in_open_semesters()
+
+        self.assertIn(self.student, users)
+        self.assertIn(other_student, users)
+
+    def test_all_users_in_open_semesters__counts_a_student_in_two_courses_once(self):
+        """A student registered in several courses within their semester is one user, not one
+        per registration."""
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
+
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 1)
+
+    def test_all_users_in_open_semesters__leaves_out_archived_semesters(self):
+        """Archiving a semester takes its students off the roster: that is what frees seats."""
+        Semester.objects.complete_semester()
+
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 0)
+
+    def test_has_multicourse_students__false_when_everyone_takes_one_course(self):
+        """A second student in their own single course is not the same as one student in two,
+        so a deck of single-course students still answers no."""
+        baker.make(CourseStudent, user=baker.make(User), course=baker.make(Course),
+                   block=baker.make(Block), semester=SiteConfig.get().active_semester)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
+    def test_has_multicourse_students__true_once_one_student_holds_two_courses(self):
+        """One student in two courses is enough: they are the person the per-course XP split
+        applies to (issue #2440)."""
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course),
+                   block=baker.make(Block), semester=SiteConfig.get().active_semester)
+
+        self.assertTrue(CourseStudent.objects.has_multicourse_students())
+
+    def test_has_multicourse_students__ignores_staff_and_archived_semesters(self):
+        """A teacher registered in two courses is not a student with two marks, and a student
+        whose semester is over is no longer on the deck."""
+        teacher = baker.make(User, is_staff=True)
+        for course in (baker.make(Course), baker.make(Course)):
+            baker.make(CourseStudent, user=teacher, course=course, block=baker.make(Block),
+                       semester=SiteConfig.get().active_semester)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
+        old = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        for course in (baker.make(Course), baker.make(Course)):
+            baker.make(CourseStudent, user=baker.make(User), course=course, block=baker.make(Block), semester=old)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
 
 
-class CourseStudentModelTest(TenantTestCase):
+class CourseStudentModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User)
-        self.course = baker.make(Course)
-        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student registered in a course in the active semester."""
+        cls.student = baker.make(User)
+        cls.course = baker.make(Course)
+        cls.course_student = baker.make(CourseStudent, user=cls.student, course=cls.course, semester=SiteConfig.get().active_semester)
 
-    def test_course_student_creation(self):
+    def test_course_student__creation(self):
+        """A CourseStudent is created as the expected model instance."""
         self.assertIsInstance(self.course_student, CourseStudent)
-        # self.assertEqual(str(self.course), self.course.title)
 
-    # def test_course_student_get_absolute_url(self):
-    #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
+    def test_str__includes_username_semester_block_and_course(self):
+        """A CourseStudent's string lists the student's username, semester, block and course."""
+        block = baker.make(Block, name='B1')
+        semester = SiteConfig.get().active_semester
+        course = baker.make(Course, title='Math')
+        course_student = baker.make(CourseStudent, user=self.student, course=course, block=block, semester=semester)
+
+        result = str(course_student)
+
+        self.assertIn(self.student.get_username(), result)
+        self.assertIn(str(semester), result)
+        self.assertIn('B1', result)
+        self.assertIn(str(course), result)
 
     @patch('courses.models.Semester.fraction_complete')
-    def test_calc_mark(self, fraction_complete):
+    def test_calc_mark__scales_with_fraction_complete(self, fraction_complete):
+        """calc_mark() scales a student's XP into a mark based on how far the semester has progressed."""
         fraction_complete.return_value = 0.5
         course = baker.make(Course, xp_for_100_percent=100)
         course_student = baker.make(CourseStudent, user=self.student, course=course, semester=SiteConfig.get().active_semester)
@@ -445,8 +1204,11 @@ class CourseStudentModelTest(TenantTestCase):
         course_student.calc_mark(50)
 
     @patch('courses.models.Semester.days_so_far')
-    def test_xp_per_day_ave(self, days_so_far):
+    def test_xp_per_day_ave__divides_xp_by_days(self, days_so_far):
+        """xp_per_day_ave() is this registration's XP divided by days so far, or 0 when no days.
 
+        Their only course, so its share is the student's whole total.
+        """
         self.student.profile.xp_cached = 120
         self.student.profile.save()
         days_so_far.return_value = 10
@@ -457,14 +1219,648 @@ class CourseStudentModelTest(TenantTestCase):
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
 
+    @patch('courses.models.Semester.days_so_far', return_value=10)
+    def test_xp_per_day_ave__divides_this_registrations_own_xp(self, days_so_far):
+        """A student in two courses has a different amount of XP in each (issue #2440), so each
+        registration averages its own share. Their deck-wide total would give both courses the
+        same number, and make the mark page's arithmetic, which shows the share right above it,
+        fail to add up."""
+        other = self._register(self.student, baker.make(Course))
+        self._approved(self.student, 120, registration=self.course_student)
+        self.student.profile.xp_invalidate_cache()
 
-class BlockModelTest(TenantTestCase):
+        # every point was put against the first course, so the other one averages none of it
+        self.assertEqual(self.course_student.xp_per_day_ave(), 12)
+        self.assertEqual(other.xp_per_day_ave(), 0)
 
-    def setUp(self):
-        self.student = baker.make(User)
-        self.block = baker.make(Block)
+    @patch('courses.models.Semester.days_so_far', return_value=10)
+    def test_xp_per_day_ave__takes_an_already_divided_share(self, days_so_far):
+        """A caller that has divided the student's XP between every registration at once hands
+        the share over rather than having it worked out again (issue #2459)."""
+        self.assertEqual(self.course_student.xp_per_day_ave(xp=50), 5)
 
-    def test_model_protection(self):
+    def _approved(self, student, xp, registration=None, max_xp=-1):
+        """Give a student an approved, XP-granting submission, optionally assigned to one of their registrations."""
+        quest = baker.make(Quest, xp=xp, max_xp=max_xp)
+        return baker.make(
+            QuestSubmission, user=student, quest=quest, registration=registration,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+
+    def _register(self, student, course):
+        """Register a student in a course in the deck's semester and return the registration."""
+        return baker.make(
+            CourseStudent, user=student, course=course, block=baker.make(Block),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def _uncap_marks(self):
+        """Put the shared deck's mark cap back off, for the tests that turn it on."""
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = False
+        config.save()
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_coursestudent_post_save__refreshes_the_students_cached_xp_and_mark(self, fraction_complete):
+        """Saving a registration is what keeps a student's cached XP and mark following their
+        courses. Joining one gives them a mark where they had none, since a mark is a
+        percentage of the XP counting toward a course, and a teacher's manual xp_adjustment
+        counts toward their XP. That is why CourseStudent.xp() is on the write path of every
+        registration save (issue #2486).
+
+        Both cached values are asserted at both saves: refreshing the XP and leaving the mark
+        behind would be the same bug from the student list's point of view, since that is the
+        column it sorts and colours by."""
+        student = baker.make(User)
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+        student.profile.refresh_from_db()
+        self.assertIsNone(student.profile.mark_cached)
+
+        registration = self._register(student, baker.make(Course, xp_for_100_percent=1000))
+
+        # halfway through the semester, 40 XP projects to 80, out of the course's 1000
+        student.profile.refresh_from_db()
+        self.assertEqual(student.profile.xp_cached, 40)
+        self.assertEqual(student.profile.mark_cached, 8)
+
+        registration.xp_adjustment = 15
+        registration.save()
+
+        student.profile.refresh_from_db()
+        self.assertEqual(student.profile.xp_cached, 55)
+        self.assertEqual(student.profile.mark_cached, 11)
+
+    def test_xp__is_the_whole_total_for_a_student_with_one_course(self):
+        """Nothing to divide, so their one course carries everything they earned."""
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course))
+        self._approved(student, xp=30)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(registration.xp(), 30)
+
+    def test_xp__shares_unassigned_work_evenly(self):
+        """Work nobody assigned to a course is split between them, which is what every
+        submission did before students could choose (issue #2440). A deck that leaves the
+        setting off therefore behaves exactly as it always has."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 20)
+        self.assertEqual(second.xp(), 20)
+
+    def test_xp__counts_assigned_work_toward_the_course_it_was_assigned_to(self):
+        """The point of the whole feature: XP the student put against one course counts there
+        in full, rather than half of it leaking into the other course."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, registration=maths_registration)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 40)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__keeps_the_work_with_a_registration_whose_course_changes(self):
+        """Work counts toward the registration it was handed in against, so a teacher changing
+        that registration's course (moving a student from Digital Art 12 to Game Design 12, say)
+        takes the work with it, rather than leaving it on the old course and sharing it out
+        between all of the student's courses (issue #2875)."""
+        student = baker.make(User)
+        art_registration = self._register(student, baker.make(Course, title='Digital Art 12'))
+        maths_registration = self._register(student, baker.make(Course, title='Maths'))
+        self._approved(student, xp=40, registration=art_registration)
+        BadgeAssertion.objects.create_assertion(student, baker.make(Badge, xp=20), registration=art_registration)
+
+        art_registration.course = baker.make(Course, title='Game Design 12')
+        art_registration.save()
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(art_registration.xp(), 60)
+        self.assertEqual(maths_registration.xp(), 0)
+
+    def test_xp__mixes_assigned_and_shared_work(self):
+        """Assigned and unassigned work add up: the student's own choices land where they said,
+        and everything else (badges, older work) is still shared."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, registration=maths_registration)
+        self._approved(student, xp=10)  # unassigned, so shared
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 45)
+        self.assertEqual(art_registration.xp(), 5)
+
+    def test_xp__adds_the_registrations_own_adjustment(self):
+        """xp_adjustment is already per course ("an adjustment to the user's XP for this
+        course"), so it belongs to its own registration rather than being shared."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        first.xp_adjustment = 12
+        first.save()
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 32)
+        self.assertEqual(second.xp(), 20)
+
+    def test_xp__never_totals_more_than_the_student_earned(self):
+        """A repeatable quest's max_xp caps what it is worth however it is spread, so splitting
+        one across two courses cannot conjure XP that the student's own total does not have."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        quest = baker.make(Quest, xp=30, max_xp=40)
+        for registration in (maths_registration, art_registration):
+            baker.make(
+                QuestSubmission, user=student, quest=quest, registration=registration,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+        student.profile.xp_invalidate_cache()
+
+        # the cap is applied to the quest first, then shared out in proportion to what each
+        # course was assigned: two equal submissions, so half the capped 40 each
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(art_registration.xp(), 20)
+        self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
+        self.assertEqual(student.profile.xp_cached, 40)
+
+    def test_xp__counts_a_badge_toward_the_course_it_was_granted_for(self):
+        """A badge granted alongside a quest carries that quest's course, so the badge and the
+        work it recognises count toward the same course (issue #2440)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        BadgeAssertion.objects.create_assertion(
+            student, baker.make(Badge, xp=20), registration=maths_registration,
+        )
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__shares_a_badge_that_belongs_to_no_course(self):
+        """A badge granted on its own, with no course behind it, is shared like any other
+        unassigned XP rather than landing arbitrarily in one course."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        BadgeAssertion.objects.create_assertion(student, baker.make(Badge, xp=20))
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 10)
+        self.assertEqual(second.xp(), 10)
+
+    def test_xp__still_shares_unassigned_work_when_a_registration_has_no_course(self):
+        """A registration with no course still takes its share of the work the student never
+        assigned, the same as any other registration of theirs."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        maths_registration = self._register(student, maths)
+        courseless = self._register(student, None)
+        self._approved(student, xp=40)  # unassigned, so shared between the two
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(courseless.course)
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(courseless.xp(), 20)
+
+    def test_xp__answers_with_the_whole_total_for_a_registration_that_is_not_current(self):
+        """The split divides a student's XP between the courses they are in now, so a
+        registration from a semester that is over is not part of it and answers with their
+        total, the same as a student with one course."""
+        student = baker.make(User)
+        old = baker.make(
+            CourseStudent, user=student, course=baker.make(Course), block=baker.make(Block),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self._register(student, baker.make(Course))
+        self._register(student, baker.make(Course))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(old.xp(), student.profile.xp_cached)
+
+    def _approved_yesterday(self, student, xp, registration=None):
+        """Give a student an approved submission dated yesterday.
+
+        The date filter is on time_approved, which baker would otherwise fill with a random
+        datetime that may not be behind us.
+        """
+        submission = self._approved(student, xp=xp, registration=registration)
+        submission.time_approved = timezone.localtime() - timedelta(days=1)
+        submission.save()
+        return submission
+
+    def test_xp_across_series__divides_what_the_student_had_earned_by_then(self):
+        """A course's progress line is its own share as of each day, not an even share of the
+        student's whole total (issue #2453), and the whole line is worked out in one pass
+        (issue #2459)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
+        self._approved_yesterday(student, xp=40, registration=registrations[0])
+        today = timezone.localtime()
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([[xp for _registration, xp in row] for row in series], [[0, 0], [40, 0]])
+
+    def test_xp_across_series__is_the_students_whole_total_when_they_have_one_course(self):
+        """Nothing to divide, so their one course carries everything they had earned by each
+        date, and carries it as the exact figure rather than a share worked out from one."""
+        student = baker.make(User)
+        registrations = [self._register(student, baker.make(Course))]
+        self._approved_yesterday(student, xp=30)
+        today = timezone.localtime()
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([xp for row in series for _registration, xp in row], [0, 30])
+
+    def test_xp_across_series__counts_an_adjustment_at_every_date(self):
+        """A manual adjustment is not something the student earned on a day, so it stands
+        against its own course from the first point on the chart, the same as xp() counts it."""
+        student = baker.make(User)
+        maths_registration = self._register(student, baker.make(Course, title='Maths'))
+        maths_registration.xp_adjustment = 10
+        maths_registration.save()
+        registrations = [maths_registration, self._register(student, baker.make(Course, title='Art'))]
+        today = timezone.localtime()
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([[xp for _registration, xp in row] for row in series], [[10, 0], [10, 0]])
+
+    def test_xp_across_series__counts_badge_xp_from_the_day_it_was_granted(self):
+        """Badge XP counts toward the course the badge was granted against, and appears on the
+        chart from the day it was granted rather than from the start of the term."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
+        assertion = baker.make(
+            BadgeAssertion, user=student, badge=baker.make(Badge, xp=20), registration=registrations[0],
+            semester=SiteConfig.get().active_semester,
+        )
+        today = timezone.localtime()
+        # timestamp is auto_now_add, so it has to be written after the assertion is made
+        BadgeAssertion.objects.filter(pk=assertion.pk).update(timestamp=today - timedelta(days=1))
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([[xp for _registration, xp in row] for row in series], [[0, 0], [20, 0]])
+
+    def test_xp_across_series__totals_agree_with_the_students_xp_at_that_date(self):
+        """What the courses are given between them at each date is the student's whole XP as
+        of then, cap and all, so a chart drawn from the series agrees with the total the
+        student is shown. Pinned against Profile.xp_to_date(), which is where that number is
+        defined."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
+        # a repeatable quest taken past its cap and split across two courses, which is the case
+        # where a date's per-course figures are fractions rather than whole submissions
+        quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
+        for registration in (registrations[0], None):
+            submission = baker.make(
+                QuestSubmission, user=student, quest=quest, registration=registration,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+            submission.time_approved = timezone.localtime() - timedelta(days=1)
+            submission.save()
+        dates = [timezone.localtime() - timedelta(days=2), timezone.localtime()]
+
+        series = CourseStudent.objects.xp_across_series(student, registrations, dates)
+
+        self.assertEqual(
+            [sum(xp for _registration, xp in row) for row in series],
+            [student.profile.xp_to_date(date) for date in dates],
+        )
+        self.assertEqual([sum(xp for _registration, xp in row) for row in series], [0, 15])
+
+    def test_xp_across_series__costs_the_same_however_many_dates(self):
+        """Reading each source once is the point of the series: a progress chart asks for a
+        whole semester of class days at a time, and what it costs must not grow with them
+        (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
+        survives any unrelated change to how the XP is looked up."""
+        student = baker.make(User)
+        registrations = [self._register(student, baker.make(Course)), self._register(student, baker.make(Course))]
+        self._approved_yesterday(student, xp=40)
+        today = timezone.localtime()
+        dates = [today - timedelta(days=day) for day in reversed(range(20))]
+
+        with CaptureQueriesContext(connection) as one_date:
+            CourseStudent.objects.xp_across_series(student, registrations, dates[:1])
+        with CaptureQueriesContext(connection) as every_date:
+            CourseStudent.objects.xp_across_series(student, registrations, dates)
+
+        self.assertEqual(len(every_date), len(one_date))
+
+    def test_mark__is_none_for_a_course_that_does_not_use_marks(self):
+        """A course can be run on XP alone (issue #403). A student in one has no percentage at
+        all, which is not the same as a percentage of zero: nothing that shows a mark should
+        show them one."""
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course, uses_marks=False))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(registration.mark())
+
+    def test_mark__is_zero_for_a_registration_with_no_course(self):
+        """A registration's course is nullable, and deleting a course leaves the registration
+        behind with none. There is no course to ask whether it uses marks, and nothing to be a
+        percentage of, so the mark is zero."""
+        student = baker.make(User)
+        registration = self._register(student, None)
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(registration.course)
+        self.assertEqual(registration.mark(), 0)
+
+    def test_mark__is_still_worked_out_for_the_courses_that_do_use_marks(self):
+        """Turning marks off for one course leaves the others alone: a student in both gets a
+        percentage for the graded one and none for the other."""
+        student = baker.make(User)
+        graded = self._register(student, baker.make(Course, xp_for_100_percent=1000))
+        for_joy = self._register(student, baker.make(Course, uses_marks=False))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNotNone(graded.mark())
+        self.assertIsNone(for_joy.mark())
+
+    def test_xp__shares_out_work_assigned_to_a_course_the_student_has_left(self):
+        """Deleting a registration must not make its XP vanish. Work assigned to a course the
+        student no longer holds has nowhere to count, so it goes back into the shared pool and
+        is split like any other unassigned work, rather than being taken off the total and
+        credited nowhere."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        dropped = baker.make(Course, title='Dropped')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        dropped_registration = self._register(student, dropped)
+        self._approved(student, xp=30, registration=dropped_registration)
+        student.profile.xp_invalidate_cache()
+
+        dropped_registration.delete()
+
+        self.assertEqual(maths_registration.xp(), 15)
+        self.assertEqual(art_registration.xp(), 15)
+        self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
+
+    def test_xp__shares_out_work_assigned_to_a_registration_that_is_not_one_of_theirs_now(self):
+        """Same for a registration the split is not dividing between, such as one from a
+        semester that is over: whatever put the work there, the XP is the student's and has to
+        keep counting somewhere."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        old = baker.make(
+            CourseStudent, user=student, course=baker.make(Course, title='Last term’s course'), block=baker.make(Block),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self._approved(student, xp=20, registration=old)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 10)
+        self.assertEqual(art_registration.xp(), 10)
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_mark__is_worked_out_from_the_registrations_own_xp(self, fraction_complete):
+        """Each course has its own mark, because each has its own XP (issue #2440). A student
+        who put all their work against one course is at 0% in the other, not at the same mark
+        in both."""
+        fraction_complete.return_value = 0.5
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths', xp_for_100_percent=100)
+        art = baker.make(Course, title='Art', xp_for_100_percent=100)
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, registration=maths_registration)
+        student.profile.xp_invalidate_cache()
+
+        # 40 XP halfway through a semester projects to 80, out of the course's 100
+        self.assertEqual(maths_registration.mark(), 80)
+        self.assertEqual(art_registration.mark(), 0)
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_mark__caps_at_100_when_the_deck_asks_for_that(self, fraction_complete):
+        """cap_marks_at_100_percent applies per registration, so a course a student is running
+        away with reads 100% rather than a projected 160%."""
+        fraction_complete.return_value = 0.5
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = True
+        config.save()
+        # save(), not update(): the setting is cached, and only save() invalidates that cache
+        self.addCleanup(self._uncap_marks)
+
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course, xp_for_100_percent=100))
+        self._approved(student, xp=80)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(registration.mark(), 100)
+
+    def test_calc_semester_grades__records_each_course_its_own_final_xp(self):
+        """Archiving writes each registration's own XP into its final_xp. A student who put all
+        their work against one course must not have that course's total recorded against the
+        other one as well (issue #2440)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=60, registration=maths_registration)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        maths_registration.refresh_from_db()
+        art_registration.refresh_from_db()
+        self.assertEqual(maths_registration.final_xp, 60)
+        self.assertEqual(art_registration.final_xp, 0)
+
+    def test_calc_semester_grades__records_the_odd_xp_rather_than_dropping_it(self):
+        """Archiving records whole XP that adds up to what the student earned. final_xp is an
+        integer field, so a share of 2.5 rounded on its own drops the odd XP from the record
+        for good: 5 XP shared between two courses has to archive as 2 and 3, not 2 and 2
+        (issue #2490)."""
+        student = baker.make(User)
+        registrations = [
+            self._register(student, baker.make(Course, title='Maths')),
+            self._register(student, baker.make(Course, title='Art')),
+        ]
+        self._approved(student, xp=5)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        for registration in registrations:
+            registration.refresh_from_db()
+        self.assertEqual(sum(registration.final_xp for registration in registrations), 5)
+        self.assertEqual(sorted(registration.final_xp for registration in registrations), [2, 3])
+
+    def test_calc_semester_grades__hands_the_odd_xp_out_a_point_at_a_time(self):
+        """The odd XP goes whole to the share closest to earning it, rather than being split
+        again or dropped: three courses sharing 10 XP archive as 4, 3 and 3, which keeps every
+        course within 1 XP of its exact share and all 10 XP in the record (issue #2490)."""
+        student = baker.make(User)
+        registrations = [
+            self._register(student, baker.make(Course, title=title))
+            for title in ('Maths', 'Art', 'Music')
+        ]
+        self._approved(student, xp=10)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        for registration in registrations:
+            registration.refresh_from_db()
+        self.assertEqual(sum(registration.final_xp for registration in registrations), 10)
+        self.assertEqual(sorted(registration.final_xp for registration in registrations), [3, 3, 4])
+
+    def test_calc_semester_grades__records_the_xp_the_student_was_shown_all_term(self):
+        """The division is the same one whoever asks it, so the XP a student is shown against
+        a course during the term is the number recorded against it for good: 7 XP split two
+        ways reads as 4 and 3 on the marks page and archives as 4 and 3."""
+        student = baker.make(User)
+        registrations = [
+            self._register(student, baker.make(Course, title='Maths')),
+            self._register(student, baker.make(Course, title='Art')),
+        ]
+        self._approved(student, xp=7)
+        student.profile.xp_invalidate_cache()
+        shown = [registration.xp() for registration in registrations]
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        for registration in registrations:
+            registration.refresh_from_db()
+        self.assertEqual([registration.final_xp for registration in registrations], shown)
+        self.assertEqual(shown, [4, 3])
+
+    def test_xp_across__gives_whole_xp_when_a_capped_quest_is_split_between_courses(self):
+        """A repeatable quest taken past its max_xp gives each course the capped total in
+        proportion to what it was assigned uncapped (issue #2440), which is a fraction even
+        with nothing shared between the courses. Those shares are whole XP too, and still add
+        up to the student's total (issue #2490)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        registrations = [self._register(student, maths), self._register(student, art)]
+        quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
+        for registration in registrations:
+            baker.make(
+                QuestSubmission, user=student, quest=quest, registration=registration,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+        student.profile.xp_invalidate_cache()
+
+        shares = [xp for _registration, xp in CourseStudent.objects.xp_across(student, registrations)]
+
+        self.assertEqual(sum(shares), 15)
+        self.assertEqual(sorted(shares), [7, 8])
+
+    def test_clean__refuses_a_student_in_two_open_semesters(self):
+        """A student belongs to one semester at a time (#1781): they can take several courses
+        within it, but being in two open semesters at once would make "which semester did they
+        earn this XP in?" ambiguous again."""
+        student = baker.make(User)
+        first = baker.make(Semester, status=Semester.Status.OPEN)
+        second = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=student, course=baker.make(Course), semester=first)
+
+        clashing = CourseStudent(user=student, course=baker.make(Course), semester=second, block=baker.make(Block))
+
+        with self.assertRaises(ValidationError) as raised:
+            clashing.full_clean()
+        self.assertIn('semester', raised.exception.error_dict)
+        self.assertIn('only be in one semester', str(raised.exception))
+
+    def test_clean__allows_a_second_course_in_the_same_semester(self):
+        """The rule is one semester, not one course: a student takes as many courses and
+        groups within their semester as they like."""
+        student = baker.make(User)
+        semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=student, course=baker.make(Course), semester=semester)
+
+        second_course = CourseStudent(
+            user=student, course=baker.make(Course), semester=semester, block=baker.make(Block),
+        )
+
+        second_course.full_clean()  # does not raise
+
+    def test_clean__allows_a_registration_in_a_semester_that_is_not_open(self):
+        """Last year's registration is history, not a clash: only another *open* semester
+        counts, or nobody could ever join their second term."""
+        student = baker.make(User)
+        baker.make(
+            CourseStudent, user=student, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+
+        this_term = CourseStudent(
+            user=student, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.OPEN), block=baker.make(Block),
+        )
+
+        this_term.full_clean()  # does not raise
+
+    def test_clean__lets_a_student_keep_their_own_registration(self):
+        """Re-saving an existing registration compares against the student's *other* rows, so
+        editing (say) the block on the one they already have doesn't read as a clash with
+        itself."""
+        student = baker.make(User)
+        registration = baker.make(
+            CourseStudent, user=student, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.OPEN), block=baker.make(Block),
+        )
+
+        registration.block = baker.make(Block)
+
+        registration.full_clean()  # does not raise
+
+    def test_clean__ignores_a_registration_that_has_no_semester_yet(self):
+        """A half-built registration (no user or semester chosen) has nothing to compare, so the
+        rule stays quiet and leaves the missing-field errors to the fields themselves."""
+        incomplete = CourseStudent(course=baker.make(Course))
+
+        incomplete.clean()  # does not raise
+
+
+class BlockModelTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student and a Block for the class tests."""
+        cls.student = baker.make(User)
+        cls.block = baker.make(Block)
+
+    def test_model_protection__block_with_students(self):
         """
             Quick test to see if Block model deletion is prevented when trying to delete Block model programmatically
             Block deletion is only prevented when there are CourseStudent models linked via foreign key to the Block model
@@ -478,7 +1874,7 @@ class BlockModelTest(TenantTestCase):
         # see if models.PROTECT is in place
         self.assertRaises(ProtectedError, self.block.delete)
 
-    def test_condition_met_as_prerequisite(self):
+    def test_condition_met_as_prerequisite__registered_in_block_active_semester(self):
         """ If the user is registered in a course in this block during the active semester, then condition is met
         Tests check condition on self.block for self.student """
 
@@ -498,12 +1894,9 @@ class BlockModelTest(TenantTestCase):
         self.assertTrue(self.block.condition_met_as_prerequisite(self.student))
 
 
-class RankManagerTest(TenantTestCase):
+class RankManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        pass
-
-    def test_get_rank(self):
+    def test_get_rank__returns_rank_for_xp(self):
         """ Test that the correct rank is returned for a given XP value"""
 
         # default ranks are create from 0-1000XP, so test above that range.
@@ -529,7 +1922,7 @@ class RankManagerTest(TenantTestCase):
         rank_0 = Rank.objects.get_rank(-100)
         self.assertIsNotNone(rank_0)
 
-    def test_get_next_rank(self):
+    def test_get_next_rank__returns_next_rank_for_xp(self):
         """ Test that the correct rank is returned for a given XP value"""
 
         # default ranks are create from 0-1000XP, so test above that range.
@@ -538,7 +1931,7 @@ class RankManagerTest(TenantTestCase):
         self.assertEqual(rank_2000, Rank.objects.get_next_rank(1999))
         self.assertEqual(rank_3000, Rank.objects.get_next_rank(2000))
         self.assertEqual(rank_3000, Rank.objects.get_next_rank(2999))
-        self.assertEqual(None, Rank.objects.get_next_rank(3000))
+        self.assertIsNone(Rank.objects.get_next_rank(3000))
 
     def test_get_next_rank__when_deleted(self):
         """Method can handle if ranks were deleted """
@@ -546,22 +1939,48 @@ class RankManagerTest(TenantTestCase):
         rank_1000 = Rank.objects.get_next_rank(1000)
         self.assertIsNone(rank_1000)
 
-
-class RankModelTest(TenantTestCase):
-
-    def setUp(self):
+    def test_get_ranks_lte__returns_ranks_at_or_below_xp(self):
+        """get_ranks_lte(xp) returns the ranks whose xp is <= the given value."""
         Rank.objects.all().delete()
-        self.rank = baker.make(Rank, name="TestRank", xp=0)
+        rank_0 = baker.make(Rank, xp=0)
+        rank_100 = baker.make(Rank, xp=100)
+        baker.make(Rank, xp=200)
 
-    def test_rank_creation(self):
+        result = Rank.objects.all().get_ranks_lte(100)
+
+        self.assertCountEqual(result, [rank_0, rank_100])
+
+    def test_get_ranks_gt__returns_ranks_above_xp(self):
+        """get_ranks_gt(xp) returns the ranks whose xp is strictly greater than the given value."""
+        Rank.objects.all().delete()
+        baker.make(Rank, xp=0)
+        baker.make(Rank, xp=100)
+        rank_200 = baker.make(Rank, xp=200)
+
+        result = Rank.objects.all().get_ranks_gt(100)
+
+        self.assertCountEqual(result, [rank_200])
+
+
+class RankModelTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Clear the default ranks and create a single TestRank at 0 XP."""
+        # every test in this class expects the default ranks gone, with only TestRank remaining
+        Rank.objects.all().delete()
+        cls.rank = baker.make(Rank, name="TestRank", xp=0)
+
+    def test_rank__creation(self):
+        """A Rank is created and its str is its name."""
         self.assertIsInstance(self.rank, Rank)
         self.assertEqual(str(self.rank), self.rank.name)
 
-    def test_get_absolute_url(self):
+    def test_get_absolute_url__returns_ranks_list(self):
         """Absolute url for all ranks is the ranks list page"""
         self.assertEqual(self.rank.get_absolute_url(), reverse('courses:ranks'))
 
-    def test_get_icon_url(self):
+    def test_get_icon_url__default_and_custom(self):
         """Returns the icon url for the rank, if no url then returns the default icon from SiteConfig"""
         self.assertEqual(self.rank.get_icon_url(), SiteConfig.get().get_default_icon_url())
         self.rank.icon = 'test.png'
@@ -569,8 +1988,42 @@ class RankModelTest(TenantTestCase):
 
         self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
 
+    def test_get_map__falls_back_to_lookup_when_not_cached(self):
+        """Without a pre-populated _map_cached, get_map() looks the map up individually
+        (returning None when the rank has no map)."""
+        self.assertFalse(hasattr(self.rank, '_map_cached'))
+        self.assertIsNone(self.rank.get_map())
 
-class RankCacheInvalidationTest(TenantTestCase):
+
+class GradeModelTest(ByteDeckTenantTestCase):
+    """Tests for the Grade model (used as a prerequisite type)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a grade (with a value that won't collide with the default grades) and a student."""
+        cls.grade = baker.make(Grade, name='Test Grade', value=99)
+        cls.student = baker.make(User)
+
+    def test_str__returns_name(self):
+        """A grade's string representation is its name."""
+        self.assertEqual(str(self.grade), 'Test Grade')
+
+    def test_condition_met_as_prerequisite__true_when_student_registered_in_that_grade(self):
+        """The grade prereq is met when the student has a current course tagged with that grade."""
+        baker.make(
+            CourseStudent,
+            user=self.student,
+            grade_fk=self.grade,
+            semester=SiteConfig.get().active_semester,
+        )
+        self.assertTrue(self.grade.condition_met_as_prerequisite(self.student, 1))
+
+    def test_condition_met_as_prerequisite__false_when_student_not_in_that_grade(self):
+        """The grade prereq is not met when the student has no current course in that grade."""
+        self.assertFalse(self.grade.condition_met_as_prerequisite(self.student, 1))
+
+
+class RankCacheInvalidationTest(ByteDeckTenantTestCase):
     """get_rank()/get_next_rank() read from the cached rank list, so every ORM
     write path must invalidate it: save/create and deletes are covered by the
     post_save/post_delete signals, while update()/bulk_create()/bulk_update()
@@ -592,14 +2045,14 @@ class RankCacheInvalidationTest(TenantTestCase):
         """Populate the rank cache so the test's write can be shown to invalidate it."""
         Rank.objects.get_ranks_cached()
 
-    def test_cached_rank_lookups_hit_no_queries(self):
+    def test_cached_rank_lookups__hit_no_queries(self):
         """With a warm cache, get_rank() and get_next_rank() must not query the database."""
         self.warm_cache()
         with self.assertNumQueries(0):
             Rank.objects.get_rank(100)
             Rank.objects.get_next_rank(100)
 
-    def test_save_invalidates_cache(self):
+    def test_save__invalidates_cache(self):
         """Creating a Rank (via save) and re-saving it must invalidate the cache (post_save signal)."""
         self.warm_cache()
         rank = baker.make(Rank, xp=123456)
@@ -610,21 +2063,21 @@ class RankCacheInvalidationTest(TenantTestCase):
         rank.save()
         self.assert_cache_matches_db()
 
-    def test_instance_delete_invalidates_cache(self):
+    def test_instance_delete__invalidates_cache(self):
         """Deleting a Rank instance must invalidate the cache (post_delete signal)."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         rank.delete()
         self.assert_cache_matches_db()
 
-    def test_queryset_delete_invalidates_cache(self):
+    def test_queryset_delete__invalidates_cache(self):
         """Queryset .delete() must invalidate the cache (receivers disable fast-delete, so post_delete fires)."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         Rank.objects.filter(pk=rank.pk).delete()
         self.assert_cache_matches_db()
 
-    def test_queryset_update_invalidates_cache(self):
+    def test_queryset_update__invalidates_cache(self):
         """Queryset .update() fires no signals; the RankQuerySet.update override must invalidate the cache."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
@@ -632,16 +2085,113 @@ class RankCacheInvalidationTest(TenantTestCase):
         self.assertEqual(Rank.objects.get_rank(654321).pk, rank.pk)
         self.assert_cache_matches_db()
 
-    def test_bulk_create_invalidates_cache(self):
+    def test_bulk_create__invalidates_cache(self):
         """bulk_create() fires no signals; the RankQuerySet.bulk_create override must invalidate the cache."""
         self.warm_cache()
         Rank.objects.bulk_create([Rank(name='Bulk Rank', xp=123456)])
         self.assert_cache_matches_db()
 
-    def test_bulk_update_invalidates_cache(self):
+    def test_bulk_update__invalidates_cache(self):
         """bulk_update() fires no signals; the RankQuerySet.bulk_update override must invalidate the cache."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         rank.xp = 654321
         Rank.objects.bulk_update([rank], ['xp'])
         self.assert_cache_matches_db()
+
+
+class ExcludedDateModelTest(ByteDeckTenantTestCase):
+    """Tests for the ExcludedDate model (dates excluded from a semester's class-day count)."""
+
+    def test_str__returns_date_formatted_dd_mon_yyyy(self):
+        """An excluded date's string is its date formatted as DD-Mon-YYYY."""
+        semester = baker.make(Semester)
+        excluded = baker.make(ExcludedDate, semester=semester, date=date(2019, 9, 2))
+        self.assertEqual(str(excluded), '02-Sep-2019')
+
+    def test_ExcludedDate__two_semesters_can_exclude_the_same_date(self):
+        """A holiday that falls in two semesters is excluded from each of them.
+
+        A deck can run more than one semester at a time, and each counts its own class days
+        off its own excluded dates, so the day has to be recorded in both (#2647).
+        """
+        fall = baker.make(Semester)
+        night_school = baker.make(Semester)
+
+        baker.make(ExcludedDate, semester=fall, date=date(2019, 11, 11))
+        baker.make(ExcludedDate, semester=night_school, date=date(2019, 11, 11))
+
+        self.assertEqual(list(fall.excluded_days()), [date(2019, 11, 11)])
+        self.assertEqual(list(night_school.excluded_days()), [date(2019, 11, 11)])
+
+    def test_ExcludedDate__one_semester_cannot_exclude_the_same_date_twice(self):
+        """A second row for a date a semester already excludes is refused by the database.
+
+        Uniqueness moved from the date alone to the date within its semester, so this is what
+        is left of it: a semester still gets one row per day.
+        """
+        semester = baker.make(Semester)
+        baker.make(ExcludedDate, semester=semester, date=date(2019, 11, 11))
+
+        with self.assertRaises(IntegrityError):
+            ExcludedDate.objects.create(semester=semester, date=date(2019, 11, 11))
+
+    def test_from_other_semesters__returns_the_other_semesters_dates_in_date_order(self):
+        """Every excluded date the deck holds outside this semester, oldest first."""
+        semester = baker.make(Semester)
+        other = baker.make(Semester)
+        baker.make(ExcludedDate, semester=other, date=date(2019, 12, 25), label='Christmas')
+        baker.make(ExcludedDate, semester=other, date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'},
+             {'date': '2019-12-25', 'label': 'Christmas'}],
+        )
+
+    def test_from_other_semesters__leaves_out_this_semesters_own_dates(self):
+        """A date this semester already excludes is not offered back to it."""
+        semester = baker.make(Semester)
+        other = baker.make(Semester)
+        baker.make(ExcludedDate, semester=semester, date=date(2019, 11, 11), label='mine')
+        baker.make(ExcludedDate, semester=other, date=date(2019, 12, 25), label='theirs')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-12-25', 'label': 'theirs'}],
+        )
+
+    def test_from_other_semesters__offers_a_date_two_semesters_both_hold_once(self):
+        """Two semesters skipping the same holiday is one day to copy, not two rows."""
+        semester = baker.make(Semester)
+        for _ in range(2):
+            baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+
+    def test_from_other_semesters__prefers_a_labelled_row_over_an_unlabelled_one(self):
+        """Collapsing two rows for a date keeps the label, which is the part worth copying."""
+        semester = baker.make(Semester)
+        baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='')
+        baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+
+    def test_from_other_semesters__an_unsaved_semester_has_none_of_its_own_to_leave_out(self):
+        """The create form is offered every excluded date on the deck.
+
+        `SemesterCreate.get_object` hands the form an unsaved Semester, which cannot be the
+        owner of any row, so there is nothing to exclude from the offer.
+        """
+        baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(Semester()),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )

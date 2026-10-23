@@ -8,6 +8,20 @@
         {% with no_details=True %}
             {% include "quest_manager/buttons.html" %}
         {% endwith %}
+    {% elif blocking_quests %}
+        {% comment %} This student does qualify for this quest: a blocking quest is holding it
+           back, which is also why it is missing from their Available tab. Naming that quest
+           beats the prerequisites panel below, which would be untrue here (#2729). {% endcomment %}
+        <div id="quest-on-hold-{{ q.id }}" class="panel panel-info panel-top">
+            <div class="panel-heading">
+                <h3 class="panel-title"><i class="fa fa-fw fa-hand-paper-o"></i> On Hold</h3>
+            </div>
+            <div class="panel-body">
+                <p>This quest is on hold until you finish
+                    {% include "quest_manager/snippets/blocking_quests.html" %}
+                    It comes back as soon as {{ blocking_quests|pluralize:"it is,they are" }} done.</p>
+            </div>
+        </div>
     {% else %}
         <div id="quest-preview-{{ q.id }}" class="panel panel-danger panel-top">
             <div class="panel-heading">

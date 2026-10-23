@@ -1,27 +1,72 @@
 name: Build and Tests
 
-on: [push, pull_request]
+# Run on pushes to the long-lived branches only, plus every pull request.
+# Without the branch filter, a push to a PR branch triggered BOTH a push run
+# and a pull_request run -- the whole ~30 min suite twice per commit.
+# `competencies` is included because it's a long-running integration branch
+# that sub-issue PRs target (see CLAUDE.md). master/staging must stay here:
+# the auto-deploy workflow (deploy.yml) fires via workflow_run when this
+# workflow succeeds on those branches.
+on:
+  push:
+    branches: [develop, staging, master, competencies]
+  pull_request:
+
+# A force-push or rapid follow-up commit cancels the now-stale in-progress
+# run instead of letting both finish. Each PR and each branch gets its own
+# group (github.ref), so unrelated runs never cancel each other. Cancelling
+# a stale master/staging run is safe for auto-deploy: the cancelled run
+# never reaches "success", so deploy.yml simply fires for the newest SHA.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+        with:
+          # This job doesn't push git afterwards, so don't leave the GITHUB_TOKEN
+          # persisted in .git/config where later steps/actions could read it.
+          persist-credentials: false
       - name: Copy sample environment variables
         run: cp .env.example .env
       - name: Build the docker compose stack
         run: docker compose up -d
       - name: Check running containers
         run: docker ps -a
+      # The `docker compose run` steps below all use --no-deps: without it,
+      # `run` re-evaluates the service's depends_on and can RECREATE the db
+      # container while the web container (from `up -d` above) is still running
+      # its startup migrations -- killing web, so the later `docker compose
+      # exec web` fails with "service 'web' is not running". Everything these
+      # one-off containers need is already up, so never let `run` touch the
+      # rest of the stack. --rm stops them piling up as exited containers.
       - name: Check for potential django problems
-        run: docker compose run web python src/manage.py check
+        run: docker compose run --rm --no-deps web python src/manage.py check
+      - name: Check production deployment security settings
+        # Exercises the DEBUG=off (production/staging) config path so the
+        # SECURE_*/cookie-security settings can't silently regress. Overrides
+        # DEBUG and SECRET_KEY because .env.example ships DEBUG=True and an
+        # intentionally-weak key; -e vars win over .env (django-environ uses
+        # setdefault semantics). --fail-level WARNING turns the deploy checks
+        # into a hard gate.
+        run: >
+          docker compose run --rm --no-deps
+          -e DEBUG=False
+          -e SECRET_KEY=ci-deploy-check-only-not-a-real-secret-key-0123456789abcdef
+          web python src/manage.py check --deploy --fail-level WARNING
       - name: Check for missing migrations
-        run: docker compose run web python src/manage.py makemigrations --check --dry-run
+        run: docker compose run --rm --no-deps web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
         run: |
           docker compose exec -T web coverage run --parallel-mode src/manage.py test src
           docker compose exec -T web coverage combine
           docker compose exec -T web coverage xml
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

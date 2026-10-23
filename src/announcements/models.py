@@ -23,6 +23,35 @@ class AnnouncementQuerySet(models.query.QuerySet):
     def not_expired(self):
         return self.filter(Q(datetime_expires=None) | Q(datetime_expires__gt=timezone.now()))
 
+    def search(self, search_term):
+        """Narrow announcements to those matching every word of a search term.
+
+        An announcement matches a word on its title or in its content, the two things the
+        list shows: the panel heading carries the title and the panel it opens carries the
+        content. The author is deliberately absent, since the list never names them, so a
+        match on it would return an announcement whose reason for matching is invisible.
+
+        Several words narrow the results rather than widening them, matching the quest
+        lists (`quest_manager.listing.search_quests`): every word has to match something,
+        though not all the same thing.
+
+        Content is the HTML the editor saved, so a word can match markup rather than
+        anything the reader sees: "img" finds every announcement carrying a picture.
+        Matching the rendered text instead would mean stripping the tags off every
+        announcement in Python, which is what paginating in the database avoids.
+
+        Args:
+            search_term (str): what the user typed, or '' for no filtering.
+
+        Returns:
+            AnnouncementQuerySet: the matching announcements.
+        """
+        announcements = self
+        for word in search_term.split():
+            announcements = announcements.filter(Q(title__icontains=word) | Q(content__icontains=word))
+
+        return announcements
+
 
 class AnnouncementManager(models.Manager):
     def get_queryset(self):

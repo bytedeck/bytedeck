@@ -1,13 +1,22 @@
-from captcha.fields import ReCaptchaField
-from captcha.widgets import ReCaptchaV2Checkbox
+from django_recaptcha.fields import ReCaptchaField
+from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.core.validators import MaxLengthValidator
 from django.forms import ModelForm
 
 from .models import Tenant
 
 User = get_user_model()
+
+# The longest deck name a requester can pick. The name becomes the deck's
+# subdomain and schema, and while Postgres would allow up to the model field's
+# 62 characters, a 62-character subdomain is unreadable in a browser bar and in
+# every email that quotes it, so new decks are capped well below that
+# (maintainer decision, 2026-08-08). Existing decks are untouched: this is a
+# form-level cap on the creation path, not a model constraint.
+DECK_NAME_MAX_LENGTH = 30
 
 
 class TenantBaseForm(ModelForm):
@@ -19,9 +28,34 @@ class TenantBaseForm(ModelForm):
         model = Tenant
         fields = ["name"]
 
+    def __init__(self, *args, **kwargs):
+        """Initialize the form: cap the deck name at DECK_NAME_MAX_LENGTH and
+        surface that limit in the field's help text, so requesters see the cap
+        up front (#1975) and the resulting deck URL stays readable.
+        """
+        super().__init__(*args, **kwargs)
+        name_field = self.fields["name"]
+        name_field.max_length = DECK_NAME_MAX_LENGTH
+        name_field.validators.append(MaxLengthValidator(DECK_NAME_MAX_LENGTH))
+        name_field.widget.attrs["maxlength"] = DECK_NAME_MAX_LENGTH
+        name_field.help_text += f". The name can be at most {DECK_NAME_MAX_LENGTH} characters long."
+
     def clean_name(self):
+        """Validate the deck name.
+
+        Rejects the reserved ``public`` name and a name whose schema already exists in
+        the database without a matching tenant object. The length and format are already
+        enforced by the model field (``max_length`` and ``check_tenant_name``).
+
+        Returns:
+            str: The cleaned deck name.
+
+        Raises:
+            forms.ValidationError: If the name is reserved or collides with an existing
+                orphaned schema.
+        """
         name = self.cleaned_data["name"]
-        # has already validated the model field at this point
+        # has already validated the model field (format, length, uniqueness) at this point
         if name == "public":
             raise forms.ValidationError("The public tenant is restricted and cannot be used.")
         else:
@@ -145,4 +179,7 @@ class DeckRequestForm(forms.Form):
         label="Your Email",
         widget=forms.EmailInput(attrs={"placeholder": "you@example.com"})
     )
-    captcha = ReCaptchaField(widget=ReCaptchaV2Checkbox)
+    # Must match the widget type of the site's reCAPTCHA keys: a single key pair is
+    # configured globally and Google's keys are widget-type specific, so use the same
+    # invisible widget as the public contact form (see hackerspace_online/forms.py).
+    captcha = ReCaptchaField(label='', widget=ReCaptchaV2Invisible)

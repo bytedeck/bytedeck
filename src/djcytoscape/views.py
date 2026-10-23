@@ -1,3 +1,4 @@
+import json
 from django.http import HttpResponseRedirect
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -8,14 +9,18 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404, reverse
 from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_POST
 from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView, FormView
 from django.urls import reverse_lazy
+from django.utils.html import format_html
 
 from hackerspace_online.decorators import staff_member_required
 
+from badges.models import BadgeAssertion
 from quest_manager.models import QuestSubmission, Quest
 from siteconfig.models import SiteConfig
+from utilities.html import link_to
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .models import CytoScape
@@ -25,23 +30,56 @@ from .tasks import regenerate_all_maps
 User = get_user_model()
 
 
+def map_ids_redrawn_for(object_):
+    """The ids of the maps a change to `object_` rebuilds, as things stand.
+
+    These are the maps the map signals queue (`CytoScapeManager.get_maps_to_regenerate_for`):
+    the ones drawing the object, and the ones drawing its prerequisites, where it joins a map.
+
+    Args:
+        object_: a Quest, Badge or Rank.
+
+    Returns:
+        set: the map ids; empty for an object just deleted, which has no pk left.
+    """
+    if object_.pk is None:
+        return set()
+    return set(CytoScape.objects.get_maps_to_regenerate_for(object_).values_list('id', flat=True))
+
+
+def message_maps_being_updated(request, map_ids):
+    """Tell the teacher which maps are being rebuilt, each name linked to its map.
+
+    Args:
+        request (HttpRequest): the request to add the message to.
+        map_ids (set): the maps being rebuilt; no message when empty.
+    """
+    if map_ids:
+        maps = CytoScape.objects.filter(id__in=map_ids)
+        messages.success(request, format_html("These maps are being updated: {} ", maps.get_maps_as_formatted_string()))
+
+
 class UpdateMapMessageMixin:
-    """ Should be used for models that have signals which update related maps when modified/deleted
-    ie. badges, quests, ranks, prerequisites (not applicable since overridden)
+    """For the forms that change or delete something maps draw (a badge, quest or rank), whose
+    saves rebuild maps through the map signals: names the maps being rebuilt in a message.
     """
     def form_valid(self, *args, **kwargs):
-        """ Upon successful form, adds a success message listing related maps that are updated.
-        returns a response object.
-        """
+        """Save as the view does, then name every map the change is rebuilding.
 
-        if SiteConfig.get().map_auto_update:
-            maps = CytoScape.objects.get_related_maps(self.object)
-            if maps:
-                messages.success(
-                    self.request,
-                    f"These maps are being updated: {maps.get_maps_as_formatted_string()} "
-                )
-        return super().form_valid(*args, **kwargs)
+        Those are the maps from before the change and after it (#2847). Before, for the maps the
+        object leaves or is deleted from; after, for the maps it joins through a prerequisite it
+        has just been given, which drew nothing of it until now.
+
+        Returns:
+            HttpResponse: the view's own response.
+        """
+        if not SiteConfig.get().map_auto_update:
+            return super().form_valid(*args, **kwargs)
+
+        map_ids = map_ids_redrawn_for(self.object)
+        response = super().form_valid(*args, **kwargs)
+        message_maps_being_updated(self.request, map_ids | map_ids_redrawn_for(self.object))
+        return response
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -90,6 +128,55 @@ def quest_map(request, scape_id):
     return quest_map_personalized(request, scape_id, None)
 
 
+def _quest_status_ids(user):
+    """Split the quests this student has handed in into approved and still-waiting.
+
+    Covers their WHOLE history rather than the semester they are in now (#2678): a map is a
+    picture of what they have done, and work from an earlier term is no less done for the
+    term having ended.
+
+    A quest with an approved submission counts as approved even when a later repeat of it is
+    waiting, so a quest that has ever counted for them keeps saying so rather than flipping
+    back on a resubmission.
+
+    Args:
+        user: the student whose map is being drawn.
+
+    Returns:
+        tuple[list[int], list[int]]: the quest ids to mark approved, and those to mark
+        awaiting approval. Sorted, so the rendered page is identical between requests.
+    """
+    # is_completed means handed in; is_approved is the teacher's decision on it. One query
+    # over both, rather than one per status. order_by() drops the manager's default ordering,
+    # which the database would have to sort the student's whole submission history to honour:
+    # the rows go into sets here, and the ids come back out sorted.
+    handed_in = QuestSubmission.objects.all_completed(user=user, active_semester_only=False).order_by()
+    approved, awaiting = set(), set()
+    for quest_id, is_approved in handed_in.values_list('quest_id', 'is_approved'):
+        (approved if is_approved else awaiting).add(quest_id)
+    return sorted(approved), sorted(awaiting - approved)
+
+
+def _earned_badge_ids(user):
+    """The badges this student holds, for colouring the badge nodes on a map (#2678).
+
+    Badges appear on maps alongside quests, and they earn the same green: a badge is either
+    granted or not, with nothing corresponding to a submission waiting on a teacher, so no
+    badge is ever yellow.
+
+    All-time for the same reason quests are: a badge earned last term is still theirs.
+
+    Args:
+        user: the student whose map is being drawn.
+
+    Returns:
+        list[int]: the badge ids to mark earned, sorted and deduplicated (a badge granted
+        more than once is one node on the map).
+    """
+    assertions = BadgeAssertion.objects.get_queryset(active_semester_only=False).get_user(user)
+    return sorted(set(assertions.values_list('badge_id', flat=True)))
+
+
 @non_public_only_view
 @login_required
 def quest_map_personalized(request, scape_id, user_id):
@@ -102,25 +189,27 @@ def quest_map_personalized(request, scape_id, user_id):
     if user == request.user or request.user.is_staff:
         # do not personalize for staff accounts
         if not user.is_staff:
-            completed_qs = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
-            quest_ids = completed_qs.values_list('quest__id', flat=True)
-            # Evalute and remove doubels by converting to a set
-            quest_ids = set(quest_ids)
+            approved_quest_ids, awaiting_quest_ids = _quest_status_ids(user)
+            earned_badge_ids = _earned_badge_ids(user)
             personalized_user = user
         else:
-            quest_ids = None
+            approved_quest_ids, awaiting_quest_ids, earned_badge_ids = [], [], []
             personalized_user = None
 
         scape = get_object_or_404(CytoScape, id=scape_id)
 
-        if scape.class_styles_json is None or scape.class_styles_json is None:
+        if scape.elements_json is None or scape.class_styles_json is None:
             scape.update_cache()
 
         context = {
             'scape': scape,
-            'elements': scape.elements_json,
-            'class_styles': scape.class_styles_json,
-            'completed_quests': quest_ids,
+            # Parsed here so the template can hand them to json_script, which escapes <, > and &
+            # on the way into the page: a name holding "</script>" cannot end the block (#2519).
+            'elements': json.loads(scape.elements_json),
+            'class_styles': json.loads(scape.class_styles_json),
+            'approved_quests': approved_quest_ids,
+            'awaiting_approval_quests': awaiting_quest_ids,
+            'earned_badges': earned_badge_ids,
             'fullscreen': True,
             'personalized_user': personalized_user,
         }
@@ -205,7 +294,7 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
         self.object = form.save()
         messages.success(
             self.request,
-            f"New map {self.object.name} was successfully generated."
+            format_html("New map {} was successfully generated.", link_to(self.object, self.object.name)),
         )
         return HttpResponseRedirect(self.get_success_url())
 
@@ -215,6 +304,7 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def regenerate(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
     try:
@@ -228,18 +318,14 @@ def regenerate(request, scape_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def regenerate_all(request):
-    scapes = CytoScape.objects.all()
-    if scapes.count() > 5:
-        messages.warning(request, "You have a lot of maps, so the map regeneration is being processed in the background. It may take a few minutes.")  # noqa
-        regenerate_all_maps.apply_async(args=[request.user.id], queue='default')
-    else:
-        for scape in CytoScape.objects.all():
-            try:
-                scape.regenerate()
-            except scape.InitialObjectDoesNotExist:
-                messages.warning(request, f"The initial object for the '{scape.name} Map' no longer exists. The map has now been removed too.")
-
-        messages.success(request, "All valid quest maps have been regenerated.")
+    # Offload to celery: regenerating maps builds each map's full graph JSON in memory, so
+    # doing it in the request would scale a single web request's memory with the number and
+    # size of maps -- one of the per-request memory blowups tracked in #2081. The task
+    # regenerates each map, deletes any whose initial object no longer exists, and notifies
+    # the requesting user of failures and completion.
+    messages.info(request, "Map regeneration is being processed in the background. You'll be notified when it's complete.")
+    regenerate_all_maps.apply_async(args=[request.user.id], queue='default')
 
     return redirect('djcytoscape:primary')

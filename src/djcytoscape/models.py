@@ -8,9 +8,10 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.urls import reverse
-from django.db import models
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 
 from url_or_relative_url_field.fields import URLOrRelativeURLField
 
@@ -133,7 +134,15 @@ class CytoElement(models.Model):
 
         # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before
         # other nodes within that comound node (campaign)
-        ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
+
+        # `id` is the final tiebreaker so this is a *total* order: without it, sibling elements
+        # (same group and data_parent — e.g. every top-level node, whose data_parent is NULL) come
+        # back in whatever order Postgres happens to return, which shifts as regenerate() deletes and
+        # recreates rows. Cytoscape's dagre layout breaks ties between same-rank nodes by their input
+        # order, so that unstable emission order made the map toggle between layouts on each
+        # regeneration. Ordering by id (i.e. deterministic creation order) makes the emitted JSON —
+        # and therefore the rendered layout — identical every time. Issue #1977.
+        ordering = ['-group', models.F('data_parent').asc(nulls_first=True), 'id']
 
     def __str__(self):
         if self.group == self.NODES:
@@ -218,7 +227,23 @@ class CytoElement(models.Model):
         # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
         # Just save the model name and the id seperately?
         """
-        return str(type(obj).__name__) + ": " + str(obj.id)
+        return CytoElement.generate_selector_id_for(type(obj), obj.id)
+
+    @staticmethod
+    def generate_selector_id_for(model_class, object_id):
+        """The same selector id as `generate_selector_id`, from a model and an id.
+
+        For a caller that holds those without the object: a Prereq's generic foreign key
+        columns, say, which name their target without loading it.
+
+        Args:
+            model_class: the model the object is an instance of.
+            object_id: the object's primary key.
+
+        Returns:
+            str: the selector id, e.g. "Quest: 21".
+        """
+        return str(model_class.__name__) + ": " + str(object_id)
 
     @staticmethod
     def get_selector_styles_json_dict(selector, styles):
@@ -373,16 +398,22 @@ class TempCampaign:
 class CytoScapeQueryset(models.QuerySet):
 
     def get_maps_as_formatted_string(self):
-        """ returns queryset of maps as grammatically correct string with hyperlinks to map pages
-        [map1]
-        >>> map1
-        [map1, map2]
-        >>> map1 and map2
-        [map1, map2, ..., mapN]
-        >>> map1, map2, ..., and mapN
+        """Name every map in this queryset as a list of links, read as a sentence.
+
+        Each map is linked to its own page, and the names are joined the way the count
+        calls for::
+
+            [map1]                  ->  map1
+            [map1, map2]            ->  map1 and map2
+            [map1, map2, ..., mapN] ->  map1, map2, ..., and mapN
+
+        Returns:
+            SafeString | None: the linked names, safe to render, with each map's own name
+            escaped; None when the queryset is empty.
         """
-        # .join functions do not convert to str
-        names = [f'<a href="{scape.get_absolute_url()}">{str(scape)}</a>' for scape in self]
+        # format_html rather than an f-string: the result is handed to a django message, which
+        # renders markup only when it is marked safe, and which escapes the map name on the way in.
+        names = [format_html('<a href="{}">{}</a>', scape.get_absolute_url(), str(scape)) for scape in self]
 
         if self.count() == 0:
             return None
@@ -390,83 +421,20 @@ class CytoScapeQueryset(models.QuerySet):
             return names[0]
         # oxford comma not applicable
         elif self.count() == 2:
-            return " and ".join(names)
-        # oxford comma
+            return format_html('{} and {}', *names)
+        # oxford comma. str.join would drop the safeness the links were just built with.
         else:
-            return ", ".join(names[:-1]) + f", and {names[-1]}"
+            return format_html(
+                '{}, and {}',
+                format_html_join(', ', '{}', ((name,) for name in names[:-1])),
+                names[-1],
+            )
 
 
 class CytoScapeManager(models.Manager):
 
     def get_queryset(self):
         return CytoScapeQueryset(self.model, using=self._db)
-
-    def generate_random_tree_scape(self, name, size=100):
-        scape = CytoScape(
-            name=name,
-            layout_name='breadthfirst',
-            layout_options="directed: true, spacingFactor: " + str(1.75 * 30 / size),
-        )
-        scape.save()
-
-        # generate starting node
-        source_node = CytoElement(scape=scape, group=CytoElement.NODES, )
-        source_node.save()
-        node_list = [source_node]
-        count = 1
-        while node_list and count < size:
-            current_node = random.choice(node_list)
-            # 10% chance to split branch, 10% to cap it
-            split = random.random()
-            children = 1
-            if split < .10:
-                children = random.randint(1, 3)  # 1 to 3
-
-            if current_node is source_node:
-                children = 10
-            if split < 90:  # create the target nodes, connect them to source, add them to list
-                for _i in range(0, children):
-                    new_node = CytoElement(scape=scape, group=CytoElement.NODES, )
-                    new_node.save()
-                    node_list.append(new_node)
-                    edge = CytoElement(
-                        scape=scape, group=CytoElement.EDGES,
-                        data_source=current_node,
-                        data_target=new_node,
-                    )
-                    edge.save()
-                    count += 1
-
-            if len(node_list) > 1:  # don't cap last node
-                node_list.remove(current_node)
-
-        return scape
-
-    def generate_random_scape(self, name, size=100):
-        new_scape = CytoScape(
-            name=name,
-        )
-        new_scape.save()
-
-        # generate nodes
-        for _i in range(0, size):
-            new_node = CytoElement(
-                scape=new_scape,
-                group=CytoElement.NODES,
-            )
-            new_node.save()
-
-        # generate edges
-        for _i in range(0, size * 3):
-            new_edge = CytoElement(
-                scape=new_scape,
-                group=CytoElement.EDGES,
-                data_source=CytoElement.objects.get_random_node(new_scape),
-                data_target=CytoElement.objects.get_random_node(new_scape),
-            )
-            new_edge.save()
-
-        return new_scape
 
     def get_map_for_init(self, initial_object):
         """Return the map that this object initiates, else return None"""
@@ -478,11 +446,56 @@ class CytoScapeManager(models.Manager):
 
     def get_related_maps(self, object_):
         """ returns all CytoScape maps associated with object as a queryset """
-        selector_id = CytoElement.generate_selector_id(object_)
+        return self._maps_drawing([CytoElement.generate_selector_id(object_)])
 
+    def get_maps_to_regenerate_for(self, object_):
+        """The maps a change to `object_` should rebuild: the ones drawing it, and the ones
+        drawing its prerequisites.
+
+        The prerequisites are what make this more than `get_related_maps`. A map draws only
+        objects that are active, so a draft quest is drawn on no map, and asking which maps
+        draw it answers "none" for the one change that should put it on one: publishing it
+        (#2663). Where it lands is not a mystery, though. A map is built by walking forward
+        from its initial object to the objects that rely on what it has already drawn, so a
+        quest joins a map exactly where one of its prerequisites already sits, and those
+        maps are the ones with something new to draw.
+
+        Reading the prerequisites rather than every map also keeps the answer honest in the
+        other direction: a quest waiting behind a prerequisite that is itself off the map
+        has nothing to add to any map, and gets none.
+
+        Args:
+            object_: the Quest, Badge or Rank that changed.
+
+        Returns:
+            QuerySet: the CytoScape maps to rebuild, without duplicates.
+        """
+        selector_ids = [CytoElement.generate_selector_id(object_)]
+
+        # Rank has no prerequisites of its own (only Quest and Badge carry HasPrereqsMixin),
+        # so it contributes just its own node.
+        prereqs = object_.prereqs() if hasattr(object_, 'prereqs') else []
+
+        for prereq in prereqs:
+            for content_type_id, object_id in (
+                (prereq.prereq_content_type_id, prereq.prereq_object_id),
+                (prereq.or_prereq_content_type_id, prereq.or_prereq_object_id),
+            ):
+                # built from the generic foreign key's own columns rather than by following
+                # it. The model and the id are all a selector needs, and ContentType.get_for_id
+                # is cached for the process, so a run of saves does not pay a query per
+                # prerequisite; a Prereq whose target is gone is simply skipped.
+                if content_type_id is not None and object_id is not None:
+                    model_class = ContentType.objects.get_for_id(content_type_id).model_class()
+                    selector_ids.append(CytoElement.generate_selector_id_for(model_class, object_id))
+
+        return self._maps_drawing(selector_ids)
+
+    def _maps_drawing(self, selector_ids):
+        """The maps carrying a node for any of these selector ids, as a queryset."""
         related_ids = CytoElement.objects.filter(
             group=CytoElement.NODES,
-            selector_id=selector_id,
+            selector_id__in=selector_ids,
         ).values_list('scape__id', flat=True)
 
         return self.get_queryset().filter(id__in=related_ids)
@@ -562,18 +575,25 @@ class CytoScape(models.Model):
         return elements.select_related('data_parent', 'data_source', 'data_target')
 
     def elements_dict(self):
-        elements = self.elements()
-        nodes = elements.filter(group=CytoElement.NODES)
-        edges = elements.filter(group=CytoElement.EDGES)
+        """Serialize this scape's nodes and edges into the dict cytoscape/dagre consumes.
 
-        nodes_list = [node.json_dict() for node in nodes]
-        edges_list = [edge.json_dict() for edge in edges]
+        Nodes are emitted parents-before-children because cytoscape requires a compound parent
+        to be defined before any child that references it, then in node-id order, which is the
+        deterministic ordering issue #2012 asked for: dagre decides same-rank order by
+        crossing-minimization rather than input order, but a stable input still keeps a map
+        looking the same between generations.
+        """
+        nodes = list(self.elements().filter(group=CytoElement.NODES))
+        edges = list(self.elements().filter(group=CytoElement.EDGES))
 
-        elements_dict = {
-            'nodes': nodes_list,
-            'edges': edges_list,
+        # Parents (compound campaign nodes) before children, then deterministic node-id order (#2012).
+        nodes.sort(key=lambda n: (n.data_parent_id is not None, n.id))
+        edges.sort(key=lambda e: e.id)
+
+        return {
+            'nodes': [node.json_dict() for node in nodes],
+            'edges': [edge.json_dict() for edge in edges],
         }
-        return elements_dict
 
     def generate_elements_json(self):
         return json.dumps(self.elements_dict())
@@ -597,6 +617,18 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
+        """Build the node label shown on the map for a mappable object.
+
+        Supports the object types that can appear on a quest map: a Quest, a Badge, or a
+        Rank (all of which have an ``xp`` attribute), and a Category (campaign). The label is
+        ``"<prefix><name> (<xp/points>)"``: a Badge/Rank name is prefixed with ``"Badge: "`` /
+        ``"Rank: "``, the name is truncated with an ellipsis past a max length that shrinks as
+        the xp value grows, and the parenthetical suffix is the object's xp (a ``+`` marks
+        student-enterable xp) or, for a Category, its total xp sum.
+
+        :param obj: the Quest/Badge/Rank/Category the node represents.
+        :return: the display label string for the node.
+        """
         # set max label length in characters
         # object labels with large xp values require a shorter name length so all values when combined comply with max label length
         if hasattr(obj, 'xp'):
@@ -622,31 +654,17 @@ class CytoScape(models.Model):
             else:
                 plus = ""
             post = f" ({str(obj.xp)}{plus})"
-        elif type(obj) is Category:
+        # Every object placed on a map is a Quest, Badge, or Rank (all of which have an
+        # ``xp`` attribute, handled above) or a Category, so this elif always matches when
+        # reached; the implicit "neither" fall-through never happens in practice.
+        elif type(obj) is Category:  # pragma: no branch
             post = f" ({str(obj.xp_sum())} XP)"
 
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
         #     if obj.max_repeats != 0:
         #         post += ' ⟲'
 
-        # json.dumps to escape special characters in the object, such as single and double quote marks.
-        # dumps not working...just try manually
-        title = title.replace('"', '\\"')
         return title + post
-
-    def get_last_node_in_campaign(self, parent_node, offset=0):
-        """
-        :param offset: offset from last node by this (i.e. 1 --> second last node)
-        :param parent_node: the compound node/parent, i.e. campaign
-        :return: the most recent node added to the campaign (added to the compound/parent node) by using the highest id
-        """
-        try:
-            # latest normally used with dates, but actually works with other fields too!
-            # return CytoElement.objects.all_for_campaign(self, parent_node).latest('id')
-            qs = CytoElement.objects.all_for_campaign(self, parent_node).order_by('-id')
-            return qs[offset]
-        except self.DoesNotExist:
-            return None
 
     def create_first_node(self, obj):
         """ Creates the first node from `obj`, then if this map has a parent, creates an aditiona node to link back to back to the parent scape/map.
@@ -675,43 +693,15 @@ class CytoScape(models.Model):
 
         return first_node
 
-    def create_child_map_node(self, obj, data_source):
-        """ If this obj is a transition node (to a new map, make a node to link to the next map"""
-        ct = ContentType.objects.get_for_model(obj)
-        # obj = ct.get_object_for_this_type(id=obj.id)
-
-        child_map_qs = CytoScape.objects.filter(initial_content_type=ct.id, initial_object_id=obj.id)
-        if child_map_qs.exists():
-            child_map = child_map_qs[0]
-            label = f"{child_map.name} Map"
-        else:
-            label = "The Void"
-
-        child_map_node, _ = CytoElement.objects.get_or_create(
-            scape=self,
-            group=CytoElement.NODES,
-            label=label,
-            href=reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id]),  # <content_type_id>, <object_id>, <originating_scape_id>
-            classes="link child-map",
-        )
-
-        # link them together with an edge
-        CytoElement.objects.get_or_create(
-            scape=self,
-            group=CytoElement.EDGES,
-            data_source=data_source,
-            data_target=child_map_node,
-        )
-
-        return child_map_node
-
     def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
         # check for an icon
         if hasattr(obj, 'get_icon_url'):
             img_url = obj.get_icon_url()
-        else:
+        # Defensive fallback: every object that reaches map generation (Quest, Badge) defines
+        # get_icon_url, so this branch is never taken in practice -- excluded from coverage.
+        else:  # pragma: no cover
             img_url = "none"
 
         # check for map transition
@@ -746,11 +736,8 @@ class CytoScape(models.Model):
 
     def get_temp_campaign(self, campaign_id) -> TempCampaign:
         for campaign in self.campaign_list:
-            try:
-                if campaign.node_id == campaign_id:
-                    return campaign
-            except ValueError:
-                pass
+            if campaign.node_id == campaign_id:
+                return campaign
         return None
 
     def add_to_campaign(self, obj, target_node, source_node):
@@ -772,13 +759,16 @@ class CytoScape(models.Model):
         if hasattr(obj, 'campaign') and obj.campaign is not None:
             campaign = obj.campaign
 
-            # Create a node for this campaign (or get it if it already exists)
-            campaign_node, campaign_created = CytoElement.objects.get_or_create(
+            # Create a node for this campaign (or get it if it already exists).
+            # selector_id ties the compound node back to its Category, the same way quest and
+            # badge nodes point at their objects, so a campaign node can be found from the
+            # Category it draws.
+            campaign_node, _ = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
                 label=CytoScape.generate_label(obj.campaign),
                 classes="campaign",
-                # defaults={'attribute': value},
+                defaults={'selector_id': CytoElement.generate_selector_id(obj.campaign)},
             )
 
             # Add a parent (i.e. campaign) to the target node (to form a compound node)
@@ -786,9 +776,16 @@ class CytoScape(models.Model):
             target_node.save()
 
             # TempCampaign utility for cleaning up the edges and making the resulting map look good, after the entire map is built
-            if campaign_created:
-                self.campaign_list.append(TempCampaign(campaign_node.id))
+            # Whether this run has met the campaign yet, which is what the caller and the edge
+            # cleanup both want to know. get_or_create reports whether it wrote the row, and the
+            # two answers differ whenever the node is already in the table: campaign_list is
+            # rebuilt per run, so it would hold nothing for that node and the add_node below
+            # would be reached with None (#2656).
             temp_campaign = self.get_temp_campaign(campaign_node.id)  # not a Django model, so custom method
+            campaign_created = temp_campaign is None
+            if campaign_created:
+                temp_campaign = TempCampaign(campaign_node.id)
+                self.campaign_list.append(temp_campaign)
 
             # TODO: Nodes might be present multiple times through different source nodes?  check and combine
             temp_campaign.add_node(target_node.id, source_node.id)
@@ -868,8 +865,10 @@ class CytoScape(models.Model):
                         # 5 remove edges between quests and common reliants
                         for quest_node in campaign.nodes:
                             # we already know all quests have this reliant node in common, so the edges should all exist
-                            # unless it has an internal reliant...
-                            if reliant_node_id in quest_node.reliant_node_ids:
+                            # unless it has an internal reliant (a common reliant can be shared by the campaign
+                            # via has_internal_reliant() even for a member that doesn't directly hold it), in
+                            # which case there is no direct edge to remove.
+                            if reliant_node_id in quest_node.reliant_node_ids:  # pragma: no branch
                                 edge_node = get_object_or_404(CytoElement,
                                                               data_source_id=quest_node.id,
                                                               data_target_id=reliant_node_id)
@@ -1032,11 +1031,55 @@ class CytoScape(models.Model):
         self.update_cache()
         self.save()
 
-    def regenerate(self):
-        if self.initial_content_object is None:
-            self.delete()
-            raise (self.InitialObjectDoesNotExist)
+    def regenerate(self, on_lock_acquired=None):
+        """Rebuild this map's elements from the objects it maps.
 
-        # Delete existing nodes
-        CytoElement.objects.all_for_scape(self).delete()
-        self.calculate_nodes()
+        Args:
+            on_lock_acquired: optional callable, run once this map's row is held and
+                immediately before the rebuild reads anything. `regenerate_map` releases
+                its claim on the map there (djcytoscape/tasks.py): up to that moment the
+                rebuild has read nothing it keeps, so it still covers every save made
+                while it waited for the row, and past it, it does not.
+
+        Raises:
+            InitialObjectDoesNotExist: if the object the map starts from is gone, in which
+                case the map deletes itself, since it has nothing left to draw.
+        """
+        try:
+            with transaction.atomic():
+                # One regeneration of a map at a time. Saving any Quest, Badge, Rank or Prereq
+                # queues regenerate_map for each related map (djcytoscape/signals.py), so editing a
+                # single quest can put several tasks on the same map. Each of them starts by
+                # deleting the elements the others are midway through building on, and the loser
+                # either meets a campaign node it did not create or writes an edge to a node that
+                # has just been deleted (#2656). Taking the map's own row makes the second task
+                # wait for the first and then rebuild from a settled starting point.
+                #
+                # Holding it for the whole rebuild is also what keeps the map readable throughout:
+                # the delete and the nodes replacing it land together, so nobody loading the page
+                # meets the empty gap between them.
+                CytoScape.objects.select_for_update().get(pk=self.pk)
+
+                # Load this map, and the object it starts from, again now that the row is
+                # ours. Waiting for it can take as long as the whole rebuild ahead of it, and
+                # every save made during that wait is collapsed into this rebuild rather than
+                # given one of its own (djcytoscape/tasks.py), so building from what was read
+                # before the wait would publish a map missing them with nothing queued to
+                # correct it. refresh_from_db clears the cached initial_content_object too,
+                # which is the one calculate_nodes builds the map's first node from.
+                self.refresh_from_db()
+
+                if on_lock_acquired is not None:
+                    on_lock_acquired()
+
+                if self.initial_content_object is None:
+                    raise self.InitialObjectDoesNotExist
+
+                # Delete existing nodes
+                CytoElement.objects.all_for_scape(self).delete()
+                self.calculate_nodes()
+        except self.InitialObjectDoesNotExist:
+            # Out here rather than inside the block above: raising rolls that block back,
+            # so a delete made in it would be undone along with everything else.
+            self.delete()
+            raise

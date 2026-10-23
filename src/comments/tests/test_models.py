@@ -1,19 +1,27 @@
+import posixpath
+import tempfile
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.test import TestCase
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
-from comments.models import Comment, clean_html
+from announcements.models import Announcement
+from comments.models import Comment, Document, clean_html
+from utilities.uploads import is_own_folder
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
 
-class CommentManagerTest(TenantTestCase):
+class CommentManagerTest(ByteDeckTenantTestCase):
 
     def test_create_comment__with_required_parameters(self):
+        """create_comment() with only user, text, and path leaves the target and parent unset."""
         user = baker.make(User)
         path = "/some/path/"
         text = "This is a comment."
@@ -21,12 +29,13 @@ class CommentManagerTest(TenantTestCase):
 
         self.assertEqual(comment.user, user)
         self.assertEqual(comment.text, text)
-        self.assertEqual(comment.path, path + "#comment-" + str(comment.id))
+        self.assertEqual(comment.path, f"{path}#comment-{comment.id}")
         self.assertIsNone(comment.target_content_type)
         self.assertIsNone(comment.target_object_id)
         self.assertIsNone(comment.parent)
 
     def test_create_comment__without_path(self):
+        """create_comment() raises ValueError when no path is provided."""
         user = baker.make(User)
         text = "This is a comment."
         with self.assertRaises(ValueError) as cm:
@@ -34,6 +43,7 @@ class CommentManagerTest(TenantTestCase):
         self.assertEqual(str(cm.exception), "Must include a path when adding a comment")
 
     def test_create_comment__without_user(self):
+        """create_comment() raises ValueError when no user is provided."""
         path = "/some/path/"
         text = "This is a comment."
         with self.assertRaises(ValueError) as cm:
@@ -41,6 +51,7 @@ class CommentManagerTest(TenantTestCase):
         self.assertEqual(str(cm.exception), "Must include a user when adding a comment")
 
     def test_create_comment__with_all_parameters(self):
+        """create_comment() stores the target content type/object id and parent when supplied."""
         user = User.objects.create(username="testuser")
         path = "/some/path/"
         text = "This is a comment."
@@ -50,32 +61,72 @@ class CommentManagerTest(TenantTestCase):
 
         self.assertEqual(comment.user, user)
         self.assertEqual(comment.text, text)
-        self.assertEqual(comment.path, path + "#comment-" + str(comment.id))
+        self.assertEqual(comment.path, f"{path}#comment-{comment.id}")
         self.assertEqual(comment.target_content_type, ContentType.objects.get_for_model(target))
         self.assertEqual(comment.target_object_id, target.id)
         self.assertEqual(comment.parent, parent)
 
+    def test_create_comment__empty_text_is_allowed(self):
+        """A draft comment (e.g. a quest submission's draft_comment) is created empty before
+        the student types anything, so empty text must pass full_clean() (issue #1630).
+        """
+        comment = Comment.objects.create_comment(user=baker.make(User), text="", path="/some/path/")
+        self.assertEqual(comment.text, "")
+
+    def test_create_comment__invalid_data_raises_validation_error(self):
+        """create_comment() runs full_clean(), so invalid data raises ValidationError rather
+        than being silently saved (issue #1630).
+        """
+        user = baker.make(User)
+        with self.assertRaises(ValidationError):
+            # path exceeds the model's max_length of 350
+            Comment.objects.create_comment(user=user, text="hi", path="/" + "x" * 400)
+
+
+class CommentModelValidationTest(ByteDeckTenantTestCase):
+    """flag()/unflag() validate the comment before saving (issue #1630)."""
+
+    def setUp(self):
+        """Create a valid comment used by each validation test."""
+        self.comment = Comment.objects.create_comment(user=baker.make(User), text="hi", path="/some/path/")
+
+    def test_flag__runs_full_clean(self):
+        """flag() calls full_clean() before save(), so an invalid comment raises."""
+        self.comment.path = "/" + "x" * 400  # now exceeds max_length
+        with self.assertRaises(ValidationError):
+            self.comment.flag()
+
+    def test_unflag__runs_full_clean(self):
+        """unflag() calls full_clean() before save(), so an invalid comment raises."""
+        self.comment.flagged = True
+        self.comment.path = "/" + "x" * 400  # now exceeds max_length
+        with self.assertRaises(ValidationError):
+            self.comment.unflag()
+
 
 class CleanHTMLTests(TestCase):
-    def test_format_unformatted_links(self):
+    def test_clean_html__formats_unformatted_links(self):
+        """Bare URLs in text are wrapped in anchor tags opening in a new tab."""
         text = '<p>Visit my website: example.com</p>'
         expected_output = '<p>Visit my website: <a href="http://example.com" target="_blank">example.com</a></p>'
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
-    def test_skip_formatted_links(self):
+    def test_clean_html__skips_already_formatted_links(self):
+        """Existing anchor tags are left unchanged."""
         text = '<p>Visit my website: <a href="http://example.com" target="_blank">example.com</a></p>'
         expected_output = '<p>Visit my website: <a href="http://example.com" target="_blank">example.com</a></p>'
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
-    def test_set_links_target_blank(self):
+    def test_clean_html__sets_links_target_blank(self):
+        """Anchor tags without a target get target="_blank" added."""
         text = '<a href="http://example.com">Link</a>'
         expected_output = '<a href="http://example.com" target="_blank">Link</a>'
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
-    def test_fix_missing_closing_ul_tag(self):
+    def test_clean_html__fixes_missing_closing_ul_tag(self):
         """ TODO: Test passes but the function isn't very good.
         Closes the list in the wrong place.  Need to fix the function."""
         text = '<ul><li>Item 1</li><p>Paragraph</p>'
@@ -83,31 +134,66 @@ class CleanHTMLTests(TestCase):
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
-    def test_remove_script_tags(self):
+    def test_clean_html__keeps_a_list_with_formatted_items_as_one_list(self):
+        """A list whose items hold bold text stays one list, rather than each later item being
+        pushed into a list of its own nested inside it."""
+        text = '<ul><li><b>one</b></li><li><b>two</b></li><li>a <a href="http://example.com">link</a></li><li>four</li></ul>'
+        expected_output = (
+            '<ul><li><b>one</b></li><li><b>two</b></li>'
+            '<li>a <a href="http://example.com" target="_blank">link</a></li><li>four</li></ul>'
+        )
+        self.assertEqual(clean_html(text), expected_output)
+
+    def test_clean_html__keeps_a_numbered_list_numbered(self):
+        """A numbered list's items are already in a list, so they are not wrapped in a bulleted one."""
+        text = '<ol><li>one</li><li><b>two</b></li><li>three</li></ol>'
+        self.assertEqual(clean_html(text), text)
+
+    def test_clean_html__orphan_li_after_empty_ul_is_left_in_place(self):
+        """A bare <li> whose previous <li> was skipped (because that one followed a <ul>) hits the
+        'no open <ul> group yet' path and is left where it is rather than re-wrapped."""
+        cleaned = clean_html('<ul></ul><li>A</li><li>B</li>')
+        # the two orphan <li>s are left exactly where they were, not re-wrapped in a new <ul>
+        self.assertEqual(cleaned, '<ul></ul><li>A</li><li>B</li>')
+
+    def test_clean_html__removes_script_tags(self):
+        """Script tags and their contents are stripped from the html."""
         text = '<p>Some text<script>alert("Hello");</script></p>'
         expected_output = '<p>Some text</p>'
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
+    def test_clean_html__convert_newlines_false_keeps_newlines_unbroken(self):
+        """With convert_newlines=False, newlines in the text are preserved rather than turned into <br> tags."""
+        text = "line one\nline two"
+        cleaned = clean_html(text, convert_newlines=False)
+        self.assertNotIn("<br>", cleaned)
+        self.assertIn("\n", cleaned)  # the newline is kept, not dropped or collapsed
 
-class CommentModelTest(TenantTestCase):
 
-    def setUp(self):
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
+class CommentModelTest(ByteDeckTenantTestCase):
 
-    def test_comment_creation(self):
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and student shared across the test methods."""
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+
+    def test_comment_creation__str_returns_text(self):
+        """A comment is created and its string representation is its text."""
         comment = baker.make(Comment)
         self.assertIsInstance(comment, Comment)
         self.assertEqual(str(comment), comment.text)
 
-    def test_get_absolute_url(self):
+    def test_get_absolute_url__returns_url(self):
+        """A comment exposes a non-null absolute url."""
         comment = baker.make(Comment)
         self.assertIsInstance(comment, Comment)
         self.assertEqual(str(comment), comment.text)
         self.assertIsNotNone(comment.get_absolute_url())
 
-    def test_orphaned_li_tags(self):
+    def test_orphaned_li_tags__wrapped_in_ul(self):
+        """Orphaned <li> tags in comment text are wrapped in a <ul> on save."""
         bad_comment_texts = [
             "<li>1</li><li>2</li>",
             "<div><li>1</li><li>2</li>",
@@ -125,7 +211,8 @@ class CommentModelTest(TenantTestCase):
             self.assertIn("<ul>", comment.text)
             self.assertIn("</ul>", comment.text)
 
-    def test_script_removal(self):
+    def test_script_removal__strips_script_tags(self):
+        """Script tags in comment text are removed on save."""
         bad_text = "<p>stuff</p><script>do bad stuff</script>"
 
         comment = Comment.objects.create_comment(
@@ -136,7 +223,8 @@ class CommentModelTest(TenantTestCase):
 
         self.assertNotIn("<script>", comment.text)
 
-    def test_comment_text_unchanged(self):
+    def test_comment_text__unchanged_for_valid_html(self):
+        """Valid html in comment text is preserved unchanged."""
         text = "<p>This is some good html snippet that shouldn't be changed</p>"
 
         comment = Comment.objects.create_comment(
@@ -149,29 +237,33 @@ class CommentModelTest(TenantTestCase):
 
         self.assertHTMLEqual(comment.text, text)
 
-    def test_flag(self):
+    def test_flag__sets_flagged_true(self):
+        """flag() marks an unflagged comment as flagged."""
         comment = baker.make(Comment)
         self.assertFalse(comment.flagged)
         comment.flag()
         self.assertTrue(comment.flagged)
 
-    def test_unflag(self):
+    def test_unflag__sets_flagged_false(self):
+        """unflag() clears the flagged state of a flagged comment."""
         comment = baker.make(Comment, flagged=True)
         self.assertTrue(comment.flagged)
         comment.unflag()
         self.assertFalse(comment.flagged)
 
-    def test_get_origin(self):
+    def test_get_origin__returns_path(self):
+        """get_origin() returns the comment's path."""
         comment = baker.make(Comment)
         self.assertEqual(comment.get_origin(), comment.path)
 
-    def test_is_child(self):
+    def test_is_child__true_only_for_child(self):
+        """is_child() is true for a comment with a parent and false otherwise."""
         parent = baker.make(Comment)
         child = baker.make(Comment, parent=parent)
         self.assertTrue(child.is_child())
         self.assertFalse(parent.is_child())
 
-    def test_get_children(self):
+    def test_get_children__returns_all_children(self):
         "Test that method returns a queryset including all children"
         parent = baker.make(Comment)
 
@@ -183,3 +275,211 @@ class CommentModelTest(TenantTestCase):
         child2 = baker.make(Comment, parent=parent)
         children = parent.get_children()
         self.assertQuerySetEqual(children, [child, child2], ordered=False)
+
+    def test_get_target_object__returns_target_when_set(self):
+        """get_target_object() resolves the comment's generic target via its content type."""
+        target = baker.make('announcements.Announcement')
+        comment = Comment.objects.create_comment(user=self.student, text="hi", path="/some/path/", target=target)
+        self.assertEqual(comment.get_target_object(), target)
+
+    def test_get_target_object__returns_none_when_unset(self):
+        """get_target_object() returns None when the comment has no target object."""
+        comment = Comment.objects.create_comment(user=self.student, text="hi", path="/some/path/")
+        self.assertIsNone(comment.get_target_object())
+
+
+class DocumentModelTest(ByteDeckTenantTestCase):
+    """Tests for the Document model (a file attached to a comment)."""
+
+    def test_is_valid_portfolio_type__true_for_image_and_video_false_otherwise(self):
+        """is_valid_portfolio_type() accepts image/video attachments and rejects other file types."""
+        self.assertTrue(Document(docfile=SimpleUploadedFile("art.png", b"x")).is_valid_portfolio_type())
+        self.assertTrue(Document(docfile=SimpleUploadedFile("clip.mp4", b"x")).is_valid_portfolio_type())
+        self.assertFalse(Document(docfile=SimpleUploadedFile("notes.txt", b"x")).is_valid_portfolio_type())
+
+    def test_docfile__a_new_upload_never_takes_a_deleted_files_address(self):
+        """Two students attach files of the same name on the same day, and the first is deleted in
+        between, as a draft attachment is when its student removes it. The second must not be
+        stored at the address the first had: the CDN keeps serving a deleted file there for up to
+        a day, so whoever opened the second student's file got the first's (#2805)."""
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            first = Document.objects.create(docfile=SimpleUploadedFile("New_Piskel_3.gif", b"first student's"))
+            first_address = first.docfile.name
+            first.docfile.storage.delete(first_address)
+            first.delete()
+
+            second = Document.objects.create(docfile=SimpleUploadedFile("New_Piskel_3.gif", b"second student's"))
+
+        self.assertNotEqual(second.docfile.name, first_address)
+        self.assertEqual(posixpath.basename(second.docfile.name), "New_Piskel_3.gif")
+
+
+class DocumentFolderTest(ByteDeckTenantTestCase):
+    """The files attached to one comment share a folder of their own, so a student's web page finds
+    the stylesheet it links to beside it (#2861)."""
+
+    def setUp(self):
+        """A comment to attach files to, and a throwaway MEDIA_ROOT to store them in."""
+        media_root = tempfile.TemporaryDirectory()
+        self.addCleanup(media_root.cleanup)
+        media_override = override_settings(MEDIA_ROOT=media_root.name)
+        media_override.enable()
+        self.addCleanup(media_override.disable)
+        self.comment = self.new_comment()
+
+    def new_comment(self):
+        """A comment by a new student, with no target, as a draft submission comment starts out.
+
+        Returns:
+            Comment: the comment.
+        """
+        return Comment.objects.create_comment(user=baker.make(get_user_model()), path="/", text="", target=None)
+
+    def attach(self, name, content=b"x", comment=None):
+        """Attach a file to a comment, as a draft save or a submit does.
+
+        Args:
+            name (str): the file's name.
+            content (bytes): the file's content.
+            comment (Comment): the comment to attach it to; this test's own when left out.
+
+        Returns:
+            Document: the stored attachment.
+        """
+        return Document.objects.create(comment=comment or self.comment, docfile=SimpleUploadedFile(name, content))
+
+    def folder(self, document):
+        """The folder a document's file is stored in.
+
+        Args:
+            document (Document): the attachment.
+
+        Returns:
+            str: its folder, relative to the storage's root.
+        """
+        return posixpath.dirname(document.docfile.name)
+
+    def test_docfile__files_on_one_comment_share_a_folder(self):
+        """A web page and its stylesheet, attached by separate draft saves, land in one folder of
+        their own, so the page's link to `style.css` finds it."""
+        page = self.attach("index.html", b"<link rel='stylesheet' href='style.css'>")
+        stylesheet = self.attach("style.css", b"body { color: teal; }")
+
+        self.assertEqual(self.folder(stylesheet), self.folder(page))
+        self.assertTrue(is_own_folder(self.folder(page)))
+        self.assertEqual(posixpath.basename(stylesheet.docfile.name), "style.css")
+
+    def test_docfile__each_comment_has_its_own_folder(self):
+        """Another comment's files, even under the same names, go in a folder of their own."""
+        mine = self.attach("index.html")
+        theirs = self.attach("index.html", comment=self.new_comment())
+
+        self.assertNotEqual(self.folder(theirs), self.folder(mine))
+
+    def test_docfile__a_file_on_no_comment_gets_its_own_folder(self):
+        """Files on no comment have nothing to share a folder with."""
+        first = Document.objects.create(docfile=SimpleUploadedFile("photo.png", b"x"))
+        second = Document.objects.create(docfile=SimpleUploadedFile("photo.png", b"x"))
+
+        self.assertNotEqual(self.folder(second), self.folder(first))
+        self.assertTrue(is_own_folder(self.folder(second)))
+
+    def test_docfile__does_not_join_a_day_folder(self):
+        """A comment whose earlier file sits straight in its day's folder, from before every
+        upload had a folder of its own, doesn't pull a new file in among everyone's uploads from
+        that day: the new file gets a folder of its own."""
+        Document.objects.create(comment=self.comment, docfile="documents/2026/09/30/index.html")
+
+        stylesheet = self.attach("style.css")
+
+        self.assertTrue(is_own_folder(self.folder(stylesheet)))
+
+    def test_move_attachments_to_new_folder__moves_them_together(self):
+        """The comment's files move, contents and names intact, into one new folder, and the old
+        files go once the transaction commits."""
+        page = self.attach("index.html", b"<p>page</p>")
+        stylesheet = self.attach("style.css", b"body {}")
+        storage, old_folder = page.docfile.storage, self.folder(page)
+        old_names = [page.docfile.name, stylesheet.docfile.name]
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.comment.move_attachments_to_new_folder()
+
+        page.refresh_from_db()
+        stylesheet.refresh_from_db()
+        self.assertNotEqual(self.folder(page), old_folder)
+        self.assertEqual(self.folder(stylesheet), self.folder(page))
+        self.assertTrue(is_own_folder(self.folder(page)))
+        self.assertEqual(posixpath.basename(page.docfile.name), "index.html")
+        with storage.open(page.docfile.name) as moved:
+            self.assertEqual(moved.read(), b"<p>page</p>")
+        for old_name in old_names:
+            self.assertFalse(storage.exists(old_name))
+
+    def test_move_attachments_to_new_folder__keeps_the_old_files_until_the_commit(self):
+        """The old files are deleted only once the transaction commits, so a rollback can't leave a
+        row naming a file already gone."""
+        page = self.attach("index.html")
+        storage, old_name = page.docfile.storage, page.docfile.name
+
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.comment.move_attachments_to_new_folder()
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertTrue(storage.exists(old_name))
+
+    def test_move_attachments_to_new_folder__points_a_missing_file_at_the_new_folder_too(self):
+        """A file already gone from storage has nothing to copy, but its row moves with the rest:
+        left naming the old folder, it would offer that folder to the next upload, and a
+        replacement for the removed file would go back to its address."""
+        missing = self.attach("notes.txt")
+        page = self.attach("index.html")
+        missing.docfile.storage.delete(missing.docfile.name)
+        old_folder = self.folder(page)
+
+        self.comment.move_attachments_to_new_folder()
+        replacement = self.attach("style.css")
+
+        page.refresh_from_db()
+        missing.refresh_from_db()
+        self.assertEqual(self.folder(missing), self.folder(page))
+        self.assertNotEqual(self.folder(page), old_folder)
+        self.assertEqual(self.folder(replacement), self.folder(page))
+
+
+class CommentManagerPrefetchTest(ByteDeckTenantTestCase):
+    """The comments template reads each comment's attached documents and published question
+    answers, so all_with_target_object() prefetches both: a page with a long comment thread
+    must not cost a query per comment (#2168)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """An announcement with three commenting students: the announcements list renders these
+        threads and its comments carry no answers, the case that made the N+1 cost pure waste."""
+        cls.announcement = baker.make(Announcement)
+        cls.students = [User.objects.create_user(f"student{i}") for i in range(3)]
+
+    def setUp(self):
+        """Comment on the announcement as each student, one with a file attached."""
+        for student in self.students:
+            comment = Comment.objects.create_comment(
+                user=student, path="/announcements/", text="Nice announcement.", target=self.announcement)
+            if student is self.students[0]:
+                baker.make(Document, comment=comment,
+                           docfile=SimpleUploadedFile("notes.txt", b"file_content"))
+
+    def test_all_with_target_object__prefetches_documents_and_answers(self):
+        """Reading every comment's documents and answers costs no further queries.
+
+        Announcement comments never have question answers, so before the prefetch each one ran an
+        always-empty query for them, plus another for its documents.
+        """
+        comments = list(self.announcement.get_comments())
+        self.assertEqual(len(comments), 3)
+
+        with self.assertNumQueries(0):
+            attached = [document for comment in comments for document in comment.document_set.all()]
+            answers = [answer for comment in comments for answer in comment.question_submissions.all()]
+
+        self.assertEqual(len(attached), 1)
+        self.assertEqual(answers, [])

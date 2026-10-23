@@ -8,15 +8,15 @@ Save us all some time and frustration by working through these steps carefully, 
 
 ### Running Tests and Checking Code Style
 You can run tests either locally, or through the web container:
-1. This will run all the project's tests and if successful, will also check the code style using flake8 (make sure you're in your virtual environment):
-   * using venv: `python src/manage.py test src && flake8 src`
-   * using docker: `docker compose exec web bash -c "python src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+1. This will run all the project's tests and if successful, will also check the code style using ruff (make sure you're in your virtual environment):
+   * using venv: `python src/manage.py test src && ruff check src`
+   * using docker: `docker compose exec web bash -c "python src/manage.py test src && ruff check src"`  (assuming it's running. If not, change `exec` to `run`)
 1. Tests take too long, but you can speed them up a number of ways:
    * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
      `python src/manage.py test src --parallel --failfast`
    * Only run tests from a single app, for example: `python src/manage.py test src/announcements`
-   * Only run tests from a single test class: `python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`
-   * Only run a single test: `python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
+   * Only run tests from a single test class: `python src/manage.py test announcements.tests.test_views.AnnouncementViewTests`
+   * Only run a single test: `python src/manage.py test announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
 1. This project uses git pre-commit hooks, set up with the Python "[pre-commit](https://pre-commit.com/)" module. These hooks trigger a series of checks every time a new commit is made. They ensure that the code is formatted correctly, and some even auto-correct certain simple issues. However, we don't have pre-commit hooks for running our Django tests, so the full test suite must still be ran separately. All pre-commit hooks are defined in the [.pre-commit-config.yaml](.pre-commit-config.yaml) file. Note that if auto-corrections are made, the commit won't complete, and you'll need to run the commit command again. It can also be helpful to run these hooks manually to ensure you have everything setup correctly:
 
    * using venv: `pre-commit run`
@@ -46,9 +46,9 @@ or to run in a local venv (assuming you have activated it), start all the docker
 1. Write tests! See Test Requirements below for important details (if you are not comfortable with test-driven development, you can also write tests after writing code instead of before).  Also see "Running Tests and Checking Code Style" section.
 1. Write code!
 1. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
-   * venv: `python src/manage.py test src --failfast --parallel && flake8 src`
-   * docker: `docker compose exec web bash -c "python src/manage.py test src --failfast --parallel && flake8 src"`
-1. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number. Note that if your development environment is running inside of docker and not a Python virtual environment, the pre-commit hooks won't run properly. For this reason, you will be required to run your commit command inside of docker:
+   * venv: `python src/manage.py test src --failfast --parallel && ruff check src`
+   * docker: `docker compose exec web bash -c "python src/manage.py test src --failfast --parallel && ruff check src"`
+1. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number. **Prefix the commit message with the type of change** — one of `feat`, `fix`, `chore`, `style`, `refactor`, `docs`, `perf`, `test`, or `ci` — followed by a colon and a space (e.g. `fix: correct off-by-one in the student list pagination; Closes #123`); see this [primer on commit types](https://medium.com/@aslandjc7/git-is-a-powerful-version-control-system-but-writing-clear-and-meaningful-commit-messages-is-48eebc428a00). Note that if your development environment is running inside of docker and not a Python virtual environment, the pre-commit hooks won't run properly. For this reason, you will be required to run your commit command inside of docker:
    - venv: `git commit -am "Useful description of your changes; Closes #123"`
    - docker: `docker compose exec web bash -c "git commit -m 'Useful description of your changes; Closes #123'"` (ensure the commit message is enclosed in single and not double quotes)
 1. Repeat steps 4-9 above until the feature/issue is completed.
@@ -94,6 +94,8 @@ To verify the test coverage of your additions, you can run coverage during testi
 
 1. Except in the most trivial cases, provide a detailed description in your PR that fully details the changes you made, in plain English, and how they address the issue.  The project's expectation is described at https://www.pullrequest.com/blog/writing-a-great-pull-request-description/
 
+1. **Prefix your PR title with the type of change**, matching your commit prefixes — one of `feat`, `fix`, `chore`, `style`, `refactor`, `docs`, `perf`, `test`, or `ci` — for example `feat: add server-side pagination to the student list`.
+
 ### Documentation
 Please ensure your code is well documented. Do not assume that your code is obvious to reviewers, other developers, or even your future self:
 * All methods and classes must include a docstring that fully explains what the purpose of the function is, why it's needed, and what it's being used for.
@@ -113,8 +115,136 @@ When contributing to this repo, you need to keep in mind its multi-tenant archit
 * **SiteConfig**: To get the SiteConfig singleton of a specific tenant, use the class method `SiteConfig.get()`
 * **Migrations**: Do NOT use the standard migrate command! If for some reason you need to manually migrate, use the `migrate_schemas` command instead (you can find docs for this and other management commands [here](https://django-tenants.readthedocs.io/en/latest/use.html?highlight=migrations#management-commands))
 
+### Migrations and the deploy window
+
+A deploy applies migrations from the **new** image while the **previous** containers are
+still serving, so that the slow part of a deploy happens with the site up rather than down
+(see `production/server-update.sh`). For the seconds between the two, the outgoing code is
+querying the new schema.
+
+Django `SELECT`s every concrete field of a model by default. So a column the outgoing
+version still declares on its model class, and no longer finds in the database, makes its
+ordinary reads raise `ProgrammingError` until it is replaced. With six uwsgi workers on live
+traffic, that is real requests failing during a lesson.
+
+**Safe in one release:**
+
+* Adding a nullable column, or one with a database default. The outgoing version does not
+  know about it and never mentions it.
+* Adding a model, an index, or a constraint that existing rows already satisfy.
+* Backfilling data with a `RunPython` that only writes columns the outgoing version can
+  already cope with.
+
+**Not safe in one release**, and caught by the guard in
+`src/hackerspace_online/tests/test_conventions.py`:
+
+* `RemoveField`, `DeleteModel`: the outgoing version still selects it.
+* `RenameField`, `RenameModel`: the same, and there is no ordering that avoids it. A rename
+  is a drop and an add.
+
+**How to drop a column safely**, over two releases:
+
+1. **Release one.** Remove the field from `models.py`, but keep the column. Write the
+   migration by hand so it changes Django's *state* without touching the database:
+
+   ```python
+   operations = [
+       migrations.SeparateDatabaseAndState(
+           database_operations=[],  # the column stays exactly as it is
+           state_operations=[migrations.RemoveField(model_name="quest", name="old_field")],
+       ),
+   ]
+   ```
+
+   After this ships, nothing running mentions the column, but it is still there.
+
+2. **Release two.** Actually drop the column, once no deployed version knows about it.
+   This one has to be `RunSQL`, **not** another `RemoveField`:
+
+   ```python
+   operations = [
+       migrations.RunSQL(
+           sql='ALTER TABLE "quest_manager_quest" DROP COLUMN "old_field";',
+           reverse_sql='ALTER TABLE "quest_manager_quest" ADD COLUMN "old_field" integer NULL;',
+       ),
+   ]
+   ```
+
+   `RemoveField` resolves the field from the migration's *from-state* to work out what to
+   drop, and release one already took it out of that state, so a `RemoveField` here raises
+   `KeyError: 'old_field'` before it reaches the database. `RunSQL` reads no state at all,
+   which is exactly why it is the right tool for the half that is only a column change.
+
+   The unqualified table name is correct here: `migrate_schemas` runs each migration once
+   per tenant schema with the search path already set, so the statement drops the column in
+   every deck rather than only the public one. Write `reverse_sql` too, so the migration is
+   still reversible in development.
+
+A **rename** is the same shape with more steps: add the new column, write both for a
+release, backfill, switch reads to the new one, then drop the old one by the two steps
+above. If that sounds like a lot for a tidier name, it is: that is the argument for leaving
+the name alone.
+
+**Tightening a column** (`AlterField` to `null=False`, or a narrower type) is unsafe for the
+mirror reason: the outgoing version still writes the old shape. Add the constraint in a later
+release than the code that stops violating it. This one is *not* automated, because most
+`AlterField`s are harmless and a check that cries wolf on the common case only teaches people
+to skip it.
+
+**If a migration genuinely cannot hurt a deploy** (a table nothing has ever queried in
+production, say), put a `deploy-unsafe-ok` marker in the migration file with a comment saying
+which of those it is. Do not add entries to `LEGACY_DEPLOY_UNSAFE_MIGRATIONS`: that list is
+the migrations that predate the check.
+
+### Troubleshooting: a quest is missing from a student's Available tab
+
+A quest that opens fine from the quest map or its own URL, and is nowhere in the student's
+Available tab, is the most common "the site is broken" report. It is not one bug: **"in the
+Available tab" and "can I start this?" are two different code paths**, and the tab applies three
+filters the other one never sees.
+
+Starting a quest (the map link, the quest's own URL) goes through `Quest.is_available()`: the
+quest is active, is not already in progress or repeat-capped, its prerequisites are worked out
+**live**, and `available_outside_course` covers a student with no current course.
+
+The tab goes through `Quest.objects.get_available()`, which uses the **cached** prerequisite
+answer and then applies, in order:
+
+1. `not_in_progress_completed_or_cooldown()` -- the repeat and cooldown rules, in SQL
+2. `block_if_needed()` -- if **any** quest with `blocking=True` is available to the student, or
+   they have one in progress, the tab returns *only* blocking quests. Every other quest they
+   qualify for disappears from the list, with nothing said, and stays startable from the map
+3. `exclude_hidden()` -- the student pressed Hide on the quest
+
+So a missing quest has four possible causes, and only one of them is the cache. Two things make
+a stale cache permanent rather than self-healing:
+
+* `QuestQuerySet.get_pk_met_list()` recomputes only when the student has **no cache row at
+  all**; an existing row is served as-is, however old
+* the `update_conditions` command only calls `apply_async`, so it does nothing while celery is
+  down or its queue is backed up
+
+`quest_availability` answers all of this for one student. It is a tenant app, so point it at a
+deck:
+
+```bash
+# every quest this student can start but cannot see, and the filter responsible for each
+python src/manage.py tenant_command quest_availability --schema=hackerspace <username>
+
+# the full account of one quest: each filter in turn, every prerequisite with its own verdict,
+# and the cached prerequisite answer next to a live one
+python src/manage.py tenant_command quest_availability --schema=hackerspace <username> --quest 42
+
+# recompute this student's cached prerequisite results here and now, without celery
+python src/manage.py tenant_command quest_availability --schema=hackerspace <username> --rebuild
+```
+
+The report opens with the student's XP, rank, registration and whether their cache still agrees
+with a live calculation, so "is celery keeping up?" is answered before anything else. A quest
+report ends with a verdict naming the filter that dropped it and what to do about it.
+
 ### Use a Consistent Coding Style
-We use Flake8 with [a few exclusions](https://github.com/timberline-secondary/hackerspace/blob/develop/src/.flake8).  These will be enforced by the pre-commit hook.
+We use [ruff](https://docs.astral.sh/ruff/) (lint only) with a few exclusions -- see `[tool.ruff]` in [pyproject.toml](pyproject.toml).  These will be enforced by the pre-commit hook.
 
 ### Advanced / Optional: Inspecting the database with pgadmin4
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)

@@ -1,6 +1,11 @@
 {% extends "badges/base.html" %}
 {% load crispy_forms_tags %}
 
+{% block head %}
+{# the icon picker's stylesheet, icon list and JS (utilities.fa_icon_widget) #}
+{{ form.media }}
+{% endblock %}
+
 {% block heading_inner %} {{ heading }} {% endblock %}
 
 {% block content %}

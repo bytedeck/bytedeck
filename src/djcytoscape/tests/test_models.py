@@ -1,20 +1,23 @@
 import json
+from collections import defaultdict
 from itertools import cycle
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
 from django.test import SimpleTestCase
+from django.test.utils import CaptureQueriesContext
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
-# from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoElement, CytoScape, TempCampaign, TempCampaignNode, clean_JSON
+from prerequisites.models import Prereq
 from quest_manager.models import Quest, Category
 
-# from django_tenants.test.client import TenantClient
 from hackerspace_online.shell_utils import generate_quests
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
 User = get_user_model()
@@ -24,6 +27,19 @@ def generate_real_primary_map():
     """Generate a maps with the initial quests, campaigns, and badges installed via data migrations"""
     welcome_quest = Quest.objects.get(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1')
     return CytoScape.generate_map(welcome_quest, 'Main')
+
+
+def bake_scape(**kwargs):
+    """``baker.make`` a CytoScape pointed at a real Quest initial object.
+
+    CytoScape.initial_content_type is a non-nullable ForeignKey(ContentType) with a
+    uniqueness constraint on (initial_content_type, initial_object_id). Bare
+    ``baker.make(CytoScape)`` would give it a random, dangling initial object, so
+    these tests pin it to a freshly-created Quest instead.
+    """
+    kwargs.setdefault('initial_content_type', ContentType.objects.get_for_model(Quest))
+    kwargs.setdefault('initial_object_id', baker.make('quest_manager.Quest').id)
+    return baker.make(CytoScape, **kwargs)
 
 
 class JSONTestCaseMixin:
@@ -48,22 +64,35 @@ class JSONTestCaseMixin:
 class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
     """ All tests for the method: def clean_JSON(dirty_json_str): """
 
-    def test_clean_json_no_braces(self):
+    def test_clean_JSON__no_braces(self):
+        """A brace-less key/value string is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('"key": true'))
 
-    def test_clean_json_trailing_comma_no_braces(self):
+    def test_clean_JSON__trailing_comma_no_braces(self):
+        """A brace-less string with a trailing comma is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('"key": true,'))
 
-    def test_clean_json_trailing_comma_with_braces(self):
+    def test_clean_JSON__trailing_comma_with_braces(self):
+        """A braced object with a trailing comma is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('{"key": true,}'))
 
-    def test_clean_json_unquoted_key(self):
+    def test_clean_JSON__already_valid_braced_object_unchanged(self):
+        """A string that is already a braced object with no trailing comma is returned
+        unchanged, exercising the branch where the closing brace is already present."""
+        value = '{"key": true}'
+        self.assertEqual(clean_JSON(value), value)
+        self.assertValidJSON(clean_JSON(value))
+
+    def test_clean_JSON__unquoted_key(self):
+        """An unquoted key is quoted so the result is valid JSON."""
         self.assertValidJSON(clean_JSON('key: true'))
 
-    def test_clean_json_single_quoted_key(self):
+    def test_clean_JSON__single_quoted_key(self):
+        """A single-quoted key is normalised to double quotes for valid JSON."""
         self.assertValidJSON(clean_JSON('\'key\': true'))
 
-    def test_clean_old_defaults_INIT_OPTIONS(self):
+    def test_clean_JSON__old_defaults_init_options(self):
+        """The legacy INIT_OPTIONS defaults block is cleaned into valid JSON."""
         json_str = """minZoom: 0.5,
             maxZoom: 1.5,
             wheelSensitivity: 0.1,
@@ -74,7 +103,8 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
             """
         self.assertValidJSON(clean_JSON(json_str))
 
-    def test_clean_old_defaults_NODE_STYLES(self):
+    def test_clean_JSON__old_defaults_node_styles(self):
+        """The legacy NODE_STYLES defaults block is cleaned into valid JSON."""
         json_str = """label: 'data(label)',
             'text-valign':   'center', 'text-halign': 'right',
             'text-margin-x': '-155',
@@ -93,7 +123,8 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
             """
         self.assertValidJSON(clean_JSON(json_str))
 
-    def test_clean_old_defaults_EDGE_STYLES(self):
+    def test_clean_JSON__old_defaults_edge_styles(self):
+        """The legacy EDGE_STYLES defaults block is cleaned into valid JSON."""
         json_str = """'width': 1,
             'curve-style':   'bezier',
             'line-color':    'black',
@@ -106,20 +137,24 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
         self.assertValidJSON(clean_JSON(json_str))
 
 
-class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
-    def setUp(self):
-        self.map = generate_real_primary_map()
+class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Generate the real primary map to populate CytoElement rows for the tests."""
+        cls.map = generate_real_primary_map()
 
-    def test_object_creation(self):
+    def test_object_creation__is_cytoelement_instance(self):
+        """A baked object is a CytoElement instance."""
         self.element = baker.make(CytoElement)
         self.assertIsInstance(self.element, CytoElement)
 
-    def test_json(self):
-        """ Should be valid json string, check by deserializing """
+    def test_json__is_valid_json_string(self):
+        """Each element's json() returns a deserializable JSON string."""
         for element in CytoElement.objects.all():
             self.assertValidJSON(element.json())
 
-    def test_json_dict(self):
+    def test_json_dict__is_valid_dict_with_data(self):
+        """Each element's json_dict() is a serializable dict with a 'data' key (and 'classes' for nodes)."""
         for element in CytoElement.objects.all():
             json_dict = element.json_dict()
             self.assertIsInstance(json_dict, dict)
@@ -128,8 +163,8 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
             if element.is_node():  # Quests, Campaigns and Badges should have a class
                 self.assertIn('classes', json_dict)
 
-    def test_valid_urls(self):
-        """ tests if valid urls wont throw ValidationErrors """
+    def test_full_clean__valid_urls(self):
+        """Valid href URLs pass full_clean without raising ValidationError."""
         element = baker.make(CytoElement)
         valid_urls = [
             '/',
@@ -152,8 +187,8 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
             except ValidationError:
                 self.fail(f"{url} is not a valid URL")
 
-    def test_invalid_urls(self):
-        """ tests if invalid urls throw ValidationErrors """
+    def test_full_clean__invalid_urls(self):
+        """Invalid href URLs raise ValidationError during full_clean."""
         element = baker.make(CytoElement)
         invalid_urls = [
             ' ',  # space
@@ -166,34 +201,189 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
                 element.href = url
                 element.full_clean()
 
+    def test_str__node_shows_id_and_label(self):
+        """A NODE element stringifies as '<id>: <label>'."""
+        node = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES, label="Hello")
+        self.assertEqual(str(node), f"{node.id}: Hello")
 
-class TempCampaignNodeTest(TenantTestCase):
-    def setUp(self):
-        self.temp_campaign_node = TempCampaignNode(id_=1)
+    def test_str__edge_shows_source_and_target(self):
+        """An EDGE element stringifies as '<id>: <source id>-><target id>'."""
+        src = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        tgt = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        edge = baker.make(CytoElement, scape=self.map, group=CytoElement.EDGES, data_source=src, data_target=tgt)
+        self.assertEqual(str(edge), f"{edge.id}: {src.id}->{tgt.id}")
 
-    def test_object_creation(self):
+    def test_json_dict__edge_includes_min_len_when_above_default(self):
+        """An edge whose min_len differs from the default (1) exposes it as 'minLen' in its data."""
+        src = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        tgt = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        edge = baker.make(
+            CytoElement, scape=self.map, group=CytoElement.EDGES,
+            data_source=src, data_target=tgt, min_len=3,
+        )
+        self.assertEqual(edge.json_dict()["data"]["minLen"], "3")
+
+    def test_get_selector_styles_json_dict__returns_none_without_styles(self):
+        """With no style string, the helper returns None (there's nothing to emit)."""
+        self.assertIsNone(CytoElement.get_selector_styles_json_dict("#1", ""))
+        self.assertIsNone(CytoElement.get_selector_styles_json_dict("#1", None))
+
+
+class TempCampaignNodeTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Build a TempCampaignNode instance for the tests."""
+        cls.temp_campaign_node = TempCampaignNode(id_=1)
+
+    def test_object_creation__is_instance_and_str_is_id(self):
+        """A TempCampaignNode is created and its string form is its id."""
         self.assertIsInstance(self.temp_campaign_node, TempCampaignNode)
         # this doesn't matter, can be changed
         self.assertEqual(str(self.temp_campaign_node), str(self.temp_campaign_node.id))
 
 
-class TempCampaignTest(TenantTestCase):
-    def setUp(self):
-        self.temp_campaign = TempCampaign(parent_node_id=1)
+class TempCampaignTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Build a TempCampaign instance for the tests."""
+        cls.temp_campaign = TempCampaign(parent_node_id=1)
 
-    def test_object_creation(self):
+    def test_object_creation__is_instance(self):
+        """A baked TempCampaign is a TempCampaign instance."""
         self.assertIsInstance(self.temp_campaign, TempCampaign)
 
+    def test_str__no_children(self):
+        """A campaign with no nodes reports that it has no children."""
+        self.assertIn("No children", str(TempCampaign(parent_node_id=1)))
 
-class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
-    def setUp(self):
-        self.map = generate_real_primary_map()
+    def test_str__with_children(self):
+        """A campaign's string lists its parent id and each child node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        rendered = str(tc)
+        self.assertIn("Parent: 1", rendered)
+        self.assertIn("Child:10", rendered)
+        self.assertIn("Child:11", rendered)
 
-    def test_object_creation(self):
+    def test_add_node__existing_id_appends_prereq(self):
+        """Re-adding an existing node id appends the new prereq instead of duplicating the node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=100)
+        tc.add_node(node_id=10, prereq_node_id=101)
+        self.assertEqual(len(tc.nodes), 1)
+        self.assertEqual(tc.get_node(10).prereq_node_ids, [100, 101])
+
+    def test_add_campaign_reliant__tracks_node_id(self):
+        """Nodes directly reliant on the campaign are tracked in campaign_reliant_node_ids."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_campaign_reliant(reliant_node_id=42)
+        self.assertEqual(tc.campaign_reliant_node_ids, [42])
+
+    def test_has_internal_reliant__true_only_for_internal_reliant(self):
+        """has_internal_reliant is True only when an internal node is a reliant of the given node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        # node 11 (internal) relies on node 10 -> internal reliant
+        tc.add_reliant(node_id=10, reliant_node_id=11)
+        self.assertTrue(tc.has_internal_reliant(tc.get_node(10)))
+        # node 11's reliant is an external id -> not internal
+        tc.add_reliant(node_id=11, reliant_node_id=999)
+        self.assertFalse(tc.has_internal_reliant(tc.get_node(11)))
+
+    def test_get_common_reliant_node_ids__only_returns_reliants_shared_by_every_node(self):
+        """A reliant depended on by every campaign node is 'common'; a reliant of only some
+        nodes is excluded.
+
+        Covers both directions of the per-node membership check and the count == len(nodes)
+        check in get_common_reliant_node_ids.
+        """
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        # 500 is a reliant of BOTH nodes -> common to the whole campaign
+        tc.add_reliant(node_id=10, reliant_node_id=500)
+        tc.add_reliant(node_id=11, reliant_node_id=500)
+        # 600 is a reliant of node 10 only -> not shared, so not common
+        tc.add_reliant(node_id=10, reliant_node_id=600)
+
+        self.assertEqual(set(tc.get_common_reliant_node_ids()), {500})
+
+    def test_is_non_sequential__always_false_due_to_is_true_comparison(self):
+        """is_non_sequential runs over a campaign whose nodes share a common prereq.
+
+        Note: the method body compares a *list* with ``is True`` (``get_common_prereq_node_ids()
+        is True``), so it currently always returns False regardless of the campaign's shape.
+        This test pins that current behavior; it should be revisited if the comparison is fixed.
+        """
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=100)
+        tc.add_node(node_id=11, prereq_node_id=100)
+        # Both nodes share prereq 100, so get_common_prereq_node_ids() is non-empty...
+        self.assertEqual(tc.get_common_prereq_node_ids(), [100])
+        # ...but `[...] is True` is False, so is_non_sequential() returns False today.
+        self.assertFalse(tc.is_non_sequential())
+
+
+class CytoManagerTests(ByteDeckTenantTestCase):
+    """Tests for the CytoElement/CytoScape manager helpers (random-node pickers and lookups)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Generate the real primary map to give the manager helpers nodes to work with."""
+        cls.map = generate_real_primary_map()
+
+    def test_get_random_node__returns_node_in_scape(self):
+        """get_random_node returns a NODE element belonging to the given scape."""
+        node = CytoElement.objects.get_random_node(self.map)
+        self.assertEqual(node.scape_id, self.map.id)
+        self.assertEqual(node.group, CytoElement.NODES)
+
+    def test_get_random_node_triangular_distribution__returns_node_in_scape(self):
+        """The triangular-distribution picker also returns a node from the scape."""
+        node = CytoElement.objects.get_random_node_triangular_distribution(self.map)
+        self.assertEqual(node.scape_id, self.map.id)
+        self.assertEqual(node.group, CytoElement.NODES)
+
+    def test_get_map_for_init__missing_then_found(self):
+        """get_map_for_init returns None when no map initiates the object, else that map."""
+        quest = baker.make('quest_manager.Quest')
+        self.assertIsNone(CytoScape.objects.get_map_for_init(quest))
+
+        scape = CytoScape.generate_map(quest, "Quest Map")
+        found = CytoScape.objects.get_map_for_init(quest)
+        self.assertEqual(found, scape)
+        self.assertEqual(found.initial_object_id, quest.id)
+
+    def test_all_for_campaign__returns_only_nodes_parented_to_that_campaign(self):
+        """all_for_campaign returns the scape's nodes whose data_parent is the given campaign node."""
+        scape = bake_scape()
+        campaign_node = baker.make(CytoElement, scape=scape, group=CytoElement.NODES)
+        child = baker.make(CytoElement, scape=scape, group=CytoElement.NODES, data_parent=campaign_node)
+        unparented = baker.make(CytoElement, scape=scape, group=CytoElement.NODES)
+
+        result = CytoElement.objects.all_for_campaign(scape, campaign_node)
+
+        self.assertIn(child, result)
+        self.assertNotIn(unparented, result)
+        self.assertNotIn(campaign_node, result)
+
+
+class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Generate the real primary map as a shared fixture for the scape tests."""
+        # tests that regenerate/mutate the map only touch the DB, which is rolled
+        # back per test, and self.map is a per-test deep copy — safe class-level fixture
+        cls.map = generate_real_primary_map()
+
+    def test_object_creation__is_instance_and_str_is_name(self):
+        """A generated map is a CytoScape whose string form is its name."""
         self.assertIsInstance(self.map, CytoScape)
         self.assertEqual(str(self.map), self.map.name)
 
-    def test_object_alphabetical_order(self):
+    def test_object_alphabetical_order__maps_ordered_by_name(self):
         """
         Map objects are ordered alphabetically at the model level to ensure
         proper sorting consistently sitewide.
@@ -211,10 +401,35 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         # A queryset created from all objects is ordered correctly by default
         self.assertQuerySetEqual(all_maps, all_maps.order_by('name'))
 
-    def test_generate_map(self):
+    def test_generate_map__creates_new_scape(self):
+        """generate_map creates a new CytoScape for the given initial object."""
         quest = baker.make('quest_manager.Quest')
         CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
+
+    def test_generate_map__transition_node_for_tilde_quest(self):
+        """A reliant quest whose label starts with '~' is turned into a transition
+        (child-map link) node: is_transition_node() detects it and
+        convert_to_transition_node() flags the node and restyles it."""
+        start = baker.make('quest_manager.Quest', name="Start Quest")
+        # A '~'-prefixed name marks a map break -> transition node (autobreak on by default).
+        transition = baker.make('quest_manager.Quest', name="~Continue in the next map")
+        transition.add_simple_prereqs([start])  # transition relies on start
+
+        scape = CytoScape.generate_map(start, "Transition Map")
+
+        node = CytoElement.objects.get(
+            scape=scape, selector_id=CytoElement.generate_selector_id(transition),
+        )
+        self.assertTrue(node.is_transition)
+        self.assertIn("child-map", node.classes)
+
+    def test_is_transition_node__autobreak_off_returns_false(self):
+        """With autobreak disabled, no node is treated as a transition node."""
+        scape = self.map
+        scape.autobreak = False
+        any_node = scape.cytoelement_set.filter(group=CytoElement.NODES).first()
+        self.assertFalse(scape.is_transition_node(any_node))
 
     def test_generate_map__long_name_xp(self):
         """
@@ -234,12 +449,14 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertEqual(CytoScape.objects.count(), 2)
 
     def test_save__sets_first_scape_as_primary(self):
-        newmap = baker.make('djcytoscape.CytoScape')
+        """The first-created map is primary; a second map saved afterwards is not."""
+        newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
 
     def test_save__changes_primary_scape(self):
-        newmap = baker.make('djcytoscape.CytoScape')
+        """Flagging a second map primary and saving demotes the previous primary map."""
+        newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
         newmap.is_the_primary_scape = True
@@ -248,17 +465,35 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.map.refresh_from_db()
         self.assertFalse(self.map.is_the_primary_scape)
 
-    def test_elements_dict(self):
+    def test_save__setting_primary_when_none_exists_is_handled(self):
+        """Saving a map as primary when no current primary exists doesn't error.
+
+        save() demotes the existing primary map, but guards the lookup with
+        CytoScape.DoesNotExist for the edge case where none is currently flagged.
+        """
+        bake_scape()  # a second map exists, so the count-based first-map branch is skipped
+        CytoScape.objects.update(is_the_primary_scape=False)
+        self.assertFalse(CytoScape.objects.filter(is_the_primary_scape=True).exists())
+
+        new_primary = bake_scape(is_the_primary_scape=True)
+
+        new_primary.refresh_from_db()
+        self.assertTrue(new_primary.is_the_primary_scape)
+
+    def test_elements_dict__has_nodes_and_edges(self):
+        """elements_dict returns a serializable dict containing 'nodes' and 'edges'."""
         eles_dict = self.map.elements_dict()
         self.assertIsInstance(eles_dict, dict)
         self.assertValidJSONDict(eles_dict)
         self.assertIn('nodes', eles_dict)
         self.assertIn('edges', eles_dict)
 
-    def test_generate_elements_json(self):
+    def test_generate_elements_json__is_valid_json(self):
+        """generate_elements_json returns a valid JSON string."""
         self.assertValidJSON(self.map.generate_elements_json())
 
-    def test_class_styles_list(self):
+    def test_class_styles_list__returns_selector_style_dicts(self):
+        """class_styles_list returns dicts each carrying a 'selector' and 'style'."""
         styles_list = self.map.class_styles_list()
         self.assertIsInstance(styles_list, list)
         style1 = styles_list[0]
@@ -267,11 +502,48 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertIn('selector', style1)
         self.assertIn('style', style1)
 
-    def test_regenerate(self):
+    def test_regenerate__no_error_on_good_map(self):
         """Can regenerate without error on a known good map object"""
         self.map.regenerate()
 
-    def test_maps_dont_include_drafts(self):
+    def test_cytoelement_ordering__is_a_total_order(self):
+        """CytoElement.Meta.ordering must end with the unique `id` tiebreaker so element
+        emission is deterministic. Without it, sibling elements (same group and data_parent —
+        e.g. every top-level node, whose data_parent is NULL) come back in whatever order
+        Postgres returns, which shifts as regenerate() churns rows. Because dagre lays out
+        same-rank nodes by their input order, that made the map toggle between layouts on each
+        regeneration (issue #1977).
+        """
+        self.assertEqual(CytoElement._meta.ordering[-1], 'id')
+
+    def test_elements_dict__nodes_in_ascending_id_order_within_parent_groups(self):
+        """The emitted map JSON must list nodes in a deterministic order: within each compound
+        (campaign) parent — and among the top-level nodes — siblings come out in ascending id,
+        i.e. creation order. A stable emission order in means a stable dagre layout out (#1977).
+        """
+        ids_by_parent = defaultdict(list)
+        for node in self.map.elements_dict()['nodes']:
+            ids_by_parent[node['data'].get('parent')].append(node['data']['id'])
+
+        # sanity: the real primary map has more than one node to order
+        self.assertGreater(sum(len(ids) for ids in ids_by_parent.values()), 1)
+        for parent, ids in ids_by_parent.items():
+            self.assertEqual(ids, sorted(ids), msg=f"nodes under parent {parent} are not id-ordered")
+
+    def test_regenerate__produces_stable_node_order(self):
+        """Regenerating a map must yield the same left-to-right node order every time so the
+        rendered layout is deterministic (issue #1977). Node ids change on each regeneration but
+        their labels don't, so we compare the ordered sequence of labels across two regenerations.
+        """
+        def ordered_labels():
+            return [node['data'].get('label') for node in self.map.elements_dict()['nodes']]
+
+        before = ordered_labels()
+        self.map.regenerate()
+        after = ordered_labels()
+        self.assertEqual(before, after)
+
+    def test_regenerate__excludes_draft_quests(self):
         """Draft unpublished quests should not appear in maps"""
 
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
@@ -286,7 +558,8 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         # should no longer be in the map
         self.assertNotIn("/quests/6/", self.map.elements_json)
 
-    def test_maps_dont_include_archived_quests(self):
+    def test_regenerate__excludes_archived_quests(self):
+        """Archived quests should not appear in maps after regeneration."""
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
         self.assertIn("/quests/6/", self.map.elements_json)
 
@@ -300,7 +573,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         # should no longer be in the map
         self.assertNotIn("/quests/6/", self.map.elements_json)
 
-    def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
+    def test_regenerate__deleted_initial_object_throws_and_deletes_map(self):
         """when regenerating a map that has had its initial object deleted, remove it and raise error."""
         bad_map = CytoScape.objects.create(
             name="bad map",
@@ -314,7 +587,110 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         # should have been deleted at this point
         self.assertFalse(CytoScape.objects.filter(name="bad map").exists())
 
-    def test_get_related_maps(self):
+    def test_calculate_nodes__campaign_nodes_already_in_the_table_are_still_tracked(self):
+        """Building a map whose campaign nodes are already there tracks them all the same.
+
+        `campaign_list` is rebuilt for each run, so a campaign node that is in the table but was
+        not written by this run has nothing in it. Deciding whether to track a campaign from
+        whether `get_or_create` wrote the row is what left `get_temp_campaign` returning None on
+        the line before it is asked to add a node (#2656). Two regenerations of one map racing
+        each other is how that state arises: each starts by deleting what the other is building
+        on, and the one that loses meets the winner's campaign nodes.
+        """
+        campaign_nodes = CytoElement.objects.all_for_scape(self.map).filter(classes='campaign')
+        self.assertTrue(campaign_nodes.exists(), "fixture has no campaigns to exercise this with")
+
+        # No delete first: this is the map's own elements standing in for another run's.
+        self.map.calculate_nodes()
+
+        tracked = {campaign.node_id for campaign in self.map.campaign_list}
+        self.assertTrue(tracked, "no campaign was tracked for the edge cleanup")
+        self.assertTrue(
+            tracked.issubset(set(campaign_nodes.values_list('id', flat=True))),
+            "a tracked campaign does not correspond to a campaign node on the map",
+        )
+
+    def test_regenerate__takes_the_maps_row_so_two_of_them_cannot_interleave(self):
+        """Regenerating locks the map's own row, so a second regeneration waits for the first.
+
+        Saving any Quest, Badge, Rank or Prereq queues `regenerate_map` for every related map,
+        so several tasks land on one map routinely. Each begins by deleting the elements the
+        others are building on, which leaves the loser writing edges to nodes that no longer
+        exist (#2656). The lock is what stops them overlapping, so its absence is the failure.
+        """
+        with CaptureQueriesContext(connection) as queries:
+            self.map.regenerate()
+
+        locking = [
+            query['sql'] for query in queries
+            if 'FOR UPDATE' in query['sql'] and 'djcytoscape_cytoscape' in query['sql']
+        ]
+        self.assertTrue(locking, "regenerate() did not lock the map row it is about to rebuild")
+
+    def test_regenerate__builds_from_the_initial_object_as_it_is_once_the_row_is_taken(self):
+        """The rebuild reads the object the map starts from after it holds the map's row.
+
+        Waiting for that row can take as long as the rebuild ahead of it, and every save
+        made during the wait is collapsed into this rebuild rather than given one of its
+        own (#2658), so building from what was loaded before the wait would publish a map
+        without those saves and queue nothing to correct it.
+
+        The wait is stood in for by resolving the initial object and then changing it in
+        the database behind the loaded instance, which is the state a task that waited is
+        in: `initial_content_object` is a GenericForeignKey, so the instance it hands back
+        is cached from whenever it was first asked for.
+        """
+        scape = CytoScape.objects.get(pk=self.map.pk)  # a fresh instance, as the task loads one
+        initial_quest = scape.initial_content_object  # resolved and cached before the wait
+        Quest.objects.filter(pk=initial_quest.pk).update(name='renamed while the rebuild waited')
+
+        scape.regenerate()
+
+        labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+        self.assertTrue(
+            any('renamed while the rebuild waited' in (label or '') for label in labels),
+            "the map's first node was built from the initial object as it was before the wait",
+        )
+
+    def test_regenerate__runs_on_lock_acquired_between_taking_the_row_and_reading(self):
+        """`on_lock_acquired` runs once the map's row is held and before anything is read.
+
+        `regenerate_map` gives up its claim on the map there (#2658), so where it runs is
+        exactly what decides which saves are collapsed into that task. Everything up to
+        this point is still covered by it, the wait for the row included, and nothing
+        after it is.
+        """
+        seen = {}
+
+        def record():
+            seen['row taken'] = any(
+                'FOR UPDATE' in query['sql'] and 'djcytoscape_cytoscape' in query['sql']
+                for query in queries.captured_queries
+            )
+            seen['nothing read yet'] = CytoElement.objects.all_for_scape(self.map).exists()
+
+        with CaptureQueriesContext(connection) as queries:
+            self.map.regenerate(on_lock_acquired=record)
+
+        self.assertEqual(seen, {'row taken': True, 'nothing read yet': True})
+
+    def test_regenerate__a_failure_part_way_through_leaves_the_map_alone(self):
+        """A regeneration that raises leaves the map that was there, rather than a deleted one.
+
+        The rebuild drops every element before writing the new ones, so without a transaction
+        around the pair, anything that goes wrong in between leaves the deck with an empty map.
+        """
+        before = list(CytoElement.objects.all_for_scape(self.map).values_list('id', flat=True))
+        self.assertTrue(before, "fixture map has no elements to preserve")
+
+        with patch.object(CytoScape, 'calculate_nodes', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                self.map.regenerate()
+
+        after = list(CytoElement.objects.all_for_scape(self.map).values_list('id', flat=True))
+        self.assertEqual(after, before)
+
+    def test_get_related_maps__counts_maps_per_quest(self):
         """ Check if CytoScape.objects.get_related_maps returns the correct maps per quest.
         """
 
@@ -357,10 +733,18 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertEqual(CytoScape.objects.get_related_maps(self.one_map).count(), 1)
         self.assertEqual(CytoScape.objects.get_related_maps(self.all_maps).count(), 3)
 
-    def test_get_maps_as_formatted_string(self):
+    def test_get_maps_as_formatted_string__formats_by_length(self):
         """ Checks if `get_maps_as_formatted_string` returns the appropriate formatting per length """
         names = [str(x) for x in range(4)]
-        scapes = baker.make(CytoScape, name=cycle(names), _quantity=4)
+        # Each scape needs a distinct real initial object: (initial_content_type,
+        # initial_object_id) is unique-constrained, so cycle 4 fresh Quest ids.
+        quest_ids = [baker.make('quest_manager.Quest').id for _ in range(4)]
+        scapes = baker.make(
+            CytoScape, name=cycle(names),
+            initial_content_type=ContentType.objects.get_for_model(Quest),
+            initial_object_id=cycle(quest_ids),
+            _quantity=4,
+        )
 
         # since baker returns a list with `_quantity` > 1
         # we have to convert it to a queryset
@@ -382,3 +766,253 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         for index, expected in enumerate(expected_results):
             result = scapes[0:index].get_maps_as_formatted_string()
             self.assertEqual(result, expected)
+
+    def test_get_maps_as_formatted_string__is_safe_and_escapes_the_map_name(self):
+        """The links survive being put in a message, and a map name carrying markup does not.
+
+        The result goes straight into a django message, which escapes anything that is not
+        marked safe, so the anchors have to be built safely. That only holds if the name
+        interpolated between them is escaped on the way in (#2498).
+        """
+        quest = baker.make('quest_manager.Quest')
+        baker.make(
+            CytoScape, name="Map <script>alert(1)</script>",
+            initial_content_type=ContentType.objects.get_for_model(Quest),
+            initial_object_id=quest.id,
+        )
+
+        result = CytoScape.objects.all().get_maps_as_formatted_string()
+
+        self.assertTrue(hasattr(result, '__html__'), "the anchors must be marked safe")
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', result)
+        self.assertNotIn('<script>alert(1)</script>', result)
+
+
+class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
+    """Targeted tests for previously-uncovered CytoScape map-generation branches."""
+
+    def test_generate_map__repeatable_reliant_quest_gets_repeat_edge_label(self):
+        """A repeatable reliant quest (max_repeats > 0) gets a circular 'x<n>' repeat edge."""
+        start = baker.make(Quest, name="Start")
+        repeatable = baker.make(Quest, name="Repeatable", max_repeats=3)
+        repeatable.add_simple_prereqs([start])
+
+        scape = CytoScape.generate_map(start, "repeat-test")
+
+        self.assertTrue(
+            CytoElement.objects.filter(scape=scape, label='x3', classes='repeat-edge').exists()
+        )
+
+    def test_generate_map__child_map_links_back_to_parent_scape(self):
+        """A map generated with a parent_scape gets a node linking back to the parent map."""
+        parent_quest = baker.make(Quest, name="ParentInit")
+        parent_scape = CytoScape.generate_map(parent_quest, "Parent Map")
+
+        child_quest = baker.make(Quest, name="ChildInit")
+        child_scape = CytoScape.generate_map(child_quest, "Child Map", parent_scape=parent_scape)
+
+        self.assertTrue(
+            CytoElement.objects.filter(
+                scape=child_scape,
+                label=f"{parent_scape.name} Quest Map",
+                classes__contains='parent-map',
+            ).exists()
+        )
+
+    def test_get_temp_campaign__returns_none_when_id_not_found(self):
+        """get_temp_campaign returns None when no TempCampaign matches the given node id."""
+        scape = bake_scape(name="temp-campaign-test")
+        scape.init_temp_campaign_list()
+        self.assertIsNone(scape.get_temp_campaign(999999))
+
+    def test_generate_map__quest_with_or_prereq_gets_complicated_prereqs_edge(self):
+        """An edge to a reliant quest that has an OR (alternate) prerequisite is tagged with the
+        'complicated-prereqs' class so the map can style alternate-prereq edges differently."""
+        start = baker.make(Quest, name="Start")
+        child = baker.make(Quest, name="Child")
+        alt = baker.make(Quest, name="Alt")
+        # child is unlocked by (start OR alt): it relies on start, and carries an OR prereq
+        Prereq.objects.create(parent_object=child, prereq_object=start, or_prereq_object=alt)
+
+        scape = CytoScape.generate_map(start, "or-prereq-test")
+
+        self.assertTrue(
+            CytoElement.objects.filter(scape=scape, classes__contains='complicated-prereqs').exists()
+        )
+
+    def test_generate_map__nonsequential_campaign_rewrites_common_prereq_edges(self):
+        """A campaign whose members are concurrently available (they share a common external
+        prerequisite) is non-sequential: fix_nonsequential_campaign_edges joins the members with
+        hidden edges and moves the shared-prereq edge onto the compound campaign node.
+
+        A member with an internal prerequisite (relying on another member rather than the shared
+        Start) still counts toward the common prereq but has no direct Start edge to remove, so
+        that member exercises the 'unless quest has internal prereq' branch of step 2.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Concurrent Campaign")
+        q1 = baker.make(Quest, name="Concurrent1", campaign=campaign)
+        q2 = baker.make(Quest, name="Concurrent2", campaign=campaign)
+        q3 = baker.make(Quest, name="Concurrent3", campaign=campaign)
+        q1.add_simple_prereqs([start])
+        q2.add_simple_prereqs([start])
+        # q3's only prereq is internal to the campaign (q1), so it holds no direct Start edge
+        q3.add_simple_prereqs([q1])
+
+        scape = CytoScape.generate_map(start, "nonseq-test")
+
+        for name in ("Concurrent1", "Concurrent2", "Concurrent3"):
+            self.assertTrue(
+                CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
+                f"{name} should be represented on the map",
+            )
+
+        def node_id_for(obj):
+            return scape.cytoelement_set.get(
+                group=CytoElement.NODES, selector_id=CytoElement.generate_selector_id(obj)
+            ).id
+
+        start_node_id = node_id_for(start)
+        campaign_node_id = node_id_for(campaign)
+
+        def visible_edge_exists(source_id, target_id):
+            """A non-hidden (styled) edge from source to target."""
+            return scape.cytoelement_set.filter(
+                group=CytoElement.EDGES, data_source_id=source_id, data_target_id=target_id
+            ).exclude(classes__contains='hidden').exists()
+
+        # step 3: the shared Start prerequisite edge is moved onto the compound campaign node
+        self.assertTrue(visible_edge_exists(start_node_id, campaign_node_id))
+        # step 2: the direct visible Start -> member prerequisite edges are removed (a hidden
+        # structural edge to the campaign's first node may be re-added in step 4, but no visible one)
+        self.assertFalse(visible_edge_exists(start_node_id, node_id_for(q1)))
+        self.assertFalse(visible_edge_exists(start_node_id, node_id_for(q2)))
+        # step 1: hidden campaign-layout edges are added to join the members
+        self.assertTrue(
+            scape.cytoelement_set.filter(group=CytoElement.EDGES, classes__contains='hidden').exists()
+        )
+
+    def test_generate_map__nonsequential_campaign_with_internal_reliant_keeps_common_reliant_edge(self):
+        """The deprecated common-reliant cleanup handles a non-sequential campaign that also has a
+        common reliant where one member holds it only via an internal reliant (not directly).
+
+        A common reliant can be shared by the whole campaign through has_internal_reliant() even
+        for a member that does not directly depend on it; for that member there is no direct
+        member -> reliant edge to remove, so the membership check's false arc is exercised. The
+        map still generates and represents every quest.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Reliant Campaign")
+        r1 = baker.make(Quest, name="Reliant1", campaign=campaign)
+        r2 = baker.make(Quest, name="Reliant2", campaign=campaign)
+        r3 = baker.make(Quest, name="Reliant3", campaign=campaign)
+        r1.add_simple_prereqs([start])
+        r2.add_simple_prereqs([start])
+        # r3 depends internally on r1, so r1 gains an internal reliant (r3)
+        r3.add_simple_prereqs([r1])
+        # an external quest depends on r2 and r3 (not r1): it is a reliant common to the campaign,
+        # but r1 holds it only through its internal reliant r3, not directly
+        external = baker.make(Quest, name="ExternalReliant")
+        external.add_simple_prereqs([r2, r3])
+
+        scape = CytoScape.generate_map(start, "reliant-internal-test")
+
+        for name in ("Reliant1", "Reliant2", "Reliant3", "ExternalReliant"):
+            self.assertTrue(
+                CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
+                f"{name} should be represented on the map",
+            )
+
+    def test_generate_map__campaign_as_prerequisite_adds_campaign_reliant(self):
+        """A quest whose prerequisite is a Campaign (Category) exercises the campaign-reliant path.
+
+        The campaign node is a compound/parent node, and a quest that relies on the whole
+        campaign is registered as a campaign-reliant during the recursive edge build, so map
+        generation completes and both quests are represented.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Test Campaign")
+        in_campaign = baker.make(Quest, name="InCampaign", campaign=campaign)
+        in_campaign.add_simple_prereqs([start])
+        reliant_on_campaign = baker.make(Quest, name="ReliantOnCampaign")
+        reliant_on_campaign.add_simple_prereqs([campaign])
+
+        scape = CytoScape.generate_map(start, "campaign-reliant-test")
+
+        self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="InCampaign").exists())
+        self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="ReliantOnCampaign").exists())
+
+
+class CampaignNodeEmissionTest(ByteDeckTenantTestCase):
+    """What a campaign contributes to the emitted elements: a compound node that points back at
+    its Category, and a deterministic place in the node list.
+
+    Two campaigns branch off a common Start quest so they render as siblings.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Two campaigns (A, B), each with one member quest that has the shared Start quest as a
+        prerequisite, so both campaigns render as siblings branching off Start.
+        """
+        cls.start = baker.make(Quest, name="Start")
+        # "A-quest" sorts before "B-quest", so campaign A's node is created first (lower id).
+        cls.camp_a = baker.make(Category, title="AAA Campaign")
+        cls.camp_b = baker.make(Category, title="BBB Campaign")
+        cls.qa = baker.make(Quest, name="A-quest", campaign=cls.camp_a)
+        cls.qb = baker.make(Quest, name="B-quest", campaign=cls.camp_b)
+        Prereq.add_simple_prereq(cls.qa, cls.start)
+        Prereq.add_simple_prereq(cls.qb, cls.start)
+
+    def _emit(self):
+        """Regenerate the map and return its elements dict."""
+        return CytoScape.generate_map(self.start, "order-test").elements_dict()
+
+    @staticmethod
+    def _index_by_category(nodes, category_id):
+        """Position of a campaign's compound node in the emitted node list."""
+        return next(i for i, n in enumerate(nodes) if n['data'].get('Category') == category_id)
+
+    def test_add_to_campaign__campaign_node_links_back_to_its_category(self):
+        """The compound campaign node carries selector_id 'Category: <pk>', the same way quest and
+        badge nodes point at their objects, and json_dict surfaces it as a `Category` data
+        attribute so the node can be found from the Category it draws.
+        """
+        scape = CytoScape.generate_map(self.start, "order-test")
+        node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
+        self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
+
+    def test_elements_dict__nodes_are_emitted_in_deterministic_id_order(self):
+        """Nodes come out in ascending-id order (A's campaign node before B's), the deterministic
+        emission issue #2012 asked for, so a map looks the same between generations.
+        """
+        nodes = self._emit()['nodes']
+        self.assertLess(
+            self._index_by_category(nodes, self.camp_a.id),
+            self._index_by_category(nodes, self.camp_b.id),
+        )
+
+    def test_elements_dict__carries_no_campaign_order(self):
+        """No node carries a campaignOrder any more (#2675).
+
+        Campaign placement is dagre's alone, so emitting an ordering key would be data nothing
+        reads, in every node of every map.
+        """
+        nodes = self._emit()['nodes']
+        self.assertTrue(nodes)
+        for node in nodes:
+            self.assertNotIn('campaignOrder', node['data'])
+
+
+class GenerateLabelTest(ByteDeckTenantTestCase):
+    """The text a map node carries for the object it stands for."""
+
+    def test_generate_label__keeps_quotes_as_they_are(self):
+        """A quote in a name reaches the label as the name has it.
+
+        The label goes to the page through json.dumps, which escapes quotes itself, so a
+        backslash added here would be drawn on the map in front of every quote (#2519).
+        """
+        quest = baker.make(Quest, name='Say "hi"', xp=2, xp_can_be_entered_by_students=False)
+
+        self.assertEqual(CytoScape.generate_label(quest), 'Say "hi" (2)')

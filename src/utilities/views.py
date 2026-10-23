@@ -130,7 +130,13 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
 
 
 @non_public_only_view
+@staff_member_required
 def videos(request):
+    """List the deck's video resources and let staff upload a new one.
+
+    Staff-only because the page is an upload form: its POST writes a file into the
+    deck's media storage, which no student (or anonymous visitor) should be able to do.
+    """
     videos = VideoResource.objects.all()
     form = VideoForm(request.POST or None, request.FILES or None)
     if form.is_valid():

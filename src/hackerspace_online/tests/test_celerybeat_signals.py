@@ -4,16 +4,17 @@ from django.db import connection
 from django.forms import model_to_dict
 from django.utils import timezone
 
-from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
-from django_tenants.test.cases import TenantTestCase
+from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, PeriodicTasks, SolarSchedule
 from django_tenants.utils import get_public_schema_name, schema_context
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 PUBLIC_SCHEMA = get_public_schema_name()
 
 
-class PeriodicTaskSignalsTest(TenantTestCase):
+class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
 
-    def test_save_CronSchedule_signal(self):
+    def test_save_CronSchedule_signal__also_saves_to_public_schema(self):
         """ Saving a CronSchedule model should also save it in the public schema """
 
         cron_schedule = CrontabSchedule(minute=5, hour=23, day_of_month=26, month_of_year=11)
@@ -33,7 +34,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(cron_schedule.day_of_month, public_cron_schedule.day_of_month)
         self.assertEqual(cron_schedule.month_of_year, public_cron_schedule.month_of_year)
 
-    def test_save_ClockedSchedule_signal(self):
+    def test_save_ClockedSchedule_signal__also_saves_to_public_schema(self):
         """ Saving a ClockedSchedule model should also save it in the public schema """
 
         now = timezone.now()
@@ -49,7 +50,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         clocked_schedule.refresh_from_db()
         self.assertEqual(clocked_schedule.clocked_time, public_clocked_schedule.clocked_time)
 
-    def test_save_IntervalSchedule_signal(self):
+    def test_save_IntervalSchedule_signal__also_saves_to_public_schema(self):
         """ Saving an IntervalSchedule model should also save it in the public schema """
 
         interval_schedule = IntervalSchedule(every=5, period=IntervalSchedule.DAYS)
@@ -66,7 +67,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(interval_schedule.period, public_interval_schedule.period)
         self.assertEqual(str(interval_schedule), str(public_interval_schedule))
 
-    def test_save_SolarSchedule_signal(self):
+    def test_save_SolarSchedule_signal__also_saves_to_public_schema(self):
         """ Saving a SolarSchedule model should also save it in the public schema """
 
         params = {
@@ -88,7 +89,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(solar_schedule.latitude, public_solar_schedule.latitude)
         self.assertEqual(solar_schedule.longitude, public_solar_schedule.longitude)
 
-    def test_save_PeriodicTask_signal(self):
+    def test_save_PeriodicTask_signal__also_saves_to_public_schema(self):
         """ Saving a periodic task should also save it in the public schema """
 
         schedule = CrontabSchedule(minute='5')
@@ -116,3 +117,30 @@ class PeriodicTaskSignalsTest(TenantTestCase):
 
         self.assertIsNotNone(public_task)
         self.assertEqual(task.name, public_task.name)
+
+    def test_save_PeriodicTask_signal__an_update_tells_beat_the_schedule_changed(self):
+        """Saving a periodic task that is already in the public schema updates the public copy, and records the change
+        where beat looks for it.
+
+        Beat reloads its schedule only when the public schema's PeriodicTasks record moves (or every few minutes). The
+        public copy is changed with a queryset update(), which skips save() and so doesn't move it: it has to be moved by hand,
+        or beat goes on running the task on its old schedule (#820). Both schedules exist before the task is saved, so
+        creating one can't move the record instead.
+        """
+        first_schedule = CrontabSchedule(minute='5')
+        first_schedule.save()
+        second_schedule = CrontabSchedule(minute='10')
+        second_schedule.save()
+
+        task = PeriodicTask(name='Sample Task', crontab=first_schedule, task='just_a_random.task.run')
+        task.save()
+
+        with schema_context(PUBLIC_SCHEMA):
+            last_change_before = PeriodicTasks.last_change()
+
+        task.crontab = second_schedule
+        task.save()
+
+        with schema_context(PUBLIC_SCHEMA):
+            self.assertEqual(PeriodicTask.objects.get(name=task.name).crontab.minute, '10')
+            self.assertGreater(PeriodicTasks.last_change(), last_change_before)

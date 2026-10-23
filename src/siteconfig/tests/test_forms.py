@@ -2,15 +2,13 @@ from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
-from django_tenants.test.cases import TenantTestCase
-
 from siteconfig.models import SiteConfig
 from siteconfig.forms import SiteConfigForm
 
-from hackerspace_online.tests.utils import generate_form_data, model_to_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data, model_to_form_data
 
 
-class SiteConfigFormTest(TenantTestCase):
+class SiteConfigFormTest(ByteDeckTenantTestCase):
     """Tests for the SiteConfig Form
     """
 
@@ -21,10 +19,8 @@ class SiteConfigFormTest(TenantTestCase):
         """
         self.config = SiteConfig.get()
 
-    def test_clean_custom_stylesheet_method(self):
-        """
-        Tests CSS validation for form uploads done by `clean_custom_stylesheet` method.
-        """
+    def test_clean_custom_stylesheet__validates_css(self):
+        """Tests CSS validation for form uploads done by `clean_custom_stylesheet` method."""
         form_data = model_to_form_data(self.config, SiteConfigForm)
         del form_data["custom_stylesheet"]
 
@@ -72,14 +68,10 @@ class SiteConfigFormTest(TenantTestCase):
             charset="utf-8",
         )
         form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
-        # print(form.errors)
         self.assertTrue(form.is_valid())
 
-    def test_custom_stylesheet_file_submission_removal(self):
-        """
-        Custom CSS file can be uploaded (submitted) and attached to `SiteConfig` model,
-        and existing file can be cleared.
-        """
+    def test_custom_stylesheet__submission_and_removal(self):
+        """Custom CSS file can be uploaded and attached to `SiteConfig`, and an existing file can be cleared."""
         valid_css = b"""body { color: black; }"""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(valid_css),
@@ -154,8 +146,8 @@ class SiteConfigFormTest(TenantTestCase):
         # the class-level list of advanced fields is not mutated by instances
         self.assertNotIn('competency_label_level_1', SiteConfigForm.advanced_fields)
 
-    def test_clean_clean_custom_profile_field_method(self):
-        """ Test if `clean_clean_custom_profile_field()` strips whitespace'd ends """
+    def test_clean_custom_profile_field__strips_whitespace(self):
+        """Test if `clean_clean_custom_profile_field()` strips whitespace'd ends."""
         form_data = model_to_form_data(self.config, SiteConfigForm)
 
         # check with whitespace only

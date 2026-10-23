@@ -11,7 +11,7 @@ urlpatterns = [
     path('semesters/add/', views.SemesterCreate.as_view(), name='semester_create'),
     path('semesters/<pk>/edit/', views.SemesterUpdate.as_view(), name='semester_update'),
     path('semesters/<pk>/delete/', views.SemesterDelete.as_view(), name='semester_delete'),
-    path('semesters/close/', views.end_active_semester, name='end_active_semester'),
+    path('semesters/<pk>/archive/', views.SemesterArchive.as_view(), name='semester_archive'),
     path('semesters/<pk>/activate/', views.SemesterActivate.as_view(), name='semester_activate'),
 
     # Blocks
@@ -23,6 +23,7 @@ urlpatterns = [
     # CourseStudent
     path('student/add/', views.CourseStudentCreate.as_view(), name='create'),
     path('student/<int:user_id>/join/', views.CourseAddStudent.as_view(), name='join'),
+    path('students/archive-help/', views.ArchiveStudentsHelp.as_view(), name='archive_students_help'),
     path('student/<pk>/edit/', views.CourseStudentUpdate.as_view(), name='update'),
     path('student/<pk>/delete/', views.CourseStudentDelete.as_view(), name='coursestudent_delete'),
 

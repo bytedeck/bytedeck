@@ -1,7 +1,7 @@
 """hackerspace_online URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
+    https://docs.djangoproject.com/en/5.2/topics/http/urls/
 Examples:
 Function views
     1. Add an import:  from my_app import views
@@ -42,6 +42,8 @@ urlpatterns += [
     # quest_manager
     re_path(r'^library/', include('library.urls', namespace='library')),
     re_path(r'^quests/', include('quest_manager.urls', namespace='quests')),
+    # questions (additional per-quest submission fields)
+    re_path(r'^questions/', include('questions.urls', namespace='questions')),
     # profile_manager
     re_path(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
     re_path(r'^announcements/', include('announcements.urls', namespace='announcements')),
@@ -77,7 +79,9 @@ urlpatterns += [
 ]
 
 
-if settings.DEBUG:
+# Dev-only wiring (static/media serving + debug toolbar). Tests run with DEBUG=False,
+# so this block never executes under the test harness -- excluded from coverage.
+if settings.DEBUG:  # pragma: no cover
     urlpatterns += static(settings.STATIC_URL,
                           document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL,

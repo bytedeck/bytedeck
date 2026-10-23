@@ -1,15 +1,14 @@
 -r requirements-production.txt
-django-debug-toolbar>=2.1
-django-debug-toolbar-template-timings>=0.9
+django-debug-toolbar>=8.0.0,<9.0
 
 # CLI
-coveralls  # includes coverage
-flake8>=3.7
-pipdeptree>=0.13.2
-pre-commit
+coveralls>=4.1.0,<5.0  # includes coverage
+ruff==0.16.5  # 0.x lint tool: exact pin so CI, the pre-commit hook and a local venv can never lint with different rule sets. Dependabot proposes the bumps
+pipdeptree>=4.2.3,<5.0
+pre-commit>=4.6.2,<5.0
 
 # code debugging/tests
-freezegun>=0.3.12
-mock>=2.0,<6.0
-model_bakery>=1.1,<2.0
-names
+freezegun>=1.5.5,<2.0
+mock>=5.2.0,<6.0
+model_bakery>=1.24.0,<2.0
+names>=0.3.0,<0.4

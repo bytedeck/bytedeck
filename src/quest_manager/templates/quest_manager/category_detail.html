@@ -1,17 +1,12 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
+{% load quest_tags %}
 
 {% block head_title %}Campaigns | {% endblock %}
 
 {% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %} {{ object.title }} Campaign{% endblock %}{% endblock %}
 
 {% block content %}
-    {% if object.quest_count != 0 and request.user.is_staff %}
-        <div class="alert alert-danger mb-3">
-            Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first.
-        </div>
-    {% endif %}
-
     {% if request.user.is_staff %}
         <div class="pull-right">
             <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button"
@@ -19,6 +14,7 @@
                 <i class="fa fa-edit"></i>
             </a>
 
+            {% can_export_to_library as can_export %}
             {% if can_export %}
               <a class="btn btn-default" role="button"
                 {% if object.quest_count != 0 %}
@@ -39,7 +35,7 @@
                 <form method="post" action="{% url 'quests:category_publish' object.id %}" class="preview-action-form">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-success" title="Publish Campaign and all its Quests">
-                        <i class="fa fa-upload"></i>
+                        <i class="fa fa-fw fa-eye"></i>
                     </button>
                 </form>
             {% endif %}

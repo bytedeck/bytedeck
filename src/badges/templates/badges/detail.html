@@ -1,10 +1,12 @@
 {% extends "badges/base.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
 {% load utility_tags %}
+{% load profile_tags %}
 
 {% block head %}
-<link href="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.css" rel="stylesheet">
-<script src="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.js"></script>
+<link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
+<script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>
 {% endblock %}
 
 {% block heading_inner %} {{ config.custom_name_for_badge }}: {{ heading }}{% endblock %}
@@ -18,28 +20,37 @@
 
     <div class="media-body">
       <div class="row">
-        <div class="col-xs-12 col-sm-8">
+        <div class="col-xs-12 col-sm-7">
           {{ badge.short_description|safe }}
         </div>
 
         {% if request.user.is_staff %}
-        <div class="col-xs-12 col-sm-4 text-right">
-          <div class="pull-right">
+        <div class="col-xs-12 col-sm-5 text-right">
+          {% comment %} One btn-group keeps every action button the same height and connected (like the
+             Current/All toggle below); fa-fw gives the icons a uniform width. The column is
+             col-sm-5 so the six icon buttons fit on one row without wrapping and breaking apart. {% endcomment %}
+          <div class="btn-group pull-right" role="group" aria-label="{{ config.custom_name_for_badge }} actions">
             <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
-              <i class="fa fa-edit"></i>
+              <i class="fa fa-fw fa-edit"></i>
             </a>
             <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}">
-              <i class="fa fa-copy"></i>
+              <i class="fa fa-fw fa-copy"></i>
             </a>
             <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}">
-              <i class="fa fa-trash-o"></i>
+              <i class="fa fa-fw fa-trash-o"></i>
             </a>
             <a class="btn btn-success" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}">
-              <i class="fa fa-user"></i>
+              <i class="fa fa-fw fa-user"></i>
             </a>
-            <a class="btn btn-success" title="Bulk grant to multiple student" href="{% url 'badges:bulk_grant_badge' badge.id %}">
-              <i class="fa fa-users"></i>
+            <a class="btn btn-success" title="Bulk grant to multiple students" href="{% url 'badges:bulk_grant_badge' badge.id %}">
+              <i class="fa fa-fw fa-users"></i>
             </a>
+            {% if badge.published %}
+            <a class="btn btn-success" title="Grant to all students who meet this {{ config.custom_name_for_badge|lower }}'s prerequisites"
+               href="{% url 'badges:grant_qualifying' badge.id %}">
+              <i class="fa fa-fw fa-user-plus"></i>
+            </a>
+            {% endif %}
           </div>
         </div>
         {% endif %}
@@ -55,8 +66,8 @@
         <div class="col-sm-6">
           <ul class="list-unstyled">
             <li><h4>XP: {{badge.xp}}</h4></li>
-            <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p></li>
-            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this {{ config.custom_name_for_badge|lower }}</p></li>
+            <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="{{ badge.badge_type.fa_icon_class }}"></i> {{badge.badge_type}}</span></p></li>
+            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_students_granted_this|floatformat:1 }}% have earned this {{ config.custom_name_for_badge|lower }}</p></li>
           </ul>
         </div>
         <div class="col-sm-6">
@@ -99,14 +110,15 @@
   {% if request.user.is_staff %}
   <h3>Assertions of this {{ config.custom_name_for_badge }}
     <div class="btn-group">
-      <a href="{% url 'badges:badge_detail' badge.id %}"
-      class="btn {% if current %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+      <a href="{% url 'badges:badge_detail' badge.id %}" title="{% people_list_description 'current' %}"
+      class="btn {% if current %}btn-primary{% else %}btn-default{% endif %}">Current</a>
 
-      <a href="{% url 'badges:badge_detail_all' badge.id %}"
-      class="btn {% if not current %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+      <a href="{% url 'badges:badge_detail_all' badge.id %}" title="{% people_list_description 'all' %}"
+      class="btn {% if not current %}btn-primary{% else %}btn-default{% endif %}">All</a>
 
     </div>
   </h3>
+  {% include 'snippets/table_loading.html' %}
   <table
         data-toggle='table'
         data-search='true'

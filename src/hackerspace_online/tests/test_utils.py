@@ -1,27 +1,27 @@
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
-from hackerspace_online.tests.utils import generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 from courses.forms import BlockForm, CourseStudentForm
 
 
-class Utils_generate_form_data_Test(TenantTestCase):
+class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
     """
         Specialized test cases for hackerspace_online.tests.utils.generate_form_data_test()
         Test to see if data generated is form_valid and can be used in post requests with different forms and models
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.teacher = get_user_model().objects.create(username="teacher", password="password", is_staff=True,)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher used to authenticate the form-submission requests."""
+        cls.teacher = get_user_model().objects.create(username="teacher", is_staff=True,)
 
-    def test_valid_SiteConfigModel(self):
+    def test_generate_form_data__valid_SiteConfig_model(self):
         """
             Basic test to see if generate_form_data works with SiteConfig model
         """
@@ -37,7 +37,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         # assert changes
         self.assertEqual(SiteConfig.get().site_name, "NEW SITE NAME")
 
-    def test_valid_RankModel(self):
+    def test_generate_form_data__valid_Rank_model(self):
         """
             Basic test to see if generate_form_data works with Rank model
         """
@@ -53,7 +53,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         # assert changes
         self.assertTrue(Rank.objects.filter(name="NEW RANK NAME").exists())
 
-    def test_valid_BlockForm(self):
+    def test_generate_form_data__valid_BlockForm(self):
         """
             Basic test to see if generate_form_data works with BlockForm
         """
@@ -79,7 +79,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
     # implemented for redundancy and there are many similarly-functional tests for other near-identical forms across site more suited to
     # this convienience method
     # form_valid_data exists as a dict but is being picked up as an arg instead of a kwarg and kwargs=form_valid_data upon creation does not fix
-    def test_valid_CourseStudentForm(self):
+    def test_generate_form_data__valid_CourseStudentForm(self):
         """
             Basic test to see if generate_form_data works with CourseStudentForm
 
@@ -124,4 +124,63 @@ class Utils_generate_form_data_Test(TenantTestCase):
         self.assertEqual(response.status_code, 302)
 
         # assert changes
-        self.assertTrue(CourseStudent.objects.count(), 1)
+        self.assertEqual(CourseStudent.objects.count(), 1)
+
+
+class ByteDeckTenantTestCaseTest(ByteDeckTenantTestCase):
+    """Regression tests for ByteDeckTenantTestCase's setUpTestData support.
+
+    django-tenants' stock TenantTestCase.setUpClass skips Django TestCase's
+    class-level setup, so setUpTestData never runs there. These tests prove that
+    our base class (1) runs setUpTestData with the tenant schema active, and
+    (2) preserves per-test isolation of the class-level data.
+
+    Note: test methods run in alphabetical order; test_a_* mutates class data and
+    test_b_* verifies the mutation did not leak into the next test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Class-level fixture that would silently never run on stock TenantTestCase."""
+        cls.category = baker.make('quest_manager.Category', title='setuptestdata-probe')
+
+    def test_setuptestdata__ran_in_tenant_schema(self):
+        """setUpTestData ran, its data is queryable, and it was created in the test tenant's schema."""
+        self.assertEqual(connection.schema_name, self.tenant.schema_name)
+        self.assertTrue(
+            apps.get_model('quest_manager', 'Category').objects.filter(title='setuptestdata-probe').exists()
+        )
+
+    def test_a_mutations_of_class_data__are_visible_within_a_test(self):
+        """A test may freely mutate class-level data; changes are visible inside that test."""
+        self.category.title = 'mutated'
+        self.category.save()
+        self.assertTrue(
+            apps.get_model('quest_manager', 'Category').objects.filter(title='mutated').exists()
+        )
+
+    def test_b_mutations_of_class_data__do_not_leak_between_tests(self):
+        """DB rows and in-memory attributes are restored between tests (runs after test_a_*)."""
+        self.assertEqual(self.category.title, 'setuptestdata-probe')
+        Category = apps.get_model('quest_manager', 'Category')
+        self.assertFalse(Category.objects.filter(title='mutated').exists())
+        self.assertTrue(Category.objects.filter(title='setuptestdata-probe').exists())
+
+
+class ViewTestUtilsMixinTest(ByteDeckTenantTestCase):
+    """Tests the login-redirect helpers against a real login-required view (tags:list)."""
+
+    def test_assertLoginRedirect__next_url_carrying_a_query_string(self):
+        """The helper matches Django's redirect when the requested url has its own query string.
+
+        Django puts the whole path and query in ?next=, percent-encoded, so the expected url has to
+        be built by encoding the query rather than pasting next_url in: pasted, the requested url's
+        own & would start a second parameter of the login url instead of staying inside ?next=.
+        """
+        url = f"{reverse('tags:list')}?page=2&sort=name"
+
+        self.assertLoginRedirect(self.client.get(url), url)
+
+    def test_assertRedirectsLoginURL__next_url_carrying_a_query_string(self):
+        """assertRedirectsLoginURL takes a url rather than a url name, so it sees query strings too."""
+        self.assertRedirectsLoginURL(f"{reverse('tags:list')}?page=2&sort=name")

@@ -41,17 +41,18 @@ class SiteConfigForm(forms.ModelForm):
     ]
 
     def __init__(self, *args, **kwargs):
-        """ Builds the form and its crispy-forms layout, adapting the fields to the
-        deck's feature flags and the requesting user.
+        """Build the Site Configuration form and its crispy layout.
 
-        The proficiency scale label fields are only included when the competencies
-        feature is enabled (otherwise they're removed entirely); the advanced fields
-        are disabled unless is_deck_owner is True.
+        Only the deck owner can change the settings in `advanced_fields`, so they're disabled for
+        anyone else. The proficiency scale label fields are only included once the competencies
+        feature is enabled (otherwise they're removed from the form entirely), and then join the
+        owner-only advanced fields. The Google sign-in setting is always disabled on this form, and
+        the two Shared Library settings and the competencies flag are labelled as experimental.
 
         Args:
-            *args, **kwargs: standard ModelForm arguments, plus the keyword-only
-                is_deck_owner (bool, default False): whether the requesting user is
-                this deck's owner and may edit the advanced fields.
+            *args: positional arguments passed through to ``forms.ModelForm``.
+            **kwargs: keyword arguments passed through to ``forms.ModelForm``, plus ``is_deck_owner``
+                (bool, default False): whether the user editing the settings is the deck owner.
         """
         is_deck_owner = kwargs.pop('is_deck_owner', False)
 
@@ -101,6 +102,8 @@ class SiteConfigForm(forms.ModelForm):
                 "display_marks_calculation",
                 "cap_marks_at_100_percent",
                 "simplified_course_registration",
+                "students_choose_xp_course",
+                "default_quest_prerequisite",
                 "custom_name_for_badge",
                 "custom_name_for_announcement",
                 "custom_name_for_group",

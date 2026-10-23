@@ -1,0 +1,15 @@
+{% extends 'questions/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block head_title %}{{ heading }} | {% endblock %}
+
+{% block heading_inner %}{{ heading }} <small>for <a href="{% url 'quests:quest_detail' quest.id %}">{{ quest.name }}</a></small>{% endblock %}
+
+{% block content %}
+{# data-warn-unsaved: leaving with a half-written question draws the browser's "Leave site?" prompt (#2572). #}
+<form method='post' enctype="multipart/form-data" data-warn-unsaved>{% csrf_token %}
+    {% crispy form %}
+    <a href="{% url 'questions:list' quest.id %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
+</form>
+{% endblock %}

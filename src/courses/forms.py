@@ -1,12 +1,86 @@
+from collections import Counter
+
 from django import forms
+from django.forms.formsets import DELETION_FIELD_NAME
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
+from django_select2.forms import Select2Widget
 
-from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedDate
+from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
+from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
+
+
+class XPCourseChoiceMixin:
+    """Asks the student which of their courses this submission's XP counts toward (issue #2440).
+
+    The form's ``registration`` field offers the student's course registrations, each shown as
+    its course. The work is filed against the registration rather than the course, so it stays
+    with that registration if a teacher later changes its course (issue #2875).
+
+    They can also decline to choose: "split evenly between my courses" is the first option and
+    the one selected by default, so a student who ignores the question gets the even split that
+    every submission used to get.
+
+    The field is only worth showing when there is a choice to make, so it is dropped when the
+    deck has the setting off, when the student is in a single course, and when no student is in
+    view at all (a staff form). Dropping it leaves the submission unassigned, which is the same
+    thing as splitting it.
+    """
+
+    #: Asked the same way of everyone, so the question reads identically whether a student is
+    #: handing in a quest or a teacher is granting a badge.
+    label = 'Which course should this XP be awarded to?'
+
+    #: Wording of the "do not assign this to a course" choice, which teacher-facing forms
+    #: override, since they are choosing on someone else's behalf.
+    split_evenly_label = 'Split evenly between my courses'
+
+    def __init__(self, *args, student=None, **kwargs):
+        """
+        Args:
+            student (User): whose courses to offer. None for a form no student fills in,
+                or one where the student is picked on the form itself and so is not yet known.
+        """
+        super().__init__(*args, **kwargs)
+        # a registration with no course has nothing to show the student, so it is not offered
+        registrations = (
+            CourseStudent.objects.current_courses(student).filter(course__isnull=False).select_related('course', 'block')
+            if student else None
+        )
+
+        if not student or not SiteConfig.get().students_choose_xp_course or registrations.count() < 2:
+            del self.fields['registration']
+            return
+
+        field = self.fields['registration']
+        field.label = self.label
+        # the label asks the whole question, so a line of help text under it would only repeat it
+        field.help_text = ''
+        # the same select2 dropdown the other fields on these pages use (both templates already
+        # render the form's media), so the question does not stand out as a different kind of
+        # box. select2 draws an optional field's empty choice as its placeholder, so the
+        # "split evenly" wording has to be handed over as one or the box reads blank.
+        field.widget = Select2Widget(attrs={
+            'data-theme': 'bootstrap',
+            'data-placeholder': self.split_evenly_label,
+        })
+        # "split evenly" is the empty choice, and it is what a submission with no course does
+        # anyway, so it needs no separate value and is the safe thing to leave selected: a
+        # student who does not think about the question gets the old behaviour. Assigning the
+        # queryset last hands the choices, empty label included, to the widget set above.
+        field.empty_label = self.split_evenly_label
+        field.queryset = registrations
+        # a student registered in the same course twice (in two groups, say) would otherwise see
+        # two identical choices, so those name their group as well
+        counts = Counter(registration.course_id for registration in registrations)
+        field.label_from_instance = lambda registration: (
+            f'{registration.course} ({registration.block})'
+            if counts[registration.course_id] > 1 and registration.block else str(registration.course)
+        )
 
 
 class NoScriptTagDatePickerInput(DatePickerInput):
@@ -22,6 +96,42 @@ class NoScriptTagDatePickerInput(DatePickerInput):
         return attrs
 
 
+class RankForm(forms.ModelForm):
+    """Rank add/edit form.
+
+    The Font Awesome icon field uses the searchable icon picker
+    (:class:`utilities.fa_icon_widget.FontAwesomeIconPickerWidget`), which writes the
+    bare icon name. The modifier field sits right below it with toggle buttons for the
+    common transforms (rotate, flip, spin, pulse) that a rank might want.
+    """
+
+    class Meta:
+        """Binds the icon/modifier picker widgets and plain-language labels onto Rank's
+        two icon fields (the Font Awesome ``fa_icon``/``fa_icon_modifiers`` and the
+        ``icon`` image fallback)."""
+
+        model = Rank
+        fields = ['name', 'xp', 'fa_icon', 'fa_icon_modifiers', 'icon']
+        widgets = {
+            # Tell the picker which field holds the modifiers so its live preview
+            # can reflect rotations/flips/etc. as they are toggled or typed.
+            'fa_icon': FontAwesomeIconPickerWidget(modifiers_field_name='fa_icon_modifiers'),
+            'fa_icon_modifiers': FontAwesomeModifierPickerWidget(),
+        }
+        labels = {
+            # "Fa icon" is jargon; call it "Icon". The ImageField (a fallback used
+            # where the font icon can't be, e.g. quest maps) then can't also be
+            # "Icon", so it becomes "Backup image".
+            'fa_icon': 'Icon',
+            'fa_icon_modifiers': 'Icon modifiers',
+            'icon': 'Backup image',
+        }
+        help_texts = {
+            'fa_icon_modifiers': 'Optional. Rotate, flip, or animate the icon above.',
+            'icon': 'A fallback image, used where the icon above can\'t be (e.g. in the quest maps).',
+        }
+
+
 class MarkRangeForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -33,6 +143,7 @@ class MarkRangeForm(forms.ModelForm):
                 'name',
                 'minimum_mark',
                 'active',
+                'color_headers',
                 Accordion(
                     AccordionGroup(
                         "Advanced",
@@ -51,19 +162,38 @@ class MarkRangeForm(forms.ModelForm):
 
     class Meta:
         model = MarkRange
-        fields = ['name', 'minimum_mark', 'active', 'color_light', 'color_dark', 'days', 'courses']
+        fields = ['name', 'minimum_mark', 'active', 'color_headers', 'color_light', 'color_dark', 'days', 'courses']
 
 
 class CourseStudentForm(forms.ModelForm):
     # filtering the available options in a foreign key choice field
     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
     def __init__(self, *args, **kwargs):
+        """Narrow the semester, course and group choices to the ones worth offering.
+
+        Semesters are the open ones, courses and groups the active ones. Under simplified
+        registration a field with only one choice is hidden and takes that choice, so a
+        student joining the usual single-semester, single-course deck is not asked anything.
+
+        Args:
+            student_registration (bool): True when this is a student registering themselves,
+                the only case simplified registration applies to. Staff adding a student see
+                every field, whatever the setting says.
+        """
         student_registration = kwargs.pop('student_registration', None)
         super().__init__(*args, **kwargs)
 
-        semester_qs = Semester.objects.get_current(as_queryset=True)
+        # every open semester, so a deck running two cohorts on different calendars lets the
+        # student say which one they are joining (issue #2157 Phase 3, #1781). With one open
+        # this is the single choice it always was, and stays hidden under simple registration
+        semester_qs = Semester.objects.open()
         self.fields['semester'].queryset = semester_qs
         self.fields['semester'].empty_label = None
+        # preselect the deck's default rather than whichever semester sorts first: the list is
+        # newest term first, so without this a deck pointed at the older of two open semesters
+        # would offer the newer one. An instance being edited keeps its own semester, since
+        # initial data built from the instance wins over a field's initial.
+        self.fields['semester'].initial = SiteConfig.get().open_semester_id
 
         courses_qs = Course.objects.filter(active=True)
         self.fields['course'].queryset = courses_qs
@@ -111,6 +241,25 @@ class CourseStudentForm(forms.ModelForm):
 
 
 class CourseStudentStaffForm(CourseStudentForm):
+    """The registration form as staff edit an existing registration, rather than create one."""
+
+    def __init__(self, *args, **kwargs):
+        """Keep the registration's own semester among the choices.
+
+        Offering only the open semesters is right for creating a registration: a student is
+        registered into a term that is running. But an archived semester keeps its
+        registrations, and a form that does not offer a field's current value cannot be saved
+        at all, so correcting the course or the group on a past registration failed validation
+        on the semester and there was no way through it (issue #2507).
+
+        This only adds the "leave it where it is" choice. Every open semester was already
+        offered, so it does not newly allow moving a registration from one term to another.
+        """
+        super().__init__(*args, **kwargs)
+        if self.instance.semester_id is not None:
+            self.fields['semester'].queryset = (
+                self.fields['semester'].queryset | Semester.objects.filter(pk=self.instance.semester_id)
+            )
 
     class Meta:
         model = CourseStudent
@@ -126,6 +275,22 @@ class SemesterForm(forms.ModelForm):
             'first_day': DatePickerInput(),
             'last_day': DatePickerInput(),
         }
+
+    def clean(self):
+        """Reject semesters whose last day falls before their first day; the date-math
+        methods (num_days, get_date, ...) assume a forward date range.
+
+        Adds a validation error on the last_day field when it precedes first_day.
+
+        Returns:
+            dict: the form's cleaned_data.
+        """
+        cleaned_data = super().clean()
+        first_day = cleaned_data.get('first_day')
+        last_day = cleaned_data.get('last_day')
+        if first_day and last_day and last_day < first_day:
+            self.add_error('last_day', "The last day of the semester can't be before its first day.")
+        return cleaned_data
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -171,6 +336,24 @@ class ExcludedDateForm(forms.ModelForm):
         return excluded_date.save()  # formset saves the rest in its own function
 
 
+def class_days_changed(semester_form, excluded_date_formsets):
+    """Whether saving a semester's form and its excluded dates changes which days it has class on,
+    and so what share of it has passed: what every mark in it is worked out from (#2899).
+
+    Args:
+        semester_form (ModelForm): the semester's own form, which holds its first and last day.
+        excluded_date_formsets (iterable of BaseFormSet): the formsets of its excluded dates.
+
+    Returns:
+        bool: True when the first or last day changed, or an excluded date was added, edited or
+        removed.
+    """
+    return (
+        bool({'first_day', 'last_day'} & set(semester_form.changed_data))
+        or any(formset.has_changed() for formset in excluded_date_formsets)
+    )
+
+
 class ExcludedDateFormsetHelper(FormHelper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -194,7 +377,68 @@ class BaseFormSet(forms.BaseModelFormSet):
         form.fields['DELETE'].widget = forms.HiddenInput()
 
 
-ExcludedDateFormset = forms.modelformset_factory(model=ExcludedDate, form=ExcludedDateForm, formset=BaseFormSet, can_delete=True, extra=1)
+class BaseExcludedDateFormSet(BaseFormSet):
+    """Refuses a semester two excluded dates on the same day.
+
+    A date is unique per semester rather than deck-wide (#2647), and `semester` is not one of
+    these forms' fields: `ExcludedDateForm.save` attaches it. Django's own formset uniqueness
+    check only covers a constraint whose every field is on the form, so it does not see this
+    one, and two rows naming the same day would reach the database as an IntegrityError.
+
+    Comparing the rows against each other is the whole check: the view hands the formset the
+    semester's entire `excludeddate_set`, so every date it already has is a form here.
+    """
+
+    def clean(self):
+        """Fault every row naming a date an earlier row in the formset already claimed."""
+        super().clean()
+
+        claimed = set()
+        for form in self.forms:
+            # A form with no cleaned_data failed its own validation, and a blank extra row or
+            # an unparseable date leaves `date` out of it: nothing to compare either way. A row
+            # marked for deletion is on its way out, so the day it holds is free to reuse.
+            date = getattr(form, 'cleaned_data', {}).get('date')
+            if date is None or form.cleaned_data.get(DELETION_FIELD_NAME):
+                continue
+
+            if date in claimed:
+                form.add_error('date', 'This semester already excludes this date.')
+            claimed.add(date)
+
+    def save_existing_objects(self, commit=True):
+        """Save the rows the teacher removed before the rows they changed.
+
+        Django walks the rows it already had in form order, deleting or writing each as it
+        comes, and the view hands them over sorted by date. So a row edited to take a date
+        that a row further down is giving up gets written while that row still holds it, and
+        the date is unique within its semester (#2647): the write fails, and the teacher who
+        moved a mistyped holiday onto the right day and deleted the leftover row gets a 500.
+
+        Deletions first frees the day before anything moves onto it. The order is put back
+        afterwards, because it is the order the rows were validated and would be rendered in.
+
+        Args:
+            commit (bool): whether to write to the database, passed straight through.
+
+        Returns:
+            list: the saved instances, from Django's own implementation.
+        """
+        original_order = list(self.forms)
+        initial_count = self.initial_form_count()
+        # Stable, so the rows that stay keep their order and only the doomed ones move up.
+        self.forms[:initial_count] = sorted(
+            self.forms[:initial_count], key=lambda form: not self._should_delete_form(form),
+        )
+        try:
+            return super().save_existing_objects(commit=commit)
+        finally:
+            self.forms[:] = original_order
+
+
+ExcludedDateFormset = forms.modelformset_factory(
+    model=ExcludedDate, form=ExcludedDateForm, formset=BaseExcludedDateFormSet, can_delete=True, extra=1,
+)
 
 
 class BlockForm(forms.ModelForm):

@@ -5,12 +5,15 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.views import SuccessMessageMixin
+from django.core.exceptions import ValidationError
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.views import View
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.template.loader import render_to_string
 from django.http import JsonResponse
@@ -18,6 +21,7 @@ from django.http import JsonResponse
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from announcements.models import Announcement
+from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
 from djcytoscape.models import CytoScape
@@ -26,20 +30,43 @@ from notifications.models import Notification
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
-from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
-from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
+from .forms import (
+    BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
+    ExcludedDateFormset, ExcludedDateFormsetHelper, class_days_changed,
+)
+from .models import Block, Course, CourseStudent, ExcludedDate, Rank, Semester, MarkRange, semester_for
 
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
 import numpy
-import math
 
 
 # Create your views here.
 @non_public_only_view
 @login_required
 def mark_calculations(request, user_id=None):
+    """Show a student how their mark was worked out, course by course.
+
+    Explains the arithmetic behind the number: how much XP counts toward the course this page
+    is about (a student in several courses has a different amount in each, issue #2440), how
+    far through the semester they are, what that projects to by the end, and the mark ranges
+    they are heading for. The deck can turn the whole page off.
+
+    Args:
+        request: the HttpRequest. Its user is whose marks are shown, unless they are staff
+            naming someone else.
+        user_id (int): the student to show, for staff looking at somebody's marks. Students
+            only ever see their own, whatever they put in the URL.
+
+    Returns:
+        HttpResponse: the rendered page, or the "turned off" notice for staff on a deck with
+        mark calculations disabled.
+
+    Raises:
+        Http404: a student reached this URL on a deck with mark calculations turned off.
+    """
     template_name = 'courses/mark_calculations.html'
 
     # Mark calculation not activated on this deck
@@ -57,43 +84,114 @@ def mark_calculations(request, user_id=None):
     else:
         user = request.user
 
-    course_student = CourseStudent.objects.current_course(user)
-    courses = CourseStudent.objects.current_courses(user)
-    num_courses = courses.count()
-    if courses:
-        xp_per_course = user.profile.xp_cached / num_courses
-    else:
-        xp_per_course = None
+    registrations = list(CourseStudent.objects.current_courses(user))
+    num_courses = len(registrations)
+    # a student belongs to one semester (#1781), so their registrations all share it, and the
+    # page's dates and day counts are the same whichever course is being read
+    semester = registrations[0].semester if registrations else None
+    fraction_complete = semester.fraction_complete() if semester else 0
 
-    # only show mark ranges where student is enrolled in and is also active
-    user_courses = user.profile.current_courses().values_list('course', flat=True)
-    assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
-    all_ranges = MarkRange.objects.filter(active=True, courses=None)
-
-    # combine assigned_ranges and all_ranges, then order by min mark and only include markranges with unique minimum marks in context queryset
-    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark').distinct('minimum_mark')
-
-    # in some tests course_student == None
-    # So, if getting this page ("courses:mark_all"/"courses:my_mark")
-    # it will crash
-    if course_student:
-        # inject the xp needed for passing the mark range
-        # cant do it with template tags as you can only multiply/divide once
-        days_percentage = course_student.semester.fraction_complete()
-        total_xp = courses.first().course.xp_for_100_percent
-        for markrange in markranges:
-            mark_percentage = markrange.minimum_mark / 100
-            markrange.xp_needed = math.floor(total_xp * mark_percentage * days_percentage)
+    # the whole page below the marks table is about one course at a time, so each course is
+    # worked out in full: its own XP, its own mark and the XP its own mark ranges call for
+    # (#2743). The division between courses is one question about the student rather than one
+    # per course, so it is asked once here for all of them (issue #2459).
+    course_panes = [
+        _course_pane(registration, xp, fraction_complete)
+        for registration, xp in CourseStudent.objects.xp_across(user, registrations)
+    ]
 
     context = {
         'user': user,
-        'obj': course_student,
-        'courses': courses,
-        'xp_per_course': xp_per_course,
+        'courses': registrations,
+        'course_panes': course_panes,
         'num_courses': num_courses,
-        'markranges': markranges,
+        'semester': semester,
+        # every course they are in is run on XP alone, so there is no mark to explain (#403)
+        'no_course_uses_marks': num_courses > 0 and not any(pane['uses_marks'] for pane in course_panes),
     }
     return render(request, template_name, context)
+
+
+def _course_markranges(course):
+    """The mark ranges a course's marks are read against, one per grade boundary, lowest first.
+
+    These are the course's own ranges plus the ones assigned to no course, which apply to every
+    course. A course run on XP alone has no percentage, so it has none (#403).
+
+    Args:
+        course (Course or None): the course.
+
+    Returns:
+        list[MarkRange]: the active ranges for the course.
+    """
+    if not (course and course.uses_marks):
+        return []
+    return list(
+        MarkRange.objects.filter(active=True)
+        .filter(Q(courses=course) | Q(courses=None))
+        .order_by('minimum_mark').distinct('minimum_mark')
+    )
+
+
+def _mark_lines(course, days_in_semester):
+    """The line the XP Progress chart draws for each of a course's mark ranges.
+
+    They are worked out on the server, so a line rounds a mark exactly as the rest of the app
+    does: on today's date each line is at the XP that Mark Calculations lists for its range
+    (#2826).
+
+    Args:
+        course (Course or None): the course being charted.
+        days_in_semester (int): the semester's class days.
+
+    Returns:
+        list[dict]: for each range, lowest first, its minimum `mark` and its `xp` on each class
+        day from the first.
+    """
+    return [
+        {"mark": markrange.minimum_mark, "xp": markrange.xp_to_reach_by_day(course.xp_for_100_percent, days_in_semester)}
+        for markrange in _course_markranges(course)
+    ]
+
+
+def _course_pane(registration, xp, fraction_complete):
+    """Everything the mark page's tab for one course is written from.
+
+    A student in several courses has a different amount of XP in each (issue #2440), so the
+    explanation is a different sum per course rather than one sum that leaves the others out.
+    Its mark ranges differ too: a range can be assigned to particular courses, and the XP any
+    of them calls for is a fraction of that course's own total (#2743).
+
+    Args:
+        registration (CourseStudent): the course to answer for.
+        xp (float): the XP counting toward it, already divided out for every one of the
+            student's registrations at once.
+        fraction_complete (float): how far through the semester it is, for working out the XP
+            each mark range calls for by today.
+
+    Returns:
+        dict: the registration, its course, that course's XP, mark and average per class day,
+        whether it has a mark at all, and its mark ranges each carrying an `xp_needed`.
+    """
+    course = registration.course
+    # a course run on XP alone has no percentage, so no mark and no ranges to head for (#403)
+    uses_marks = bool(course and course.uses_marks)
+
+    markranges = _course_markranges(course)
+    for markrange in markranges:
+        # the XP that first gives a mark shown as the range's minimum, so a student holding it
+        # is at the range (#2826)
+        markrange.xp_needed = markrange.xp_to_reach(course.xp_for_100_percent, fraction_complete)
+
+    return {
+        'registration': registration,
+        'course': course,
+        'xp': xp,
+        'mark': registration.mark(xp=xp),
+        'xp_per_day_ave': registration.xp_per_day_ave(xp=xp),
+        'uses_marks': uses_marks,
+        'markranges': markranges,
+    }
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -166,7 +264,7 @@ class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class RankCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('name', 'xp', 'icon', 'fa_icon')
+    form_class = RankForm
     model = Rank
     success_url = reverse_lazy('courses:ranks')
 
@@ -180,7 +278,7 @@ class RankCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class RankUpdate(NonPublicOnlyViewMixin, UpdateMapMessageMixin, UpdateView):
-    fields = ('name', 'xp', 'icon', 'fa_icon')
+    form_class = RankForm
     model = Rank
     success_url = reverse_lazy('courses:ranks')
 
@@ -204,7 +302,7 @@ class CourseList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
+    fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active')
     model = Course
     success_url = reverse_lazy('courses:course_list')
 
@@ -218,7 +316,7 @@ class CourseCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
+    fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active')
     model = Course
     success_url = reverse_lazy('courses:course_list')
 
@@ -253,10 +351,110 @@ class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
+class ArchiveStudentsHelp(NonPublicOnlyViewMixin, TemplateView):
+    """Staff help page explaining how to archive students so they stop counting toward
+    the deck's current-student cap (#1729 PR 4 / #1733's archiving instructions).
+
+    Linked from the at-capacity refusal page; the reminder emails (plan PR 5) will
+    link here too.
+    """
+    template_name = 'courses/archive_students_help.html'
+
+
+class SerializedRegistrationMixin:
+    """Save a registration with the one-semester rule re-checked under a lock (issue #2438).
+
+    `CourseStudent.clean()` reads the student's other registrations while the form validates,
+    which leaves a window: two registrations for the same student submitted at the same instant
+    both look clean and both save, landing them in two open semesters at once, which is the
+    state the rule exists to prevent.
+
+    Locking the student's own row makes the two queue up instead, and re-running the rule after
+    the lock is taken means the second one sees what the first wrote. It is refused the same
+    way it would have been had it arrived a moment later: as a form error naming the semester
+    the student is already in, not a crash.
+    """
+
+    def lock_student(self, user_id):
+        """Take the lock that serializes this student's registrations.
+
+        The student's own row is what has to be locked: locking their existing registrations
+        would lock nothing at all for a student registering for the first time, which is
+        exactly when two requests can race.
+
+        Args:
+            user_id (int): the student being registered.
+        """
+        User.objects.select_for_update().get(pk=user_id)
+
+    def form_valid(self, form):
+        """Save the registration, refusing it if another one beat us to this student.
+
+        Returns:
+            HttpResponse: the usual redirect on success, or the re-rendered form carrying the
+            one-semester error when a registration landed while this one waited for the lock.
+        """
+        try:
+            with transaction.atomic():
+                self.lock_student(form.instance.user_id)
+                form.instance.clean()
+                return super().form_valid(form)
+        except ValidationError as error:
+            # keyed on 'semester' by CourseStudent.clean(), so it renders on that field
+            form.add_error(None, error)
+            return self.form_invalid(form)
+
+
+class NoOpenSemesterMixin:
+    """The refusal a registration view gives while the deck has no semester open (issue #2060).
+
+    Registering anyone in a course needs a semester to register them into. With none open the
+    form's semester field has no choices at all, so rendering it can only produce a submission
+    that fails on `Select a valid choice`, which says nothing about the actual reason or what
+    to do about it.
+
+    Both views that create a registration check this first, before their other guards, and
+    both check it on POST as well as GET: the GET-side check alone would not stop a direct
+    submission to the same URL.
+
+    Attributes:
+        no_open_semester_heading (str): how the refusal page titles itself. The two views are
+            refusing different things, so each names its own.
+    """
+
+    no_open_semester_heading = ''
+
+    @staticmethod
+    def no_open_semester():
+        """Whether there is no semester open to register anyone into.
+
+        Returns:
+            bool: True when the deck has no open semester.
+        """
+        return SiteConfig.get().has_no_open_semester()
+
+    def no_open_semester_response(self, request):
+        """Render the page with the explanation in place of a form that could only fail.
+
+        Args:
+            request: the request being refused.
+
+        Returns:
+            HttpResponse: the registration template, which words the explanation for a student
+            or for staff depending on who is looking.
+        """
+        return render(request, self.template_name, {
+            'heading': self.no_open_semester_heading,
+            'no_open_semester': True,
+        })
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CourseAddStudent(SerializedRegistrationMixin, NoOpenSemesterMixin, NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     template_name = 'courses/coursestudent_form.html'
+    no_open_semester_heading = 'Add student to course'
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -265,8 +463,38 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         kwargs['instance'] = CourseStudent(user=user)
         return kwargs
 
+    def _deck_at_capacity_for_target(self):
+        """Whether the deck's current-student cap blocks the TARGET student from being added --
+        the staff-side counterpart of CourseStudentCreate's guard (#1729 PR 4)."""
+        from tenant.limits import can_add_current_student
+        target = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        return not can_add_current_student(target)
+
+    def _deck_at_capacity_response(self, request):
+        """Render the add page with the at-capacity explanation (with staff-facing links to the
+        archive-students help page and the subscribe page) instead of the form."""
+        return render(request, self.template_name, {'heading': 'Add student to course', 'deck_at_capacity': True})
+
+    def get(self, request, *args, **kwargs):
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
+
+        if self._deck_at_capacity_for_target():
+            return self._deck_at_capacity_response(request)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # block the direct POST too, or the cap could be bypassed by submitting the form URL
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
+        if self._deck_at_capacity_for_target():
+            return self._deck_at_capacity_response(request)
+        return super().post(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data()
+        # kwargs carries the validated form from form_invalid(); dropping it rebuilds an
+        # unvalidated one, losing any error added to the form after it was validated
+        ctx = super().get_context_data(**kwargs)
         ctx['heading'] = 'Add student to course'
         ctx['submit_btn_value'] = 'Add'
         return ctx
@@ -287,7 +515,9 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return kwargs
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data()
+        # kwargs carries the validated form from form_invalid(); dropping it rebuilds an
+        # unvalidated one, losing any error added to the form after it was validated
+        ctx = super().get_context_data(**kwargs)
         ctx['heading'] = f'Update {self.object.user.username}\'s course'
         ctx['submit_btn_value'] = 'Update'
         return ctx
@@ -296,20 +526,98 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
-# Student Course Registration View
-class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+def _registration_added_message(registration):
+    """What a student is told when they have been added to a course.
 
-    # if an active CourseStudent object assigned to student exists when student accesses registration view (user already enrolled), page will 403
+    Names the group and the semester alongside the course (issue #2179). A deck can run
+    several courses, several groups and several semesters at once, so naming only the course
+    leaves a student unable to tell which group they landed in or which term it counts toward.
+
+    Args:
+        registration (CourseStudent): the registration that was just created.
+
+    Returns:
+        str: the message, HTML-safe. The group and the semester are each left out when the
+        registration has none: both are nullable, and a half-written sentence is worse than a
+        shorter one.
+    """
+    # format_html escapes the names, which a teacher types and which reach the page through
+    # the messages template's `|safe`
+    parts = [format_html('You have been added to the <strong>{}</strong> course', registration.course)]
+    if registration.block:
+        parts.append(format_html(
+            'in the <strong>{}</strong> {}',
+            registration.block, SiteConfig.get().custom_name_for_group.lower(),
+        ))
+    if registration.semester:
+        parts.append(format_html('during the <strong>{}</strong> semester', registration.semester))
+
+    # safe because every name above went through format_html; the joining text is our own
+    return mark_safe(', '.join(parts) + '.')
+
+
+# Student Course Registration View
+class CourseStudentCreate(SerializedRegistrationMixin, NoOpenSemesterMixin, NonPublicOnlyViewMixin,
+                          SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+
     def test_func(self):
-        return not CourseStudent.objects.filter(user=self.request.user, active=True).exists()
+        """Allow the registration view only when the student is not already actively registered
+        for the current (active) semester.
+
+        A registration left active in an old, not-yet-closed semester must not 403 them out of
+        joining a course in the new semester (#1893), so the check is scoped to the active
+        semester rather than any active registration.
+
+        Returns:
+            bool: True if the user may access the registration view (they are not yet actively
+                registered for the active semester), False otherwise.
+        """
+        return not CourseStudent.objects.all_for_user_semester(
+            self.request.user, SiteConfig.get().open_semester
+        ).get_active().exists()
 
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
-    success_message = "You have been added to the %(course)s course"
+    template_name = 'courses/coursestudent_form.html'
+    no_open_semester_heading = 'Join a course'
+
+    def get_success_message(self, cleaned_data):
+        """The message naming what the student just joined (issue #2179).
+
+        Built from the saved registration rather than from a `success_message` template, so
+        the deck's own word for a group can be used and the same wording serves the
+        simplified-registration shortcut in get(), which has no form to interpolate.
+
+        Args:
+            cleaned_data (dict): the form's cleaned data, which this does not need.
+
+        Returns:
+            str: the message, HTML-safe.
+        """
+        return _registration_added_message(self.object)
+
+    def _deck_at_capacity(self):
+        """Whether the deck's current-student cap blocks this user from registering (#1729 PR 4)."""
+        from tenant.limits import can_add_current_student
+        return not can_add_current_student(self.request.user)
+
+    def _deck_at_capacity_response(self, request):
+        """Render the join page with the at-capacity explanation instead of the registration form.
+
+        Placed before the simplified-registration auto-create path in get(), so a deck at its
+        cap can't gain active students through the auto-create shortcut either.
+        """
+        return render(request, self.template_name, {'heading': 'Join a course', 'deck_at_capacity': True})
 
     def get(self, request, *args, **kwargs):
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
+
+        if self._deck_at_capacity():
+            return self._deck_at_capacity_response(request)
+
         # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
         # if simplified_course_registration is enabled in siteconfig and all three form fields are hidden, object should be created automatically
         simpleregistration = SiteConfig.get().simplified_course_registration
@@ -326,18 +634,28 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
             # can get active objects directly with first() and siteconfig.active_semester
             obj, created = CourseStudent.objects.get_or_create(
                     user=self.request.user,
-                    semester=SiteConfig.get().active_semester,
+                    semester=SiteConfig.get().open_semester,
                     block=Block.objects.filter(active=True).first(),
                     course=Course.objects.filter(active=True).first()
             )
 
-            # after object has been created, redirect to normal success url and display normal success message
-            # fstring used instead of self.success_message because form context not available
+            # after object has been created, redirect to normal success url and display the same
+            # message the form path shows, built from the registration rather than form context
             if created:
-                messages.success(request, f"You have been added to the {obj.course} Course")
+                messages.success(request, _registration_added_message(obj))
             return redirect(self.success_url)
         else:
             return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # Also block the POST: without this a student could still submit a registration into the
+        # closed active semester by posting directly (the form's only semester choice) (#2060).
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
+        # ...and the same for the capacity cap: the GET-side guard alone wouldn't stop a direct POST
+        if self._deck_at_capacity():
+            return self._deck_at_capacity_response(request)
+        return super().post(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()
@@ -348,7 +666,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         # setting kwarg field defaults for form instance is necessary for hidden fields (user, semester, course, block)
         # user is always hidden and semester always sets default, so can set both non-conditionally
         kwargs['instance'] = CourseStudent(user=self.request.user,
-                                           semester=SiteConfig.get().active_semester)
+                                           semester=SiteConfig.get().open_semester)
 
         # block and course will not always be hidden or defaulted, only set kwarg defaults where already necessary (only 1 active option)
         block_qs = Block.objects.filter(active=True)
@@ -363,7 +681,9 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         return kwargs
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data()
+        # kwargs carries the validated form from form_invalid(); dropping it rebuilds an
+        # unvalidated one, losing any error added to the form after it was validated
+        ctx = super().get_context_data(**kwargs)
 
         ctx['submit_btn_value'] = 'Join'
         ctx['heading'] = 'Join a course'
@@ -383,17 +703,138 @@ class CourseStudentDelete(NonPublicOnlyViewMixin, DeleteView):
 class SemesterList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Semester
 
+    def get_context_data(self, **kwargs):
+        """Add the open semesters, so the heading can name them all.
+
+        The deck's pointer names only one of them, and with two cohorts running that would
+        describe half the deck (issue #2157 Phase 3).
+
+        Returns:
+            dict: the standard ListView context plus `open_semesters`.
+        """
+        context = super().get_context_data(**kwargs)
+        context['open_semesters'] = Semester.objects.open()
+        return context
+
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+class RefuseSemesterMixin:
+    """Refuse GET and POST alike when the semester they target is off limits.
+
+    Subclasses implement refusal_message(), returning the message to show, or None to let
+    the request through. The check lives in the handlers rather than in dispatch() on
+    purpose: a dispatch() override runs *before* NonPublicOnlyViewMixin's, so looking the
+    semester up there would query a tenant-only table on the public schema instead of
+    letting that mixin raise its 404.
+    """
+
+    def refusal_message(self):
+        """The reason this semester can't be acted on, or None when it can.
+
+        Returns:
+            str or None: the error message to show the user, or None to allow the request.
+        """
+        raise NotImplementedError
+
+    def _refuse(self, request):
+        """Turn a refusal into a redirect, or return None to let the handler run.
+
+        Args:
+            request: the request being served, to attach the message to.
+
+        Returns:
+            HttpResponse or None: a redirect to the semester list when refused.
+        """
+        message = self.refusal_message()
+        if message is None:
+            return None
+        messages.error(request, message)
+        return redirect('courses:semester_list')
+
+    def get(self, request, *args, **kwargs):
+        """Refuse the semester or render the page.
+
+        Args:
+            request: the incoming request.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments.
+
+        Returns:
+            HttpResponse: the redirect from _refuse(), or the normal response.
+        """
+        return self._refuse(request) or super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        """Refuse the semester or perform the action.
+
+        Args:
+            request: the incoming request.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments.
+
+        Returns:
+            HttpResponse: the redirect from _refuse(), or the normal response.
+        """
+        return self._refuse(request) or super().post(request, *args, **kwargs)
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+class SemesterDelete(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+    """Staff-only confirm-and-delete view for a Semester.
+
+    Two semesters are off limits, and both are refused for GET and POST alike (the delete
+    template hides the form for them, but the URL is still reachable directly):
+
+    * the active semester, whose deletion SiteConfig.active_semester blocks with
+      on_delete=PROTECT anyway, so this redirects instead of crashing on the constraint;
+    * an archived semester, which holds its students' final marks. Nothing points at it once
+      it is archived, so only this guard stands between a stray URL and that record.
+    """
     model = Semester
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."
+
+    ACTIVE_SEMESTER_ERROR = "The active semester can't be deleted. Activate a different semester first."
+    ARCHIVED_SEMESTER_ERROR = "An archived semester can't be deleted: it holds your students' final marks."
+
+    def refusal_message(self):
+        """Whether this semester is one of the two that can't be deleted.
+
+        Returns:
+            str or None: the error message when the target is archived or is the active
+            semester, otherwise None.
+        """
+        semester = self.get_object()
+        if semester.is_archived:
+            return self.ARCHIVED_SEMESTER_ERROR
+        # the raw pointer, not open_semester: PROTECT blocks deleting whatever active_semester
+        # references, whatever its status, so this check has to match the constraint
+        if semester == SiteConfig.get().active_semester:
+            return self.ACTIVE_SEMESTER_ERROR
+        return None
+
+    def form_valid(self, form):
+        """Delete the semester, converting a ProtectedError from the delete itself into the
+        same redirect + error: the refusal_message() pre-check can race a concurrent activation
+        (another request making this semester active between the check and the delete).
+        The success message is added here, after the delete succeeds, because Django calls
+        get_success_url() before deleting.
+
+        Returns:
+            HttpResponse: a redirect to the semester list, with a success message when the
+            deletion went through or an error message when the PROTECT constraint blocked it.
+        """
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            messages.error(self.request, self.ACTIVE_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+        messages.success(self.request, self.success_message)
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -401,13 +842,6 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
         registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
         context["registrations"] = registrations
         return context
-
-    def get_success_url(self) -> str:
-        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
-        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
-        """
-        messages.success(self.request, self.success_message)
-        return super().get_success_url()
 
 
 class SemesterCreateUpdateFormsetMixin:
@@ -428,6 +862,14 @@ class SemesterCreateUpdateFormsetMixin:
         ctx = super().get_context_data(**kwargs).copy()
         ctx['formset'] = kwargs.get('formset', self.get_formset())
         ctx['helper'] = ExcludedDateFormsetHelper()
+        # What the page's Copy button offers to bring in, so the same holidays are not typed
+        # again for every semester running alongside this one (#2648). Empty on a deck whose
+        # other semesters exclude nothing, and the template then leaves the button out.
+        #
+        # From get_object() rather than self.object, like get_formset_queryset above: on a
+        # create GET, CreateView.get sets self.object back to None after this mixin's own get
+        # has set it, so the semester is only reliably reachable by asking for it again.
+        ctx['other_excluded_dates'] = ExcludedDate.from_other_semesters(self.get_object())
         return ctx
 
     # formsets
@@ -459,6 +901,8 @@ class SemesterCreateUpdateFormsetMixin:
     def form_valid(self, form, formset):
         response = super().form_valid(form)  # has to be before formset.save() so CreateView can save model first (necessary for create view)
         formset.save()
+        if class_days_changed(form, [formset]):
+            self.object.refresh_cached_marks_on_commit()
         return response
 
     def form_invalid(self, form, formset):
@@ -482,10 +926,51 @@ class SemesterCreate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+class SemesterUpdate(RefuseSemesterMixin, SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    """Staff-only edit view for a Semester.
+
+    An archived semester is refused: its dates and excluded days are what its students' final
+    marks were calculated from, so editing them would rewrite a finished record. The list hides
+    the edit button for archived semesters, but the URL is still reachable directly.
+    """
     model = Semester
     form_class = SemesterForm
     success_url = reverse_lazy('courses:semester_list')
+
+    ARCHIVED_SEMESTER_ERROR = ("An archived semester can't be edited: its dates are what your students' "
+                               "final marks were calculated from.")
+
+    def refusal_message(self):
+        """Whether this semester is archived, and so can't be edited.
+
+        Returns:
+            str or None: the error message when the target is archived, otherwise None.
+        """
+        return self.ARCHIVED_SEMESTER_ERROR if self.get_object().is_archived else None
+
+    def form_valid(self, form, formset):
+        """Save the semester and its excluded dates, unless it was archived in the meantime.
+
+        The form holds the semester as it was when the page was loaded, so saving it writes
+        every field back, including a status that is no longer current. Re-reading under a row
+        lock closes that window: an archive committing first is seen here (and refused), and
+        one arriving later waits for this save rather than being undone by it.
+
+        Args:
+            form: the validated SemesterForm.
+            formset: the validated ExcludedDateFormset.
+
+        Returns:
+            HttpResponse: a redirect to the semester list, with an error message when the
+            semester was archived while this edit was open.
+        """
+        with transaction.atomic():
+            if Semester.objects.select_for_update().filter(
+                pk=self.object.pk, status=Semester.Status.ARCHIVED,
+            ).exists():
+                messages.error(self.request, self.ARCHIVED_SEMESTER_ERROR)
+                return redirect('courses:semester_list')
+            return super().form_valid(form, formset)
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Update Semester'
@@ -495,14 +980,35 @@ class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterActivate(View):
+class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
+    """Staff-only endpoint that makes the given semester the deck's active semester
+    (the SiteConfig.active_semester pointer that registration, XP, and submissions run through).
 
-    def get(self, request, *args, **kwargs):
+    POST only: a deck-wide state change must not be triggerable by a prefetched link or a
+    cross-site GET (Django's CSRF protection only covers unsafe methods), so GET returns 405.
+    """
+    http_method_names = ['post']
+
+    ARCHIVED_SEMESTER_ERROR = "An archived semester can't be reopened. Create a new semester instead."
+
+    def post(self, request, *args, **kwargs):
+        """Start the semester whose pk is in the URL: open it and point
+        SiteConfig.active_semester at it, so students can join a course in it.
+
+        Archiving is one-way, so an archived semester is refused: reopening one would put
+        students back into a semester whose final marks have already been recorded.
+
+        Returns:
+            HttpResponse: a redirect to the semester list (404 if the pk doesn't exist).
+        """
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
-        siteconfig = SiteConfig.get()
-        siteconfig.active_semester = semester
-        siteconfig.save()
+        if semester.is_archived:
+            messages.error(request, self.ARCHIVED_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+
+        SiteConfig.get().set_active_semester(semester)
+        messages.success(request, f'Semester {semester} is now the active semester.')
 
         return redirect('courses:semester_list')
 
@@ -562,86 +1068,266 @@ class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
         return context
 
 
-@non_public_only_view
-@staff_member_required
-def end_active_semester(request):
-    sem = Semester.objects.complete_active_semester()
-    semester_warnings = {
-        Semester.CLOSED: 'Semester is already closed, no action taken.',
-        Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester until they are approved or returned",
-        Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't close the Semester until it is fixed.",
-        'success': f'Semester {sem} has been closed: student XP has been recorded and reset to 0, in-progress quests have been deleted, and \
-        announcements have been archived.',
-    }
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterArchive(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
+    """Staff-only two-step archive (close) of one semester.
 
-    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL,
-                   Semester.STUDENTS_WITH_NEGATIVE_XP):
+    The semester is named in the URL rather than taken from the deck, so a deck running
+    two of them can archive either one (issue #2157 Phase 3). Every count and blocker
+    below belongs to that semester alone.
+
+    GET renders a preview of everything archiving will do: how many course registrations
+    get their final XP recorded (freeing those students' deck seats), how many in-progress
+    quest submissions are deleted, and whether announcements will be archived, along with
+    any blockers (submissions still awaiting approval, students with negative XP). POST
+    performs the archive via Semester.objects.complete_semester().
+    """
+    template_name = 'courses/semester_archive.html'
+
+    NOT_OPEN_ERROR = "That semester isn't open, so there is nothing to archive."
+
+    def get_semester(self):
+        """The semester this page is archiving.
+
+        Returns:
+            Semester: the one named by the URL's pk.
+        """
+        return get_object_or_404(Semester, pk=self.kwargs['pk'])
+
+    def refusal_message(self):
+        """Whether this semester can be archived at all.
+
+        Returns:
+            str or None: the error message when the target is not open (an upcoming
+            semester has no marks to record, an archived one is already done), otherwise
+            None.
+        """
+        return None if self.get_semester().is_open else self.NOT_OPEN_ERROR
+
+    def get_context_data(self, **kwargs):
+        """Assemble the preview counts and blockers for archiving this semester.
+
+        Returns:
+            dict: template context with the semester, the counts previewed above, the
+            negative-XP users queryset, and a `blocked` flag when archiving would be
+            refused (pending approvals or negative XP).
+        """
+        context = super().get_context_data(**kwargs)
+        semester = self.get_semester()
+        registrations = CourseStudent.objects.all_for_semester(semester)
+        context['semester'] = semester
+        context['num_registrations'] = registrations.count()
+        context['num_seats_freed'] = registrations.get_students_only().count()
+        # both match what archiving this semester will actually touch: another open
+        # semester's in-progress work and pending approvals are left alone
+        context['num_in_progress'] = QuestSubmission.objects.all_not_completed(
+            active_semester_only=False,
+        ).get_semester(semester).count()
+        context['num_awaiting_approval'] = QuestSubmission.objects.all_awaiting_approval(semester=semester).count()
+        # negative final XP comes from a negative xp_cached (final_xp = xp_cached / course count);
+        # select_related the profile since the blockers list renders user.profile per row
+        context['negative_xp_users'] = User.objects.filter(
+            id__in=registrations.values_list('user', flat=True), profile__xp_cached__lt=0,
+        ).select_related('profile')
+        context['num_announcements'] = Announcement.objects.get_queryset().not_archived().not_draft().count()
+        context['blocked'] = bool(context['num_awaiting_approval'] or context['negative_xp_users'])
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Archive this semester: record final XP, deactivate its registrations, delete its
+        in-progress submissions, and (unless opted out via the archive_announcements
+        checkbox) archive announcements.
+
+        Args:
+            request: the POST request, whose archive_announcements field opts in to
+                archiving announcements alongside the semester.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments, including the semester's pk.
+
+        Returns:
+            HttpResponse: a redirect to the semester list with a success message, or with
+            a message saying why archiving was refused (the semester is not open, its
+            submissions await approval, or its students have negative XP).
+        """
+        # RefuseSemesterMixin.post() is shadowed by this method, so the guard is called
+        # here instead: a POST to a semester that isn't open must be refused the same way
+        # the GET is, rather than falling through to the sentinel below.
+        refused = self._refuse(request)
+        if refused:
+            return refused
+
+        sem = Semester.objects.complete_semester(self.get_semester())
+        semester_warnings = {
+            # refusal_message() already redirects when the target isn't open, so this only
+            # comes up when another request archived it between that check and this one
+            Semester.NO_OPEN_SEMESTER: self.NOT_OPEN_ERROR,
+            Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. "
+                                              "Can't archive the semester until they are approved or returned.",
+            Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't archive the semester until it is fixed.",
+        }
+        if sem in semester_warnings:
+            messages.warning(request, semester_warnings[sem])
+            return redirect('courses:semester_list')
+
         sem.reset_students_xp_cached()
-        Announcement.objects.archive_announcements()
+        if request.POST.get('archive_announcements'):
+            Announcement.objects.archive_announcements()
+            announcements_note = ', and announcements have been archived'
+        else:
+            announcements_note = ''
+        messages.success(
+            request,
+            f'Semester {sem} has been archived: student XP has been recorded and reset to 0, '
+            f'in-progress quest submissions have been deleted{announcements_note}.'
+        )
+        return redirect('courses:semester_list')
 
-    messages.warning(
-        request,
-        semester_warnings.get(sem, semester_warnings['success']))
 
-    return redirect('courses:semester_list')
+def _registrations_to_chart(user, course_id):
+    """A student's current registrations, and which of them the progress chart is being asked for.
+
+    All of them, not just the one being charted: dividing a student's XP between their courses
+    is one question about the whole student (issue #2440), so the answer needs the full set.
+
+    Args:
+        user: the student being charted.
+        course_id: the course the request named, as a string from the POST, or None for
+            whichever course comes first.
+
+    Returns:
+        tuple: (list[CourseStudent], index or None). The index picks out their registration in
+        the course the request named, falling back to their first when it named no course or
+        one they are not in. None when they are in no course at all, which the caller charts
+        as a flat zero.
+    """
+    registrations = list(CourseStudent.objects.current_courses(user))
+    chosen = None
+    try:
+        # whatever the page posted: the chart asks for no course at all when the student has
+        # only one, and nothing stops a request naming something that is not an id
+        named = int(course_id)
+    except (TypeError, ValueError):
+        named = None
+
+    if named is not None:
+        chosen = next(
+            (index for index, registration in enumerate(registrations) if registration.course_id == named),
+            None,
+        )
+    if chosen is None and registrations:
+        chosen = 0
+    return registrations, chosen
 
 
 @xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
+    """The data behind a student's XP-over-the-semester chart, as JSON for chart.js.
+
+    Args:
+        request: the ajax request; only POST returns data.
+        user_id (int): the student to chart, or 0 for the logged-in user.
+
+    Returns:
+        HttpResponse: JSON with `days_in_semester` (the student's semester's total class days),
+        `xp_data` (a point per class day so far, as {'x': day, 'y': xp}) and `mark_lines` (the
+        charted course's mark ranges, each with its XP for every class day; see _mark_lines).
+        All three are empty when there is nothing to chart: the student is in no open semester,
+        or theirs has no class days behind it yet.
+
+    Raises:
+        Http404: for any method other than POST.
+    """
     if user_id == 0:
         user = request.user
     else:
         user = get_object_or_404(User, pk=user_id)
 
     if request.method == "POST":
-        sem = SiteConfig.get().active_semester
+        # the student's own semester, not the deck's default (issue #2157 Phase 3): two
+        # cohorts running on different calendars have different first days and different
+        # class days, so charting one student against the other's term is the wrong graph
+        # (issue #1781).
+        sem = semester_for(user)
 
-        # generate a list of dates, from first date of semester to today
-        datelist = []
-        for i in range(1, sem.days_so_far() + 1):
-            # need to ignore weekends and non-class days
-            next_day_of_class = sem.get_datetime_by_days_since_start(i, add_holidays=True)
-            datelist.append(next_day_of_class)
+        # The course being charted (from the request, defaulting to the student's first), worked
+        # out up front so the chart is told its scale even when there is nothing to plot yet: the
+        # mark lines and percent axis come from the course, not the data (issue #403, #2453).
+        registrations, charted = _registrations_to_chart(user, request.POST.get('course'))
+        charted_course = registrations[charted].course if charted is not None else None
 
-        xp_data = []
-        # generate an list of dictionary data for chart.js:
-        #   x: day into course
-        #   y: XP earned so far
+        if sem is None or sem.days_so_far() <= 0:
+            # Nothing to plot: either the student is in no open semester, or theirs has no
+            # class days behind it yet (a semester with no dates set has none at all). Hand the
+            # chart an empty dataset, but still the charted course's scale, so the axis and mark
+            # lines set up correctly and the response has the same shape as when there is data.
+            return HttpResponse(json.dumps({
+                "days_in_semester": 0,
+                "xp_data": [],
+                "mark_lines": [],
+                "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,
+                "uses_marks": charted_course.uses_marks if charted_course else False,
+            }), content_type='application/json')
 
-        xp = 0
-        num_courses = user.profile.num_courses()
-        # days_so_far == len(datelist)
-        for day in range(0, sem.days_so_far()):
-            xp = user.profile.xp_to_date(datelist[day]) / num_courses
-            xp_data.append(
-                # day 0-indexed
-                {'x': day + 1, 'y': xp}
-            )
+        # the date of every class day so far, weekends and non-class days skipped, off a
+        # single read of the semester's excluded days (issue #2459)
+        datelist = sem.get_datetimes_by_days_since_start(range(1, sem.days_so_far() + 1))
 
         today = timezone.localtime()
 
         # SAT and SUN are always excluded by numpy.busday_offset
         # use today.date() because its a datetime.datetime object and we compare it to a DateField (returns datetime.date)
-        if today.weekday() in [5, 6] or today.date() in sem.excluded_days():  # SAT, SAT or a day specifically excluded
-            # according to a comment inside get_datetime_by_days_since_start:
-            #   "work done on weekend/holidays won't show up till Monday"
+        # according to a comment inside get_datetime_by_days_since_start:
+        #   "work done on weekend/holidays won't show up till Monday"
+        # so on one of those days today's XP is asked for as well, to roll what was earned
+        # since the last class day back onto it
+        off_day = today.weekday() in [5, 6] or today.date() in sem.excluded_days()
 
-            # total_xp <= xp_to_date(today) since the latest xp_data day is the last valid day (usually a friday)
-            # ie. if today is sunday: friday's total xp <= sunday's total xp
-            # (if a submission is removed then will subtract from both friday and sunday xp)
-            total_xp = xp_data[-1]['y']
-            difference = user.profile.xp_to_date(today) - total_xp
+        # A course's own line, not an even share of the student's whole total: since #2440 the
+        # two are different numbers for a student who assigned their work (issue #2453).
+        if charted is None:  # pragma: no cover
+            # Defensive race guard, not reachable by a plain request: semester_for() just
+            # found an open-semester registration for this user, and _registrations_to_chart
+            # reads the same registrations, so charted only comes back None if the
+            # registration is deleted between the two reads. Chart zeros rather than crash.
+            xp_series = [0] * len(datelist)
+            today_xp = 0
+        else:
+            # every date in one pass rather than a query per class day (issue #2459)
+            dates = datelist + [today] if off_day else datelist
+            series = CourseStudent.objects.xp_across_series(user, registrations, dates)
+            xp_series = [row[charted][1] for row in series]
+            # on a class day the last point is today, and there is nothing later to roll back
+            today_xp = xp_series.pop() if off_day else xp_series[-1]
 
-            # if true: user has earned xp during the weekend.
-            # add that xp to the last valid date
-            if difference > 0:
-                xp_data[-1]['y'] += difference
+        # a list of dictionary data for chart.js:
+        #   x: day into course (1-indexed)
+        #   y: XP earned so far
+        xp_data = [{'x': day + 1, 'y': xp} for day, xp in enumerate(xp_series)]
 
+        # the last plotted day is the last valid day (usually a friday), so its total is at most
+        # today's: if today is sunday, friday's total xp <= sunday's total xp
+        # (if a submission is removed then will subtract from both friday and sunday xp)
+        difference = today_xp - xp_data[-1]['y']
+        # if true: user has earned xp during the weekend.
+        # add that xp to the last valid date
+        if difference > 0:
+            xp_data[-1]['y'] += difference
+
+        days_in_semester = sem.num_days()
         progress_chart = {
-            "days_in_semester": sem.num_days(),
+            "days_in_semester": days_in_semester,
             "xp_data": xp_data,
+            # the charted course's own mark ranges, each line at the XP that reaches the range on
+            # each class day (#2826)
+            "mark_lines": _mark_lines(charted_course, days_in_semester),
+            # the charted course's own scale: courses can be out of different amounts, so the
+            # axis and the mark lines have to be redrawn when a student switches (issue #2453)
+            "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,
+            # a course run on XP alone has no percentage, so the chart drops its mark lines and
+            # its percent axis rather than drawing marks the student is never given (issue #403)
+            "uses_marks": charted_course.uses_marks if charted_course else False,
         }
         json_data = json.dumps(progress_chart)
 
@@ -665,18 +1351,65 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, Vie
         pk = self.kwargs['user_id']
         return get_object_or_404(User, pk=pk)
 
+    def get_user_mark(self):
+        """The mark to draw as this student's own.
+
+        Each of a student's courses has its own mark, since work can be assigned to one of
+        them (issue #2440), and the chart is read inside that course's tab on the mark page
+        (issue #2743), so the course the request names decides which mark is marked out. It
+        is the live mark, the same number the page prints above the chart.
+
+        Returns:
+            float: the named course's mark, or this student's cached mark when the request
+            names no course they are registered in, which is the number their classmates are
+            drawn from too. 0 when there is no mark either way: a course run on XP alone has
+            none (issue #403), and neither has a student whose mark has never been calculated.
+        """
+        named = self.request.GET.get('course')
+        registrations = list(CourseStudent.objects.current_courses(self.user))
+        # the registration the request named, and only that one: a request naming nothing, or
+        # a course this student is not in, is answered with the deck's own number for them
+        # rather than with whichever course happens to come first
+        charted = next(
+            (index for index, registration in enumerate(registrations)
+             if registration.course_id and str(registration.course_id) == named),
+            None,
+        )
+        if charted is None:
+            return self.user.profile.mark_cached or 0
+
+        # divided once for all of the student's registrations, which is one question about
+        # the student rather than one per course (issue #2459)
+        xp = CourseStudent.objects.xp_across(self.user, registrations)[charted][1]
+        return registrations[charted].mark(xp=xp) or 0
+
     def get_datasets(self):
         """query datasets for both histograms ( marks over 100% will be capped at 100% )
 
+        The comparison group is this student's own semester, so a deck running two cohorts
+        on different calendars shows each of them their own classmates' marks rather than
+        both cohorts mixed together. Every classmate stands at their cached mark, the one
+        number the deck keeps per student.
+
         Returns:
-            tuple[int, list[ints]]: queried user's mark and all students in active semester's mark
+            tuple[int, list[ints]]: queried user's mark, and the marks of the other students
+            in their semester (empty when they are in none).
         """
         # grab dataset
-        user_mark = self.user.profile.mark_cached or 0  # can be nonetype
-        student_marks = Semester.get_student_mark_list(Semester, students_only=True)
-        # only remove user's mark from student_marks if user is part of active sem
-        if CourseStudent.objects.all_users_for_active_semester(students_only=True).filter(id=self.user.id).exists():
-            student_marks.remove(user_mark)
+        user_mark = self.get_user_mark()
+        semester = semester_for(self.user)
+        student_marks = semester.get_student_mark_list(students_only=True) if semester else []
+        # a student whose mark has never been calculated has mark_cached None, which has no
+        # place on a distribution and which numpy can't clip against a number
+        student_marks = [mark for mark in student_marks if mark is not None]
+        # the user's own mark is drawn in the other histogram, so take it out of this one.
+        # The list holds their cached mark, which is the deck's one number for them however
+        # many courses they are in, so that is what comes out rather than the mark being
+        # drawn. Only when it is there: theirs may be one of the Nones just dropped, and
+        # remove() raises on a value the list doesn't hold.
+        cached_mark = self.user.profile.mark_cached
+        if cached_mark in student_marks:
+            student_marks.remove(cached_mark)
 
         # limit marks, so marks > 100 can show on histogram
         user_mark = min(user_mark, 100)

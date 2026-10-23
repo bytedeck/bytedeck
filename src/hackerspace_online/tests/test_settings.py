@@ -1,0 +1,237 @@
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.http import HttpResponse
+from django.middleware.security import SecurityMiddleware
+from django.test import RequestFactory, SimpleTestCase, override_settings
+
+from hackerspace_online.settings import (
+    PRODUCTION_SECURE_REFERRER_POLICY,
+    _validate_deployment_settings,
+)
+
+
+class SecureProxySSLHeaderTest(SimpleTestCase):
+    """The app runs behind an nginx/uWSGI front end that terminates TLS and
+    forwards to Django over plain HTTP, so Django must trust the forwarded scheme
+    to recognize secure requests and build https:// URLs (e.g. in email links)."""
+
+    def test_secure_proxy_ssl_header__is_configured(self):
+        """SECURE_PROXY_SSL_HEADER must name the X-Forwarded-Proto header nginx sets."""
+        self.assertEqual(settings.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https"))
+
+    def test_forwarded_https_request__is_secure(self):
+        """A request forwarded with X-Forwarded-Proto: https is treated as secure,
+        so build_absolute_uri produces https:// links instead of http://."""
+        request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="https")
+        self.assertTrue(request.is_secure())
+        self.assertTrue(request.build_absolute_uri("/decks/request/new/").startswith("https://"))
+
+    def test_forwarded_http_request__is_not_secure(self):
+        """Without the https forwarded scheme, the request stays plain HTTP so the
+        header can't be used to fake a secure request."""
+        request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="http")
+        self.assertFalse(request.is_secure())
+
+
+class DeploymentSettingsGuardTest(SimpleTestCase):
+    """A real (non-localhost) deployment must not boot with the shipped example
+    defaults; `_validate_deployment_settings` raises to prevent it, while leaving
+    local development untouched."""
+
+    def test_local_development__is_never_blocked(self):
+        """localhost is local dev, so the example DEBUG=True + default SECRET_KEY are allowed."""
+        # Should not raise.
+        _validate_deployment_settings("localhost", True, "Change.Me!")
+
+    def test_real_deployment__rejects_debug_true(self):
+        """DEBUG=True on a real domain is refused, so debug pages can't leak in production."""
+        with self.assertRaises(ImproperlyConfigured):
+            _validate_deployment_settings("bytedeck.com", True, "a-real-random-secret-key")
+
+    def test_real_deployment__rejects_default_secret_key(self):
+        """The example 'Change.Me!' SECRET_KEY is refused on a real domain."""
+        with self.assertRaises(ImproperlyConfigured):
+            _validate_deployment_settings("bytedeck.com", False, "Change.Me!")
+
+    def test_properly_configured_deployment__is_allowed(self):
+        """DEBUG=False with a unique SECRET_KEY on a real domain passes the guard."""
+        # Should not raise.
+        _validate_deployment_settings("bytedeck.com", False, "a-real-random-secret-key")
+
+
+class ReferrerPolicyTest(SimpleTestCase):
+    """The production Referrer-Policy must not be "same-origin". Under
+    "same-origin" the browser strips the Referer from every cross-origin request,
+    so YouTube's iframe player (and other referrer-gated embeds) refuse to load
+    and show an error -- issue #1896. The production block that applies the policy
+    is skipped under TESTING, so the value is exercised via its module-level
+    constant and Django's SecurityMiddleware rather than settings.SECURE_*."""
+
+    def test_production_referrer_policy__is_not_same_origin(self):
+        """The policy must be "strict-origin-when-cross-origin" (browser default,
+        web.dev recommended), never "same-origin", so cross-origin embeds still
+        receive the origin as referrer and load correctly."""
+        self.assertEqual(PRODUCTION_SECURE_REFERRER_POLICY, "strict-origin-when-cross-origin")
+        self.assertNotEqual(PRODUCTION_SECURE_REFERRER_POLICY, "same-origin")
+
+    def test_security_middleware__emits_the_referrer_policy_header(self):
+        """SecurityMiddleware must turn the production policy into a
+        Referrer-Policy response header, proving the chosen value is what
+        browsers (and thus the YouTube embed request) actually see."""
+        with override_settings(SECURE_REFERRER_POLICY=PRODUCTION_SECURE_REFERRER_POLICY):
+            middleware = SecurityMiddleware(lambda request: HttpResponse())
+            response = middleware(RequestFactory().get("/"))
+        self.assertEqual(response.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
+
+
+class DatabaseConnectionSettingsTest(SimpleTestCase):
+    """Persistent DB connections (CONN_MAX_AGE) must be paired with connection
+    health checks, otherwise a pooled connection that died while idle (RDS
+    failover, network blip, server-side timeout) surfaces as an intermittent
+    error on whatever request draws it."""
+
+    def test_conn_health_checks__enabled(self):
+        """CONN_HEALTH_CHECKS must be True so dead persistent connections are
+        detected and transparently re-established at the start of a request."""
+        self.assertTrue(settings.DATABASES["default"]["CONN_HEALTH_CHECKS"])
+
+
+class EmailSettingsTest(SimpleTestCase):
+    """EMAIL_FILE_PATH previously read the wrong environment variable
+    (EMAIL_BACKEND, a copy-paste bug), so setting EMAIL_BACKEND would silently
+    corrupt the file-based backend's output directory."""
+
+    def test_email_file_path__defaults_to_sent_mail_dir(self):
+        """EMAIL_FILE_PATH must be a filesystem path (the _sent_mail directory
+        by default), never the value of the EMAIL_BACKEND setting."""
+        self.assertTrue(settings.EMAIL_FILE_PATH.endswith("_sent_mail"))
+        self.assertNotEqual(settings.EMAIL_FILE_PATH, settings.EMAIL_BACKEND)
+
+
+class DataUploadLimitTest(SimpleTestCase):
+    """DATA_UPLOAD_MAX_MEMORY_SIZE was previously unset, so Django's 2.5 MB
+    default applied even though nginx allows 17 MB request bodies -- large
+    non-file form posts tripped RequestDataTooBigMiddleware far below the
+    intended cap."""
+
+    def test_data_upload_limit__raised_above_django_default(self):
+        """The explicit limit must be 16 MiB: above Django's 2.5 MB default and
+        below nginx's 17 MB client_max_body_size."""
+        self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 16 * 1024 * 1024)
+
+
+class CelerySettingsTest(SimpleTestCase):
+    """Worker-hardening settings for the single shared Celery worker: bound
+    memory leaks, keep quick tasks from queueing behind long all-schema tasks,
+    and kill hung tasks instead of losing a worker slot forever."""
+
+    def test_task_results__ignored(self):
+        """No result backend is configured and nothing reads task results, so
+        results must be ignored rather than stored on the broker."""
+        self.assertTrue(settings.CELERY_TASK_IGNORE_RESULT)
+
+    def test_worker_recycling__enabled(self):
+        """Workers must recycle after a bounded number of tasks so leaks from
+        the per-schema fan-out tasks can't grow without limit."""
+        self.assertGreater(settings.CELERY_WORKER_MAX_TASKS_PER_CHILD, 0)
+
+    def test_prefetch__disabled_for_mixed_workload(self):
+        """Prefetch multiplier must be 1 so seconds-long tasks don't get stuck
+        prefetched behind minutes-long all-schema tasks."""
+        self.assertEqual(settings.CELERY_WORKER_PREFETCH_MULTIPLIER, 1)
+
+    def test_time_limits__soft_fires_before_hard(self):
+        """A soft limit must exist and fire before the hard kill so tasks get a
+        chance to clean up (SoftTimeLimitExceeded) before the worker is killed."""
+        self.assertLess(settings.CELERY_TASK_SOFT_TIME_LIMIT, settings.CELERY_TASK_TIME_LIMIT)
+
+    def test_broker__retry_on_startup(self):
+        """The worker must retry the broker connection at startup instead of
+        dying if redis is momentarily slower to come up."""
+        self.assertTrue(settings.CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP)
+
+
+class Select2CacheTest(SimpleTestCase):
+    """The select2 cache pickles a queryset per rendered widget; with no TTL
+    those entries accumulate forever, and with production Redis capped by
+    maxmemory+noeviction an unbounded cache eventually makes Redis refuse all
+    writes (breaking the shared celery broker too)."""
+
+    def test_select2_cache__has_finite_ttl(self):
+        """The select2 cache must have a finite TTL (default 24h), never None."""
+        self.assertEqual(settings.CACHES["select2"]["TIMEOUT"], 60 * 60 * 24)
+
+
+class LoggingConfigTest(SimpleTestCase):
+    """Production/staging (DEBUG=False) previously shipped no LOGGING config, so
+    Django's default silenced the console handler and app logs fell back to the
+    WARNING-level last-resort stderr -- INFO and most app logs vanished. A base
+    LOGGING config must always be defined (not gated on DB_LOGS_ENABLED) sending
+    leveled logs to stdout while preserving the 5xx-emails-ADMINS path. That the
+    process started at all proves dictConfig accepted it; these lock in intent."""
+
+    def test_logging__always_defined(self):
+        """LOGGING must exist unconditionally, independent of DB_LOGS_ENABLED
+        (the query-tracer only augments it)."""
+        self.assertIsInstance(settings.LOGGING, dict)
+        self.assertEqual(settings.LOGGING["version"], 1)
+
+    def test_console_handler__writes_to_stdout(self):
+        """App/Django logs must reach container stdout (captured by Docker's
+        json-file driver) instead of being dropped."""
+        console = settings.LOGGING["handlers"]["console"]
+        self.assertEqual(console["class"], "logging.StreamHandler")
+        self.assertEqual(console["stream"], "ext://sys.stdout")
+
+    def test_root_logger__routes_to_console(self):
+        """App loggers (getLogger(__name__), no shared prefix) reach the console
+        handler by propagating to root."""
+        self.assertIn("console", settings.LOGGING["root"]["handlers"])
+
+    def test_unhandled_5xx__still_emails_admins(self):
+        """The AdminEmailHandler path (Django's default) must be preserved and
+        gated to real deployments via require_debug_false."""
+        mail_admins = settings.LOGGING["handlers"]["mail_admins"]
+        self.assertEqual(mail_admins["class"], "django.utils.log.AdminEmailHandler")
+        self.assertIn("require_debug_false", mail_admins["filters"])
+        self.assertIn("mail_admins", settings.LOGGING["loggers"]["django"]["handlers"])
+
+    def test_db_backends__not_flooded_by_default(self):
+        """With the query-tracer off, django.db.backends must stay above DEBUG so
+        DJANGO_LOG_LEVEL=DEBUG can't flood stdout with every SQL statement."""
+        # DB_LOGS_ENABLED is off under the test runner, so the base pin applies.
+        self.assertFalse(settings.DB_LOGS_ENABLED)
+        self.assertEqual(settings.LOGGING["loggers"]["django.db.backends"]["level"], "WARNING")
+
+
+class StripeSettingsGuardTest(SimpleTestCase):
+    """A real deployment that enables Stripe checkout must also configure the
+    webhook secret (epic #1729 PR 7); `_validate_stripe_settings` raises to
+    prevent silently-unsynced renewals, while local development is untouched."""
+
+    def test_local_development__is_never_blocked(self):
+        """localhost may run any Stripe combination, including key-without-webhook."""
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        _validate_stripe_settings('localhost', 'sk_test_123', None)  # no exception
+
+    def test_deployment_without_stripe__is_allowed(self):
+        """A real deployment with Stripe entirely unset boots fine (manual billing)."""
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        _validate_stripe_settings('bytedeck.com', None, None)  # no exception
+
+    def test_deployment_with_key_but_no_webhook_secret__refuses_to_boot(self):
+        """Checkout without webhooks leaves renewals unsynced -- refuse the config."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        with self.assertRaises(ImproperlyConfigured):
+            _validate_stripe_settings('bytedeck.com', 'sk_live_123', None)
+
+    def test_deployment_with_key_and_webhook_secret__is_allowed(self):
+        """The complete Stripe configuration boots."""
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        _validate_stripe_settings('bytedeck.com', 'sk_live_123', 'whsec_123')  # no exception

@@ -1,34 +1,42 @@
 import datetime
 import re
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 from comments.models import Comment
 
-from courses.models import Semester
+from courses.models import Course, CourseStudent, Rank, Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from prerequisites.models import Prereq
+from prerequisites.tasks import update_quest_conditions_for_user
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class CategoryTestModel(TenantTestCase):  # aka Campaigns
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.category = baker.make(Category, title="Test Campaign")
+class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
+    @classmethod
+    def setUpTestData(cls):
+        """Create a test campaign (Category) shared across the tests."""
+        cls.category = baker.make(Category, title="Test Campaign")
 
-    def test_category_type_creation(self):
+    def test_category__creation_and_str(self):
+        """Creating a Category yields a Category instance whose str is its title."""
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
-    def test_condition_met_as_prerequisite(self):
+    def test_get_icon_url__returns_category_icon_when_set(self):
+        """Category.get_icon_url returns the campaign's own icon url when it has one."""
+        self.category.icon = 'icons/campaign.png'
+        self.assertEqual(self.category.get_icon_url(), self.category.icon.url)
+
+    def test_condition_met_as_prerequisite__all_unique_quests_completed(self):
         """ Test that all unique quests in a campaign are completed before the campaign is considered completed
         for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
 
@@ -79,13 +87,11 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         baker.make(QuestSubmission, quest=quest1, user=user, is_completed=True, is_approved=True)
         self.assertTrue(self.category.condition_met_as_prerequisite(user))
 
-    def test_category_icon(self):
-        pass
-
-    def test_category_url(self):
+    def test_get_absolute_url__category_page_loads(self):
+        """The campaign's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_current_quests(self):
+    def test_current_quests__returns_published_unarchived_quests(self):
         """ Test that the queryset of all quests in a campaign is returned correctly """
 
         # assert that the current campaign has no quests
@@ -101,7 +107,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         # assert that the current campaign has 2 valid quests after additions
         self.assertEqual(self.category.current_quests().count(), 2)
 
-    def test_xp_sum(self):
+    def test_xp_sum__sums_quest_xp(self):
         """ Test that the XP sum of all quests in a campaign is returned correctly """
 
         # create some quests as part of the test campaign
@@ -111,7 +117,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         # check that the XP sum is correct
         self.assertEqual(self.category.xp_sum(), 3)
 
-    def test_quest_count(self):
+    def test_quest_count__counts_quests(self):
         """ Test that the number of all quests in a campaign is returned correctly """
 
         # assert that the current campaign has no quests
@@ -125,32 +131,75 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertEqual(self.category.quest_count(), 2)
 
 
-class CommonDataTestModel(TenantTestCase):
-    def setUp(self):
-        self.common_data = baker.make(CommonData)
+class CommonDataTestModel(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Create a CommonData instance shared across the tests."""
+        cls.common_data = baker.make(CommonData)
 
-    def test_badge_series_creation(self):
+    def test_common_data__creation_and_str(self):
+        """Creating CommonData yields a CommonData instance whose str is its title."""
         self.assertIsInstance(self.common_data, CommonData)
         self.assertEqual(str(self.common_data), self.common_data.title)
 
 
-class QuestTestModel(TenantTestCase):
+class QuestTestModel(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.quest = baker.make(Quest)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a Quest shared across the tests."""
+        cls.quest = baker.make(Quest)
 
-    def test_quest_creation(self):
+    def test_quest__creation_and_str(self):
+        """Creating a Quest yields a Quest instance whose str is its name."""
         self.assertIsInstance(self.quest, Quest)
         self.assertEqual(str(self.quest), self.quest.name)
 
-    def test_quest_icon(self):
-        pass
-
-    def test_quest_url(self):
+    def test_get_absolute_url__quest_page_loads(self):
+        """The quest's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_active(self):
+    def test_get_icon_url__returns_quest_icon_when_set(self):
+        """get_icon_url returns the quest's own icon url when it has one."""
+        self.quest.icon = 'icons/quest.png'
+        self.assertEqual(self.quest.get_icon_url(), self.quest.icon.url)
+
+    def test_get_icon_url__falls_back_to_campaign_icon(self):
+        """With no quest icon but a campaign icon set, get_icon_url returns the campaign's icon url."""
+        self.quest.icon = ''
+        self.quest.campaign = baker.make('quest_manager.Category', icon='icons/campaign.png')
+        self.assertEqual(self.quest.get_icon_url(), self.quest.campaign.icon.url)
+
+    def test_icon_url__returns_icon_url_when_set(self):
+        """XPItem.icon_url returns the quest's own icon url when it has one."""
+        self.quest.icon = 'icons/quest.png'
+        self.assertEqual(self.quest.icon_url(), self.quest.icon.url)
+
+    def test_icon_url__returns_none_when_no_icon(self):
+        """XPItem.icon_url returns None when the quest has no icon (used by templates via default_if_none)."""
+        self.quest.icon = ''
+        self.assertIsNone(self.quest.icon_url())
+
+    def test_is_repeatable__reflects_max_repeats(self):
+        """XPItem.is_repeatable is True when max_repeats is non-zero (a finite or unlimited cap), False when 0."""
+        self.quest.max_repeats = 0
+        self.assertFalse(self.quest.is_repeatable())
+        self.quest.max_repeats = 3
+        self.assertTrue(self.quest.is_repeatable())
+        self.quest.max_repeats = -1  # unlimited repeats
+        self.assertTrue(self.quest.is_repeatable())
+
+    def test_is_repeat_available__false_during_cooldown(self):
+        """is_repeat_available is False when a repeatable quest has been completed but its
+        hours_between_repeats cooldown has not yet elapsed (issue #57)."""
+        student = baker.make(User)
+        quest = baker.make(Quest, max_repeats=-1, hours_between_repeats=24)
+        sub = QuestSubmission.objects.create_submission(student, quest)
+        sub.mark_completed()
+        # Completed just now, so fewer than 24 hours have passed: still on cooldown.
+        self.assertFalse(quest.is_repeat_available(student))
+
+    def test_active__false_for_unavailable_expired_or_hidden_quests(self):
         """
         The active method of the Quest model's parent "XPItem" should return the correct values based on a quest object's settings.
 
@@ -253,7 +302,8 @@ class QuestTestModel(TenantTestCase):
         with freeze_time(dt + timezone.timedelta(hours=12)):
             self.assertTrue(quest.expired())
 
-    def test_quest_html_formatting(self):
+    def test_quest_html_formatting__no_linebreaks_around_span(self):
+        """Saving a quest reformats instructions without adding line breaks around span tags."""
         test_markup = "<p>this <span>span</span> tag should not break</p>"
         self.quest.instructions = test_markup
         # Auto formatting on save
@@ -265,7 +315,7 @@ class QuestTestModel(TenantTestCase):
         self.assertIsNone(matches_found)
 
     @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-    def test_is_repeat_available(self):
+    def test_is_repeat_available__various_repeat_settings(self):
         """
         QuestManager.is_repeat_available should return True if:
             1. it is repeatable (is_repeatable != 0)
@@ -278,6 +328,12 @@ class QuestTestModel(TenantTestCase):
 
         baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
         student = baker.make(User)
+        # registered, so their submissions land in this semester and the per-semester
+        # repeat limits below count them
+        baker.make(
+            CourseStudent, user=student, course=baker.make(Course),
+            semester=SiteConfig.get().active_semester,
+        )
         quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
         quest_infinite_repeat = baker.make(Quest, name="quest-infinite-repeatable", max_repeats=-1)
         quest_repeat_1hr = baker.make(Quest, name="quest-repeatable-1hr", max_repeats=1, hours_between_repeats=1)
@@ -341,9 +397,11 @@ class QuestTestModel(TenantTestCase):
         # No repeat left this semester
         self.assertFalse(quest_semester.is_repeat_available(student))
 
-        # change semesters and the quest should appear
+        # change semesters and the quest should appear. Moving the student's registration
+        # is what puts them in the new semester: the deck's pointer is only the default
         new_active_sem = baker.make(Semester)
         SiteConfig.get().set_active_semester(new_active_sem.id)
+        CourseStudent.objects.filter(user=student).update(semester=new_active_sem)
         self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 
         # Repeat this semester, another two should be available
@@ -370,7 +428,8 @@ class QuestTestModel(TenantTestCase):
         # No repeat left this semester
         self.assertFalse(quest_semester.is_repeat_available(student))
 
-    def test_correct_ordinal_submission(self):
+    def test_ordinal__increments_and_continues_after_delete(self):
+        """Submission ordinals increment and keep counting up even after an earlier submission is deleted."""
         student = baker.make('user')
         quest = baker.make(Quest, max_repeats=-1)
 
@@ -392,26 +451,47 @@ class QuestTestModel(TenantTestCase):
         self.assertEqual(submission3.ordinal, 3)
 
 
-class SubmissionManagerTest(TenantTestCase):
+class SubmissionManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.active_semester = SiteConfig.get().active_semester
+    @classmethod
+    def setUpTestData(cls):
+        """Capture the active semester shared across the tests."""
+        cls.active_semester = SiteConfig.get().active_semester
 
-    def test_all_approved(self):
+    def test_all_approved__teacher_limits_it_to_the_students_they_teach(self):
+        """With a teacher, only the approved work of the students in that teacher's groups, as
+        the Approved tab lists it by default (#2672); without one, everyone's."""
+        teacher, other_teacher = baker.make(User, is_staff=True, _quantity=2)
+        approved = []
+        for block_teacher in (teacher, other_teacher):
+            student = baker.make(User)
+            baker.make(CourseStudent, user=student, course=baker.make(Course), semester=self.active_semester,
+                       block=baker.make('courses.Block', current_teacher=block_teacher))
+            approved.append(baker.make(QuestSubmission, user=student, is_completed=True, is_approved=True,
+                                       semester=self.active_semester))
+
+        self.assertQuerySetEqual(QuestSubmission.objects.all_approved(teacher=teacher), [approved[0]])
+        self.assertQuerySetEqual(QuestSubmission.objects.all_approved(), approved, ordered=False)
+
+    def test_all_approved__filters_by_semester_quest_and_user(self):
         """ Tests of QuestSubmissionManager.all_approved()
         def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
         """
 
         quest = baker.make(Quest, name="test quest")
         user = baker.make(User, username="test_user")
+        # registered, so the user= filter below reads this semester as theirs
+        baker.make(CourseStudent, user=user, course=baker.make(Course), semester=self.active_semester)
 
         # various submissions
         baker.make(QuestSubmission, semester=self.active_semester)  # in progress shoulnd't appear
         baker.make(QuestSubmission, is_completed=True, semester=self.active_semester)  # completed/submitted shouldn't appear
         sub_approved = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True, semester=self.active_semester)
         sub_approved_different_quest = baker.make(QuestSubmission, is_completed=True, is_approved=True, semester=self.active_semester)
-        sub_approved_other_semester = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True)
+        sub_approved_other_semester = baker.make(
+            QuestSubmission, quest=quest, is_completed=True, is_approved=True,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
         sub_approved_no_xp = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True,
                                         do_not_grant_xp=True, semester=self.active_semester)
         sub_approved_user = baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, is_approved=True,
@@ -449,27 +529,103 @@ class SubmissionManagerTest(TenantTestCase):
             ordered=False
         )
 
+    def test_all_returned__no_user_returns_returned_submissions(self):
+        """all_returned() with no user returns every returned submission (has a completion date
+        while is_completed is False), and excludes still-in-progress ones."""
+        returned = baker.make(
+            QuestSubmission, is_completed=False, time_completed=timezone.now(), semester=self.active_semester,
+        )
+        in_progress = baker.make(
+            QuestSubmission, is_completed=False, time_completed=None, semester=self.active_semester,
+        )
+        all_returned = QuestSubmission.objects.all_returned()
+        self.assertIn(returned, all_returned)
+        self.assertNotIn(in_progress, all_returned)
 
-class SubmissionTestModel(TenantTestCase):
+    def test_remove_in_progress__deletes_not_completed_submissions(self):
+        """remove_in_progress() deletes every not-completed submission across semesters."""
+        baker.make(QuestSubmission, is_completed=False, semester=self.active_semester, _quantity=2)
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.semester = baker.make(Semester)
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        self.submission = baker.make(QuestSubmission, quest__name="Test")
-        # self.badge = Recipe(Badge, xp=20).make()
+        QuestSubmission.objects.remove_in_progress()
 
-        # self.badge_assertion_recipe = Recipe(QuestSubmission, user=self.student, badge=self.badge)
+        remaining = QuestSubmission.objects.get_queryset(active_semester_only=False).not_completed()
+        self.assertFalse(remaining.exists())
 
-    def test_submission_creation(self):
+    def test_queryset_completed__oldest_first_branch(self):
+        """The completed(oldest_first=True) queryset returns completed submissions."""
+        completed = baker.make(QuestSubmission, is_completed=True, semester=self.active_semester)
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=False).completed(oldest_first=True)
+        self.assertIn(completed, qs)
+
+    def test_queryset_has_completion_date__filters_by_time_completed(self):
+        """has_completion_date() keeps only submissions that have a time_completed."""
+        with_date = baker.make(QuestSubmission, time_completed=timezone.now(), semester=self.active_semester)
+        without_date = baker.make(QuestSubmission, time_completed=None, semester=self.active_semester)
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=False).has_completion_date()
+        self.assertIn(with_date, qs)
+        self.assertNotIn(without_date, qs)
+
+    def test_all_returned__with_user_returns_that_users_returned_submissions(self):
+        """all_returned(user) returns the given user's returned submissions."""
+        user = baker.make(User)
+        # registered, so the user= filter reads this semester as theirs
+        baker.make(CourseStudent, user=user, course=baker.make(Course), semester=self.active_semester)
+        returned = baker.make(
+            QuestSubmission, user=user, is_completed=False, time_completed=timezone.now(), semester=self.active_semester,
+        )
+        self.assertIn(returned, QuestSubmission.objects.all_returned(user=user))
+
+    def test_not_submitted_or_inprogress__false_while_in_progress(self):
+        """not_submitted_or_inprogress() is False while an in-progress submission exists."""
+        user = baker.make(User)
+        quest = baker.make(Quest)
+        baker.make(QuestSubmission, user=user, quest=quest, is_completed=False, semester=self.active_semester)
+        self.assertFalse(QuestSubmission.objects.not_submitted_or_inprogress(user, quest))
+
+    def test_not_submitted_or_inprogress__defers_to_repeat_availability_when_completed(self):
+        """With a completed (not in-progress) submission, the result defers to the quest's repeat availability;
+        a non-repeatable quest is not available again."""
+        user = baker.make(User)
+        quest = baker.make(Quest, max_repeats=0)  # not repeatable
+        baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, semester=self.active_semester)
+        self.assertFalse(QuestSubmission.objects.not_submitted_or_inprogress(user, quest))
+
+
+class SubmissionTestModel(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a semester, teacher, student, and a base submission shared across the tests.
+
+        The student is left unregistered so each test can put them in the semester it needs:
+        their registration is what names the semester a returned submission moves to, and
+        some of these tests are about a student who holds none.
+        """
+        cls.semester = baker.make(Semester)
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        cls.submission = baker.make(QuestSubmission, quest__name="Test")
+
+    def register_student(self, semester):
+        """Register the shared student in `semester`, which is what makes it theirs."""
+        return baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=semester)
+
+    def test_submission__creation_and_quest_name(self):
+        """Creating a QuestSubmission yields a QuestSubmission linked to its quest."""
         self.assertIsInstance(self.submission, QuestSubmission)
         self.assertEqual("Test", self.submission.quest.name)
 
-    def test_submission_url(self):
+    def test_str__appends_ordinal_for_repeat_submissions(self):
+        """__str__ appends the ordinal in parentheses for a repeat submission (ordinal > 1)."""
+        sub = baker.make(QuestSubmission, quest__name="Repeatable", ordinal=2)
+        self.assertEqual(str(sub), "Repeatable (2)")
+
+    def test_get_absolute_url__submission_page_loads(self):
+        """The submission's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_submission_mark_completed(self):
+    def test_mark_completed__sets_state_and_clears_draft(self):
+        """mark_completed sets completion state, records the submission time, and clears the draft comment."""
         user = baker.make(User)
         sub = baker.make(QuestSubmission, user=user)
         draft_comment = Comment.objects.create_comment(
@@ -490,7 +646,7 @@ class SubmissionTestModel(TenantTestCase):
         self.assertIsNotNone(sub.first_time_completed)
         self.assertIsNone(sub.draft_comment)
 
-    def test_submission_get_previous(self):
+    def test_get_previous__returns_prior_submission(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
         repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
         first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
@@ -501,7 +657,7 @@ class SubmissionTestModel(TenantTestCase):
         second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
         self.assertEqual(first_sub, second_sub.get_previous())
 
-    def test_submission_get_previous_automatic_fix_ordinal(self):
+    def test_get_previous__fixes_duplicate_ordinals(self):
         """Submissions that have the same ordinals will be automatically fixed"""
         repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
         first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
@@ -550,7 +706,7 @@ class SubmissionTestModel(TenantTestCase):
         third_sub.refresh_from_db()
         self.assertEqual(third_sub.ordinal, old_third_submission_ordinal)
 
-    def test_get_minutes_to_complete(self):
+    def test_get_minutes_to_complete__returns_minutes_between_timestamps(self):
         """Completed quests should return the difference between the timestamp (creation) and time completed, in minutes."""
         minutes = 5
         time_delta = datetime.timedelta(0, minutes * 60)
@@ -566,8 +722,288 @@ class SubmissionTestModel(TenantTestCase):
         self.submission.mark_completed()
         self.assertEqual(self.submission.get_minutes_to_complete(), minutes)
 
-    def test_get_minutes_to_complete_if_not_completed(self):
+    def test_get_minutes_to_complete__none_if_not_completed(self):
         """Return None if the submission has not been completed yet."""
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
         self.assertIsNone(self.submission.get_minutes_to_complete())
+
+    def rank_gated_quest(self, rank_xp=60):
+        """Set up a quest a student reaches by rank, and the quest whose XP gets them there.
+
+        Args:
+            rank_xp (int): the XP the rank needs.
+
+        Returns:
+            tuple: the quest behind the rank, and an in-progress submission worth more XP than
+            the rank needs.
+        """
+        rank = baker.make(Rank, name="Digital Novice II", xp=rank_xp)
+        behind_the_rank = baker.make(Quest, name="Pixel Art 1. Introduction", max_repeats=0, blocking=False)
+        Prereq.objects.create(parent_object=behind_the_rank, prereq_object=rank)
+        earns_the_rank = baker.make(Quest, name="XP giver", xp=rank_xp * 2, blocking=False)
+        submission = baker.make(QuestSubmission, user=self.student, quest=earns_the_rank,
+                                semester=SiteConfig.get().active_semester)
+        return behind_the_rank, submission
+
+    def worker_running_dispatched_rebuilds(self):
+        """Stand in for the celery worker, running each available-quest rebuild as it is handed over.
+
+        Patched at the real dispatch, the one TransactionAwareTask hands to celery on commit, so
+        the deferral it is written for stays in place and the rebuild runs against the state the
+        operation committed. The per-user rebuild is the one dispatched as ``args=[user_id]``.
+
+        Returns:
+            unittest.mock._patch: the patch, to use as a context manager.
+        """
+        def dispatch(*args, **kwargs):
+            task_args = kwargs.get("args") or (args[0] if args else None)
+            if task_args:
+                update_quest_conditions_for_user(task_args[0])
+
+        return patch("tenant_schemas_celery.task.TenantTask.apply_async", side_effect=dispatch)
+
+    def test_mark_approved__the_quest_behind_the_rank_just_reached_becomes_available(self):
+        """The chain end to end: an approval grants XP, the XP reaches a rank, and the rebuild the
+        approval queues puts the quest behind that rank in the student's Available tab (#2722).
+
+        This is the behaviour the transaction tests below exist in service of. It cannot fail on
+        its own without the fix, because a TestCase always holds a transaction open and so supplies
+        in the test what the fix supplies in production; those tests are what pin the fix down.
+        """
+        self.register_student(SiteConfig.get().active_semester)
+        behind_the_rank, submission = self.rank_gated_quest()
+        Quest.objects.get_available(self.student)  # prime the cache, as loading the tab does
+        self.assertNotIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+        submission.mark_completed()
+        with self.worker_running_dispatched_rebuilds():
+            with self.captureOnCommitCallbacks(execute=True):
+                submission.mark_approved()
+
+        self.assertIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+    def test_mark_returned__the_quest_behind_the_rank_is_taken_back_out(self):
+        """Returning takes the XP back, so the rebuild it queues drops the quest behind the rank
+        the student no longer holds out of their Available tab again (#2722)."""
+        self.register_student(SiteConfig.get().active_semester)
+        behind_the_rank, submission = self.rank_gated_quest()
+        submission.mark_completed()
+        with self.worker_running_dispatched_rebuilds():
+            with self.captureOnCommitCallbacks(execute=True):
+                submission.mark_approved()
+        self.assertIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+        with self.worker_running_dispatched_rebuilds():
+            with self.captureOnCommitCallbacks(execute=True):
+                submission.mark_returned()
+
+        self.assertNotIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+    def test_mark_returned__a_submission_that_was_never_approved_queues_no_rebuild(self):
+        """Returning a submission still awaiting approval takes no XP back, so nothing about what
+        is available to the student changed and no rebuild is asked for.
+
+        Closing a suspended deck returns every submission still awaiting approval, so a rebuild
+        each would be hundreds of full recalculations for nothing (#2722).
+        """
+        self.register_student(SiteConfig.get().active_semester)
+        submission = baker.make(QuestSubmission, user=self.student, quest__xp=100,
+                                is_completed=True, is_approved=False)
+
+        with patch('prerequisites.tasks.update_quest_conditions_for_user.apply_async') as rebuild:
+            submission.mark_returned()
+
+        rebuild.assert_not_called()
+
+    def test_mark_approved__the_approval_and_the_xp_it_grants_are_one_transaction(self):
+        """Approving is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Saving the submission is what asks the prerequisites app to rebuild this student's
+        cache of available quests, and TransactionAwareTask hands that job to celery on
+        commit. One transaction around the approval is therefore what holds the job back
+        until the XP the approval grants has been written: without one the save commits by
+        itself, the job goes out immediately, and the worker reads the XP from before the
+        approval, so a quest waiting on the rank the student just reached is worked out as
+        still locked and never reaches their Available tab.
+        """
+        submission = baker.make(QuestSubmission, user=self.student, quest__xp=100)
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                submission.mark_approved()
+
+        submission.refresh_from_db()
+        self.assertFalse(submission.is_approved, "the approval was left standing without its XP")
+
+    def test_mark_returned__the_return_and_the_xp_it_takes_back_are_one_transaction(self):
+        """Returning is all or nothing, for the reason mark_approved() is (#2722): the cache
+        rebuild it queues must not run against the XP the student had while it was approved."""
+        self.register_student(SiteConfig.get().active_semester)
+        submission = baker.make(
+            QuestSubmission, user=self.student, quest__xp=100, is_completed=True, is_approved=True,
+        )
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                submission.mark_returned()
+
+        submission.refresh_from_db()
+        self.assertTrue(submission.is_approved, "the return was left standing without its XP")
+
+    def test_mark_returned__moves_submission_to_active_semester(self):
+        """A submission returned in a later semester is re-attached to the current semester (issue #1231).
+
+        A quest completed in a past (now closed) semester and returned for a redo in a new semester used
+        to stay linked to the old semester, so it never showed up in the student's current in-progress
+        list and, once re-approved, granted its XP in the closed semester. Returning it now moves it to
+        the active semester so the redo behaves like any other current submission.
+        """
+        past_semester = baker.make(
+            Semester, name="Past", first_day=datetime.date(2020, 1, 1),
+            last_day=datetime.date(2020, 6, 1), status=Semester.Status.ARCHIVED,
+        )
+        active_semester = SiteConfig.get().active_semester
+        self.assertNotEqual(past_semester, active_semester)
+        self.register_student(active_semester)
+
+        # A quest completed and approved back in the past (closed) semester.
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=past_semester,
+            is_completed=True, is_approved=True,
+        )
+        self.assertEqual(sub.semester, past_semester)
+
+        # Teacher returns it in the current semester -- it should move to the active semester.
+        sub.mark_returned()
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, active_semester)
+
+    def test_mark_returned__moves_submission_to_the_students_own_semester(self):
+        """The redo lands in the semester the student is in, not the one the deck points at
+        (issue #2157 Phase 3): a returned quest is re-attached from their registration."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        self.register_student(other_semester)
+        sub = baker.make(
+            QuestSubmission, user=self.student,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, other_semester)
+        self.assertNotEqual(sub.semester, SiteConfig.get().open_semester)
+
+    def test_mark_returned__does_not_stamp_a_semester_that_is_not_open(self):
+        """Returning always happens "now", so with no semester open the submission is left
+        belonging to none rather than being stamped with a semester students aren't in."""
+        config = SiteConfig.get()
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config.active_semester = upcoming
+        config.save()
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+
+        sub.refresh_from_db()
+        self.assertIsNone(sub.semester)
+
+    def test_mark_returned__keeps_active_semester_submission_on_active_semester(self):
+        """Returning a submission already in the active semester leaves it there (issue #1231).
+
+        The common case -- a teacher returning a submission for revision in the same semester it was
+        made -- must not be disturbed by the re-attachment above.
+        """
+        active_semester = SiteConfig.get().active_semester
+        self.register_student(active_semester)
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=active_semester,
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, active_semester)
+
+
+class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
+    """Quest.expired() is called for every quest rendered in list templates, so
+    it reuses an ``is_expired`` annotation from the queryset when one is present
+    instead of issuing a query per call."""
+
+    def test_expired__prefers_is_expired_annotation(self):
+        """When the instance carries an is_expired annotation, expired() returns
+        it without issuing a query."""
+        quest = baker.make(Quest)
+
+        quest.is_expired = True  # simulate the queryset annotation
+        with self.assertNumQueries(0):
+            self.assertTrue(quest.expired())
+
+        quest.is_expired = False
+        with self.assertNumQueries(0):
+            self.assertFalse(quest.expired())
+
+    def test_expired__falls_back_to_query_without_annotation(self):
+        """Without the annotation, expired() still computes the value from the DB;
+        a quest with no expiry date has not expired."""
+        quest = baker.make(Quest, date_expired=None)
+        self.assertFalse(quest.expired())
+
+
+class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
+    """The Drafts and Archived staff tabs render the same template rows as the
+    'Available' tab, which reads each quest's campaign, editor profile and tags.
+    all_drafts() and all_archived() must prefetch those relations so a page of
+    quests does not issue a query per row."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher (staff caller and quest editor) and a campaign shared across the tests."""
+        # a teacher is needed both as staff caller and as each quest's editor
+        cls.teacher = User.objects.create_user('teacher', is_staff=True)
+        cls.campaign = baker.make(Category, title="Test Campaign")
+
+    def _make_quests(self, **kwargs):
+        """Create three quests with a campaign, editor and tags set, so the
+        related-object accessors exercised by the template have data to read."""
+        quests = []
+        for i in range(3):
+            quest = baker.make(Quest, campaign=self.campaign, editor=self.teacher, **kwargs)
+            quest.tags.add(f'tag-{i}')
+            quests.append(quest)
+        return quests
+
+    def test_all_drafts__prefetches_related_objects(self):
+        """all_drafts() prefetches campaign, editor profile and tags, so reading
+        them for every draft quest issues no additional queries."""
+        self._make_quests(published=False)
+
+        drafts = list(Quest.objects.all_drafts(self.teacher))
+        self.assertEqual(len(drafts), 3)
+
+        with self.assertNumQueries(0):
+            for quest in drafts:
+                self.assertEqual(quest.campaign.title, "Test Campaign")
+                # editor__profile is select_related; profile is the reverse 1-1
+                self.assertIsNotNone(quest.editor.profile)
+                self.assertEqual(len(quest.tags.all()), 1)
+
+    def test_all_archived__prefetches_related_objects(self):
+        """all_archived() prefetches campaign, editor profile and tags, so reading
+        them for every archived quest issues no additional queries."""
+        self._make_quests(archived=True)
+
+        archived = list(Quest.objects.all_archived(self.teacher))
+        self.assertEqual(len(archived), 3)
+
+        with self.assertNumQueries(0):
+            for quest in archived:
+                self.assertEqual(quest.campaign.title, "Test Campaign")
+                self.assertIsNotNone(quest.editor.profile)
+                self.assertEqual(len(quest.tags.all()), 1)

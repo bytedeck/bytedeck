@@ -5,9 +5,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
-from django.urls import reverse_lazy
+from django.utils.html import format_html
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import RedirectView
@@ -18,16 +20,20 @@ from django.db.models import Count, Prefetch
 
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
+from courses.models import CourseStudent
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from notifications.models import Notification
 from djcytoscape.models import CytoScape
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from utilities.html import link_list, link_to
 from djcytoscape.views import UpdateMapMessageMixin
 
 
-from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
+from prerequisites.tasks import grant_badge_assertions_for_badge
+
+from .forms import BadgeAssertionForm, BadgeForm, BadgeTypeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
 
 
@@ -39,14 +45,12 @@ class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, Redire
 @non_public_only_view
 @login_required
 def badge_list(request):
-    # prefetch each type's badges with their tags and assertion counts, so the
+    # prefetch each type's badges with their tags and how many students hold each, so the
     # per-badge popovers don't trigger several queries per badge
     badge_types = BadgeType.objects.prefetch_related(
         Prefetch(
             'badge_set',
-            queryset=Badge.objects.annotate(
-                num_assertions_annotated=Count('badgeassertion')
-            ).prefetch_related('tags')
+            queryset=Badge.objects.all().with_num_students_granted().prefetch_related('tags')
         )
     )
     unpublished_badges = Badge.objects.all().filter(published=False)
@@ -66,6 +70,78 @@ def badge_list(request):
 
 class BadgePrereqsUpdate(ObjectPrereqsFormView):
     model = Badge
+
+    def get_updated_message(self):
+        """The base message, and for a published badge a link to check for and grant it to the
+        students who now qualify.
+
+        Granting runs when the teacher asks rather than on every edit, which could grant a badge
+        before it is ready (issue #1157). The link goes to badge_grant_qualifying, which confirms
+        the count first. Only published badges can be granted this way.
+
+        Returns:
+            str: the success message, with the link for a published badge.
+        """
+        message = super().get_updated_message()
+        if not self.object.published:
+            return message
+        badge_name = SiteConfig.get().custom_name_for_badge.lower()
+        grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
+        return format_html(
+            '{} <a href="{}">Check and grant this {} to qualifying students?</a>',
+            message, grant_url, badge_name,
+        )
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeGrantQualifying(NonPublicOnlyViewMixin, View):
+    """Teacher-initiated grant-check for a badge (issue #1157).
+
+    GET shows how many current students meet the badge's prerequisites but haven't been
+    granted it, and asks the teacher to confirm. POST queues grant_badge_assertions_for_badge,
+    which grants the badge to those students (in bunches) and notifies their teachers.
+    Granting happens on demand this way rather than automatically on prereq changes, so a
+    badge is never granted while it is still being built. Published badges only.
+    """
+    template_name = "badges/badge_grant_qualifying_confirm.html"
+
+    def get(self, request, badge_id):
+        badge = get_object_or_404(Badge, pk=badge_id)
+        if not badge.published:
+            return self._unpublished_redirect(request, badge)
+
+        # The template sets its own heading via the heading_inner block, so no `heading` here.
+        context = {
+            "badge": badge,
+            "qualifying_students": badge.students_who_qualify_ungranted(),
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, badge_id):
+        badge = get_object_or_404(Badge, pk=badge_id)
+        if not badge.published:
+            return self._unpublished_redirect(request, badge)
+
+        grant_badge_assertions_for_badge.apply_async(
+            kwargs={'badge_id': badge.id, 'start_from_user_id': 1}, queue='default')
+        messages.success(
+            request,
+            format_html(
+                'Granting {} "{}" to all qualifying students. This may take a moment to complete.',
+                SiteConfig.get().custom_name_for_badge.lower(), link_to(badge),
+            )
+        )
+        return redirect(badge.get_absolute_url())
+
+    @staticmethod
+    def _unpublished_redirect(request, badge):
+        """An unpublished badge can't be granted; warn and send the teacher back to it."""
+        messages.warning(
+            request,
+            f"This {SiteConfig.get().custom_name_for_badge.lower()} is not published, "
+            "so it cannot be granted to students."
+        )
+        return redirect(badge.get_absolute_url())
 
 
 class BadgeDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):
@@ -175,7 +251,7 @@ class BadgeTypeList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('name', 'sort_order', 'fa_icon')
+    form_class = BadgeTypeForm
     model = BadgeType
     success_url = reverse_lazy('badges:badge_types')
 
@@ -189,7 +265,7 @@ class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ('name', 'sort_order', 'fa_icon')
+    form_class = BadgeTypeForm
     model = BadgeType
     success_url = reverse_lazy('badges:badge_types')
 
@@ -240,18 +316,28 @@ def bulk_assertion_create(request, badge_id=None):
         # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
-        result_message = f"{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to "
         for profile in profiles:
             BadgeAssertion.objects.create_assertion(profile.user, badge)
-            result_message += profile.preferred_full_name() + "; "
 
-        messages.success(request, result_message)
+        # the badge and each student linked to their pages, so the teacher can check on any of
+        # them from the list the grant returns to (#2808)
+        messages.success(request, format_html(
+            "{} {} granted to {}",
+            SiteConfig.get().custom_name_for_badge, link_to(badge),
+            link_list(profiles, "; ", text=lambda profile: profile.preferred_full_name()),
+        ))
         return redirect('badges:list')
 
     context = {
         "heading": f"Grant {SiteConfig.get().custom_name_for_badge} in Bulk",
         "form": form,
         "submit_btn_value": "Grant",
+        # every student here has their own courses, so there is no one course to grant toward.
+        # Only worth saying on a deck that has a student in more than one course: nobody else
+        # is affected by the split, and the notice would just be a puzzle for them.
+        "bulk_course_note": (
+            SiteConfig.get().students_choose_xp_course and CourseStudent.objects.has_multicourse_students()
+        ),
     }
 
     return render(request, "badges/assertion_form.html", context)
@@ -261,19 +347,28 @@ def bulk_assertion_create(request, badge_id=None):
 @staff_member_required
 def assertion_create(request, user_id, badge_id):
     initial = {}
+    student = None
     if int(user_id) > 0:
-        user = get_object_or_404(User, pk=user_id)
-        initial['user'] = user
+        student = get_object_or_404(User, pk=user_id)
+        initial['user'] = student
     if int(badge_id) > 0:
         badge = get_object_or_404(Badge, pk=badge_id)
         initial['badge'] = badge
 
-    form = BadgeAssertionForm(request.POST or None, initial=initial)
+    # granting from a student's profile names them in the URL, so their courses can be offered;
+    # on the open grant page they are picked on the form itself and there is nobody to ask about
+    form = BadgeAssertionForm(request.POST or None, initial=initial, student=student)
 
     if form.is_valid():
         new_ass = form.save(commit=False)
-        BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp)
-        messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
+        BadgeAssertion.objects.create_assertion(
+            new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp,
+            registration=form.cleaned_data.get('registration'),
+        )
+        messages.success(request, format_html(
+            "{} {} granted to {}",
+            SiteConfig.get().custom_name_for_badge, link_to(new_ass.badge), link_to(new_ass.user.profile, new_ass.user.username),
+        ))
         return redirect('badges:list')
 
     context = {
@@ -304,11 +399,19 @@ def assertion_delete(request, assertion_id):
                  "</span>",
             verb='revoked')
 
-        messages.success(request,
-                         ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
-                          ))
-        assertion.delete()
-        user.profile.xp_invalidate_cache()
+        messages.success(request, format_html(
+            "{} {} revoked from {}",
+            SiteConfig.get().custom_name_for_badge, link_to(assertion.badge), link_to(user.profile, user.username),
+        ))
+        # Revoking and the XP it takes back go together, in one transaction: deleting the
+        # assertion queues the rebuild of this student's cache of available quests, held
+        # back until commit by prerequisites.tasks.TransactionAwareTask. So the transaction
+        # is what makes the worker read the XP the student is left with rather than the XP
+        # they had while they still held the badge, which would leave a quest waiting on a
+        # rank they no longer hold sitting in their Available tab (#2722).
+        with transaction.atomic():
+            assertion.delete()
+            user.profile.xp_invalidate_cache()
         return redirect('profiles:profile_detail', pk=user.profile.id)
 
     template_name = 'badges/assertion_confirm_delete.html'

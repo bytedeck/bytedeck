@@ -3,6 +3,11 @@
 
 {% block head_title%} Menu Items | {% endblock%}
 
+{% block head %}
+{# the icon picker's stylesheet, icon list and JS (utilities.fa_icon_widget) #}
+{{ form.media }}
+{% endblock %}
+
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}

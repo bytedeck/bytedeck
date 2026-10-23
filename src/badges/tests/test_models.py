@@ -1,38 +1,47 @@
+import datetime
+
 from unittest import mock
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
+from courses.models import Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from notifications.models import Notification
+from prerequisites.models import Prereq
 
 User = get_user_model()
 
 
-class BadgeRarityModelTest(TenantTestCase):
-    def setUp(self):
+class BadgeRarityModelTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Create rarities at known percentiles (clearing the defaults first)."""
         # clear default mark range variables
         BadgeRarity.objects.all().delete()
-        self.common = baker.make(BadgeRarity, percentile=90.0)
-        self.rare = baker.make(BadgeRarity, percentile=80.0)
-        self.ultrarare = baker.make(BadgeRarity, percentile=70.0)
+        cls.common = baker.make(BadgeRarity, percentile=90.0)
+        cls.rare = baker.make(BadgeRarity, percentile=80.0)
+        cls.ultrarare = baker.make(BadgeRarity, percentile=70.0)
 
-    def test_badge_rarity_creation(self):
+    def test_badge_rarity__creation(self):
+        """A BadgeRarity is created and its str is its name."""
         self.assertIsInstance(self.common, BadgeRarity)
         self.assertEqual(str(self.common), self.common.name)
 
-    def test_get_rarity(self):
-
+    def test_get_rarity__returns_matching_rarity_for_percentile(self):
+        """get_rarity() maps a percentile to its rarity, capping values above 100."""
         self.assertEqual(BadgeRarity.objects.get_rarity(69.0), self.ultrarare)
         self.assertEqual(BadgeRarity.objects.get_rarity(79.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(80.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(90.0), self.common)
-        self.assertEqual(BadgeRarity.objects.get_rarity(91), None)
+        self.assertIsNone(BadgeRarity.objects.get_rarity(91))
 
         ubercommon = baker.make(BadgeRarity, percentile=100.0)
         self.assertEqual(BadgeRarity.objects.get_rarity(100), ubercommon)
@@ -40,15 +49,18 @@ class BadgeRarityModelTest(TenantTestCase):
         self.assertEqual(BadgeRarity.objects.get_rarity(110), ubercommon)
 
 
-class BadgeTypeModelTest(TenantTestCase):
-    def setUp(self):
-        self.badge_type = baker.make(BadgeType)
+class BadgeTypeModelTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Create a BadgeType for the class tests."""
+        cls.badge_type = baker.make(BadgeType)
 
-    def test_badge_type_creation(self):
+    def test_badge_type__creation(self):
+        """A BadgeType is created and its str is its name."""
         self.assertIsInstance(self.badge_type, BadgeType)
         self.assertEqual(str(self.badge_type), self.badge_type.name)
 
-    def test_model_protection(self):
+    def test_model_protection__badge_type_with_badges(self):
         """ Badge types shouldn't be deleted if they have any assigned badges """
 
         # make sure initial variables are in place
@@ -60,26 +72,31 @@ class BadgeTypeModelTest(TenantTestCase):
         self.assertRaises(Exception, self.badge_type.delete)
 
 
-class BadgeSeriesTestModel(TenantTestCase):
-    def setUp(self):
-        self.badge_series = baker.make(BadgeSeries)
+class BadgeSeriesTestModel(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Create a BadgeSeries for the class tests."""
+        cls.badge_series = baker.make(BadgeSeries)
 
-    def test_badge_series_creation(self):
+    def test_badge_series__creation(self):
+        """A BadgeSeries is created and its str is its name."""
         self.assertIsInstance(self.badge_series, BadgeSeries)
         self.assertEqual(str(self.badge_series), self.badge_series.name)
 
 
-class BadgeTestModel(TenantTestCase):
+class BadgeTestModel(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.badge = baker.make(Badge)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a Badge for the class tests."""
+        cls.badge = baker.make(Badge)
 
-    def test_badge_creation(self):
+    def test_badge__creation(self):
+        """A Badge is created and its str is its name."""
         self.assertIsInstance(self.badge, Badge)
         self.assertEqual(str(self.badge), self.badge.name)
 
-    def test_get_icon_url(self):
+    def test_get_icon_url__default_and_custom(self):
         """If the badge has an icon, return its url, otherwise return default icon url from SiteConfig"""
 
         # doesn't have an icon, should return default
@@ -91,11 +108,34 @@ class BadgeTestModel(TenantTestCase):
         self.badge.save()
         self.assertEqual(self.badge.get_icon_url(), self.badge.icon.url)
 
-    def test_badge_url(self):
+    def test_badge_url__absolute_url_returns_200(self):
+        """The badge's absolute url is reachable and returns 200."""
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
+
+    def test_get_type__returns_only_badges_of_that_type(self):
+        """BadgeQuerySet.get_type filters the queryset to badges of the given badge type."""
+        badge_type = baker.make(BadgeType)
+        matching = baker.make(Badge, badge_type=badge_type)
+        other = baker.make(Badge, badge_type=baker.make(BadgeType))
+        qs = Badge.objects.all().get_type(badge_type)
+        self.assertIn(matching, qs)
+        self.assertNotIn(other, qs)
+
+    def test_fraction_of_active_students_granted_this__returns_zero_when_no_active_students(self):
+        """fraction_of_active_students_granted_this() returns 0 (no division by zero) when the
+        active-student count is zero."""
+        from django.core.cache import cache
+        from django.db import connection
+        # Prime the active-student-count cache to 0 so the guard short-circuits before dividing.
+        # Clean it up so the cached zero (60s TTL) can't leak into later tests in this process.
+        cache_key = f'{connection.schema_name}-active-student-count'
+        self.addCleanup(cache.delete, cache_key)
+        cache.set(cache_key, 0, 60)
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 0)
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
     def test_get_rarity_icon__without_rarity(self, mock_get_rarity):
+        """get_rarity_icon() returns an empty string when the badge has no rarity."""
         mock_get_rarity.return_value = None
 
         result = self.badge.get_rarity_icon()
@@ -104,8 +144,9 @@ class BadgeTestModel(TenantTestCase):
         self.assertEqual(result, '')
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
-    @mock.patch('badges.models.Badge.percent_of_active_users_granted_this')
+    @mock.patch('badges.models.Badge.percent_of_active_students_granted_this')
     def test_get_rarity_icon__with_rarity(self, mock_percentile, mock_get_rarity):
+        """get_rarity_icon() returns the rarity's icon html when the badge has a rarity."""
         mock_percentile.return_value = 80  # Set the desired percentile value
         mock_badge_rarity = mock.Mock()
         mock_badge_rarity.get_icon_html.return_value = '<span class="badge-icon">Icon</span>'
@@ -119,20 +160,153 @@ class BadgeTestModel(TenantTestCase):
         self.assertEqual(result, '<span class="badge-icon">Icon</span>')
 
 
-class BadgeAssertionManagerTest(TenantTestCase):
+class BadgeShareOfActiveStudentsTest(ByteDeckTenantTestCase):
+    """fraction_of_active_students_granted_this(): the share of the deck's active students who
+    hold a badge, shown as "% have earned this" beside its rarity (issue #2760)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, two active students and a badge none of them holds yet."""
+        cls.teacher = baker.make(User, is_staff=True)
+        cls.student1 = baker.make(User)
+        cls.student2 = baker.make(User)
+        cls.badge = baker.make(Badge)
 
     def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.sem = SiteConfig.get().active_semester
+        """Start each test with a cold cache: both counts are cached for 60s, so one cached by
+        an earlier test would otherwise stand in for this test's."""
+        from django.core.cache import cache
+        cache.clear()
 
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        # self.assertion = baker.make(BadgeAssertion, semester=self.sem)
-        # self.badge = Recipe(Badge, xp=20).make()
+    def make_test_account(self):
+        """Make a student account a teacher flagged as a test account, so it isn't a real student.
 
-        # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
+        Returns:
+            User: the new, active, non-staff user, with profile.is_test_account set and saved.
+        """
+        user = baker.make(User)
+        user.profile.is_test_account = True
+        user.profile.full_clean()
+        user.profile.save()
+        return user
 
-    def test_user_badge_assertion_count(self):
+    def test_fraction_of_active_students_granted_this__staff_dont_dilute_it(self):
+        """A badge every active student holds reads 100%, however many teachers the deck has."""
+        baker.make(User, is_staff=True, _quantity=3)
+        for student in (self.student1, self.student2):
+            baker.make(BadgeAssertion, user=student, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1)
+        self.assertEqual(self.badge.percent_of_active_students_granted_this(), 100)
+
+    def test_fraction_of_active_students_granted_this__never_passes_all_of_them(self):
+        """The two counts are cached apart for up to a minute, so a student who joins and earns
+        the badge between them can put the holders above a total cached before they joined.
+        It still reads 100% at most."""
+        from django.core.cache import cache
+        # the total as it was cached when only one of the two students had joined
+        cache.set(f'{connection.schema_name}-active-student-count', 1, 60)
+        for student in (self.student1, self.student2):
+            baker.make(BadgeAssertion, user=student, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1)
+
+    def test_fraction_of_active_students_granted_this__only_students_count_as_holders(self):
+        """Staff, superusers and test accounts holding the badge add nothing to it: only one of
+        the two students holds it, so half of them have earned it."""
+        superuser = baker.make(User, is_superuser=True)
+        for user in (self.teacher, superuser, self.make_test_account(), self.student1):
+            baker.make(BadgeAssertion, user=user, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1 / 2)
+
+    def test_fraction_of_active_students_granted_this__archived_students_are_left_out(self):
+        """Archived students count on neither side, whether or not they hold the badge."""
+        archived_holder = baker.make(User, is_active=False)
+        baker.make(User, is_active=False)
+        for user in (archived_holder, self.student1):
+            baker.make(BadgeAssertion, user=user, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1 / 2)
+
+    def test_fraction_of_active_students_granted_this__a_student_earning_it_twice_counts_once(self):
+        """A repeatable badge earned twice by one of the two students is held by half of them."""
+        baker.make(BadgeAssertion, user=self.student1, badge=self.badge, _quantity=2)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1 / 2)
+
+    def test_with_num_students_granted__counts_the_same_students(self):
+        """The annotation the badge list reads counts exactly the holders the badge counts on
+        its own: each active student once, and nobody else."""
+        superuser = baker.make(User, is_superuser=True)
+        archived = baker.make(User, is_active=False)
+        holders = (self.teacher, superuser, self.make_test_account(), archived, self.student1, self.student1)
+        for user in holders:
+            baker.make(BadgeAssertion, user=user, badge=self.badge)
+        # another badge's assertions aren't this badge's
+        baker.make(BadgeAssertion, user=self.student2, badge=baker.make(Badge))
+
+        annotated = Badge.objects.all().with_num_students_granted().get(pk=self.badge.pk)
+
+        self.assertEqual(annotated.num_students_granted_annotated, 1)
+        self.assertEqual(
+            annotated.fraction_of_active_students_granted_this(),
+            self.badge.fraction_of_active_students_granted_this(),
+        )
+
+
+class BadgeStudentsWhoQualifyUngrantedTest(ByteDeckTenantTestCase):
+    """Badge.students_who_qualify_ungranted() previews who a teacher-initiated grant-check would
+    grant. It must consider only students currently enrolled in a course this semester — not
+    unenrolled users, and not staff/test accounts that happen to be enrolled (issue #2061).
+    """
+
+    def setUp(self):
+        """A badge whose only prereq is completing a quest, plus the active semester."""
+        self.badge = baker.make(Badge)
+        self.quest = baker.make(Quest)
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        self.semester = SiteConfig.get().active_semester
+
+    def _make_qualifier(self, *, is_staff=False, enrolled=True):
+        """Make a user who has completed the prereq quest; optionally enrolled and/or staff."""
+        user = baker.make(User, is_staff=is_staff)
+        if enrolled:
+            baker.make('courses.CourseStudent', user=user, semester=self.semester)
+        baker.make(QuestSubmission, user=user, quest=self.quest,
+                   is_completed=True, is_approved=True, semester=self.semester)
+        return user
+
+    def test_students_who_qualify_ungranted__includes_enrolled_student(self):
+        """An enrolled student who meets the prereqs and lacks the badge is listed."""
+        student = self._make_qualifier()
+        self.assertIn(student, self.badge.students_who_qualify_ungranted())
+
+    def test_students_who_qualify_ungranted__excludes_unenrolled_user(self):
+        """A qualifying user not enrolled in a course this semester is not listed."""
+        unenrolled = self._make_qualifier(enrolled=False)
+        self.assertNotIn(unenrolled, self.badge.students_who_qualify_ungranted())
+
+    def test_students_who_qualify_ungranted__excludes_enrolled_staff(self):
+        """A staff member enrolled as a CourseStudent is not listed — the check is for students."""
+        staff = self._make_qualifier(is_staff=True)
+        self.assertNotIn(staff, self.badge.students_who_qualify_ungranted())
+
+
+class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and student for the manager tests."""
+        cls.sem = SiteConfig.get().active_semester
+
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        # a student's semester comes from their registration (issue #2157 Phase 3), so without
+        # one none of their stamped assertions read as this semester's
+        baker.make('courses.CourseStudent', user=cls.student, course=baker.make('courses.Course'), semester=cls.sem)
+
+    def test_user_badge_assertion_count__annotates_count_per_user(self):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
         the correct number of assertions for each user as an "assertion_count" annotation on the queryset"""
 
@@ -150,7 +324,63 @@ class BadgeAssertionManagerTest(TenantTestCase):
         self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
         self.assertNotIn(user3, qs)
 
-    def test_all_for_user_distinct(self):
+    def test_user_badge_assertion_count__all_leaves_out_archived_students(self):
+        """The badge page's All list is every non-archived student, as its name says on every
+        page that offers it (#2136): an archived student who holds the badge is not listed."""
+        badge = baker.make(Badge)
+        archived = baker.make(User, is_active=False)
+        baker.make(BadgeAssertion, user=self.student, badge=badge)
+        baker.make(BadgeAssertion, user=archived, badge=badge)
+
+        qs = BadgeAssertion.objects.user_badge_assertion_count(badge)
+
+        self.assertIn(self.student, qs)
+        self.assertNotIn(archived, qs)
+
+    def _granted_on(self, date, xp, registration=None):
+        """Grant the student a badge worth `xp`, stamped as granted on `date`.
+
+        The timestamp is auto_now_add, so it has to be written after the fact rather than
+        handed to the assertion when it is made.
+        """
+        assertion = baker.make(
+            BadgeAssertion, user=self.student, badge=baker.make(Badge, xp=xp),
+            semester=self.sem, registration=registration,
+        )
+        BadgeAssertion.objects.filter(pk=assertion.pk).update(timestamp=date)
+        return assertion
+
+    def test_xp_by_registration_series__answers_each_date_with_what_had_been_granted_by_then(self):
+        """Each date gets the split as it stood then, which is what plots a course's line
+        through the semester (issue #2459). Badges have no cap, so a date's figure is the
+        running total of everything granted by then."""
+        maths = baker.make('courses.CourseStudent', user=self.student, semester=self.sem, course=baker.make('courses.Course'))
+        monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
+        self._granted_on(monday, xp=10, registration=maths)
+        self._granted_on(monday + datetime.timedelta(days=2), xp=25)
+
+        series = BadgeAssertion.objects.xp_by_registration_series(
+            self.student, [monday - datetime.timedelta(days=1), monday, monday + datetime.timedelta(days=2)])
+
+        self.assertEqual(series, [{}, {maths.id: 10}, {maths.id: 10, None: 25}])
+
+    def test_xp_by_registration_series__costs_the_same_however_many_dates(self):
+        """Reading the assertions once is the point of the series: charting a course asks for
+        a whole semester of class days at a time, and what it costs must not grow with them
+        (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
+        survives any unrelated change to how the assertions are looked up."""
+        monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
+        self._granted_on(monday, xp=10)
+        dates = [monday + datetime.timedelta(days=day) for day in range(20)]
+
+        with CaptureQueriesContext(connection) as one_date:
+            BadgeAssertion.objects.xp_by_registration_series(self.student, dates[:1])
+        with CaptureQueriesContext(connection) as every_date:
+            BadgeAssertion.objects.xp_by_registration_series(self.student, dates)
+
+        self.assertEqual(len(every_date), len(one_date))
+
+    def test_all_for_user_distinct__distinct_by_badge_and_sorted(self):
         """
         BadgeAssertion.objects.all_for_user_distinct() returns a queryset of BadgeAssertions assigned to a user
         that are distinct by badge, and sorted by badge.badge_type.sort_order, badge.sort_order
@@ -203,27 +433,31 @@ class BadgeAssertionManagerTest(TenantTestCase):
         self.assertQuerySetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
 
 
-class BadgeAssertionTestModel(TenantTestCase):
+class BadgeAssertionTestModel(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.sem = SiteConfig.get().active_semester
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, student, badge and reusable assertion recipe."""
+        cls.sem = SiteConfig.get().active_semester
 
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        self.assertion = baker.make(BadgeAssertion, semester=self.sem)
-        self.badge = Recipe(Badge, xp=20).make()
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        cls.assertion = baker.make(BadgeAssertion, semester=cls.sem)
+        cls.badge = Recipe(Badge, xp=20).make()
 
-        self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
+        cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge, semester=cls.sem)
 
-    def test_badge_assertion_creation(self):
+    def test_badge_assertion__creation(self):
+        """A BadgeAssertion is created and its str is its badge's name."""
         self.assertIsInstance(self.assertion, BadgeAssertion)
         self.assertEqual(str(self.assertion), self.assertion.badge.name)
 
-    def test_badge_assertion_url(self):
+    def test_badge_assertion_url__absolute_url_returns_200(self):
+        """The assertion's absolute url is reachable and returns 200."""
         self.assertEqual(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_badge_assertion_count(self):
+    def test_badge_assertion__count(self):
+        """count() returns the number of times the badge has been granted to the user."""
         num = 5
         for _ in range(num):
             badge_assertion = BadgeAssertion.objects.create_assertion(
@@ -238,7 +472,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         # print(num, count)
         self.assertEqual(num, count)
 
-    def test_badge_assertion_count_bootstrap_badge(self):
+    def test_count_bootstrap_badge__empty_when_below_two(self):
         """Returns empty string if count < 2, else returns proper count"""
         badge_assertion = baker.make(BadgeAssertion, semester=self.sem)
         self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
@@ -256,7 +490,8 @@ class BadgeAssertionTestModel(TenantTestCase):
         # print(num, count)
         self.assertEqual(num, count)
 
-    def test_badge_assertion_get_duplicate_assertions(self):
+    def test_get_duplicate_assertions__returns_all_duplicates(self):
+        """get_duplicate_assertions() returns every assertion of the same badge for the user."""
         num = 5
         values = []
         for _ in range(num):
@@ -266,7 +501,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         qs = badge_assertion.get_duplicate_assertions()
         self.assertQuerySetEqual(list(qs), values, )
 
-    def test_badge_assertions_dict_items_prefetches_duplicates(self):
+    def test_badge_assertions_dict_items__prefetches_duplicates(self):
         """badge_assertions_dict_items pre-populates each distinct badge's
         duplicate assertions, so get_duplicate_assertions() serves them from
         memory with no query per badge (the profile page renders one popover
@@ -287,8 +522,8 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(duplicate_counts[badge_a.id], 2)
         self.assertEqual(duplicate_counts[badge_b.id], 3)
 
-    def test_badge_assertion_manager_create_assertion(self):
-
+    def test_create_assertion__without_semester_or_teacher(self):
+        """create_assertion() builds a BadgeAssertion whether or not a teacher is passed."""
         # no semester
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student,
@@ -304,7 +539,137 @@ class BadgeAssertionTestModel(TenantTestCase):
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
 
-    def test_badge_assertion_manager_xp_to_date(self):
+    def test_create_assertion__the_grant_and_the_xp_it_is_worth_are_one_transaction(self):
+        """Granting is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Saving the assertion is what asks the prerequisites app to rebuild the student's cache
+        of available quests, and TransactionAwareTask hands that job to celery on commit. One
+        transaction around the grant is therefore what holds the job back until the XP the badge
+        is worth has been written, so the worker does not work the student's rank out from the
+        XP they had before it.
+        """
+        badge = baker.make(Badge)
+
+        with mock.patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                BadgeAssertion.objects.create_assertion(self.student, badge, self.teacher)
+
+        self.assertFalse(
+            BadgeAssertion.objects.filter(user=self.student, badge=badge).exists(),
+            "the badge was left granted without its XP",
+        )
+
+    def test_create_assertion__uses_explicit_active_semester(self):
+        """create_assertion() honours a passed active_semester instead of the SiteConfig default."""
+        # A semester distinct from the SiteConfig default (self.sem) so this proves the passed
+        # active_semester is used rather than the default (which would pass either way).
+        explicit_semester = baker.make(Semester)
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher, active_semester=explicit_semester.id
+        )
+        self.assertEqual(new_assertion.semester_id, explicit_semester.id)
+
+    def test_create_assertion__is_stamped_with_the_recipients_own_semester(self):
+        """A badge counts toward the semester the student is registered in rather than the one
+        the deck points at (issue #2157 Phase 3), so granting it to a student in another open
+        semester adds XP where that student is actually earning it."""
+        from courses.models import Course, CourseStudent
+
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=other_semester)
+
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher
+        )
+
+        self.assertEqual(new_assertion.semester_id, other_semester.id)
+        self.assertNotEqual(new_assertion.semester_id, SiteConfig.get().open_semester_id)
+
+    def test_create_assertion__no_open_semester_grants_an_unstamped_assertion(self):
+        """Staff can still grant a badge between semesters (issue #1177). The assertion isn't
+        stamped with a semester, so it doesn't count toward the next one's XP."""
+        Semester.objects.complete_semester()
+
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher
+        )
+
+        self.assertIsNone(new_assertion.semester_id)
+
+    def test_create_assertion__a_badge_granted_between_semesters_does_not_follow_the_student(self):
+        """A badge granted between terms recognises what the student did between terms, so it
+        belongs to no term and stays that way when they join a course (issue #2474). Joining
+        adopts the quests they had on the go, which would otherwise be stranded out of both
+        their in-progress list and their available list (issue #2441); an assertion is an
+        award already made, so there is nothing to strand and its XP counts toward no
+        semester, the same rule XP already follows when it resets each term."""
+        from courses.models import Course, CourseStudent
+
+        Semester.objects.complete_semester()
+        unstamped = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
+
+        new_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=new_semester)
+
+        unstamped.refresh_from_db()
+        self.assertIsNone(unstamped.semester_id)
+
+    def test_get_queryset__active_semester_only_holds_the_unstamped_assertions_with_no_open_semester(self):
+        """With no semester open, "this semester" is the work that belongs to none: a badge
+        granted between terms is stamped with no semester (issue #2413) and is still the
+        student's, so the semester-scoped queryset is where it shows up. The assertion from
+        the archived semester is past, so it drops out of that queryset but not the
+        unscoped one."""
+        Semester.objects.complete_semester()
+        unstamped = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+        self.assertIn(unstamped, semester_scoped)
+        self.assertNotIn(self.assertion, semester_scoped)
+        self.assertIn(self.assertion, BadgeAssertion.objects.get_queryset(active_semester_only=False))
+
+    def test_get_queryset__active_semester_only_covers_every_open_semester_deck_wide(self):
+        """A deck can run two cohorts on different calendars (issue #1781), so a deck-wide
+        view of "this semester's" badges is every open semester's, not the one the deck
+        happens to point at: naming a single semester drops the other cohort's assertions
+        out of sight (issue #2475). The badges belonging to no semester are in it too, since
+        someone registered in none is still granted them (issue #2413) and no finished term
+        owns their work either. The submission side already reads this way."""
+        second_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_cohort = baker.make(BadgeAssertion, user=baker.make(User), semester=second_semester)
+        between_terms = baker.make(BadgeAssertion, user=baker.make(User), semester=None)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+
+        self.assertNotEqual(second_semester, SiteConfig.get().open_semester)
+        self.assertIn(self.assertion, semester_scoped)
+        self.assertIn(other_cohort, semester_scoped)
+        self.assertIn(between_terms, semester_scoped)
+
+    def test_get_queryset__active_semester_only_leaves_out_an_archived_semester_deck_wide(self):
+        """Covering every open semester is not the same as covering every semester: a term
+        that has been archived is a finished record, so its assertions are past and stay out
+        of the deck-wide view of current work."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        finished = baker.make(BadgeAssertion, user=self.student, semester=archived)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+
+        self.assertNotIn(finished, semester_scoped)
+        self.assertIn(finished, BadgeAssertion.objects.get_queryset(active_semester_only=False))
+
+    def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
+        """The granted notification uses the badge type's own fa_icon when it has one, rather
+        than the default certificate (the non-default branch of post_save_receiver)."""
+        badge_type = baker.make(BadgeType, fa_icon='trophy')
+        badge = baker.make(Badge, badge_type=badge_type)
+        # Creating the assertion fires post_save_receiver, which builds the notification icon.
+        BadgeAssertion.objects.create_assertion(self.student, badge, issued_by=self.teacher)
+        notification = Notification.objects.all_for_user(self.student).last()
+        self.assertIn('fa fa-trophy', notification.font_icon)
+
+    def test_calculate_xp_to_date__sums_granted_badge_xp(self):
+        """calculate_xp_to_date() totals the XP of the badges granted to the user by a date."""
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
         self.assertEqual(xp, 0)
 
@@ -317,32 +682,64 @@ class BadgeAssertionTestModel(TenantTestCase):
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
         self.assertEqual(xp, self.badge.xp)
 
-    def test_badge_assertion_manager_get_by_type_for_user(self):
+    def test_get_by_type_for_user__one_entry_per_badge_type(self):
+        """ get_by_type_for_user should return one entry per BadgeType, where the entry for the
+        granted badge's type contains the user's assertion and all other entries are empty. """
+        # registered in the semester the recipe stamps, or the assertion isn't theirs to list
+        baker.make('courses.CourseStudent', user=self.student, course=baker.make('courses.Course'), semester=self.sem)
+        assertion = self.badge_assertion_recipe.make()
         badge_list_by_type = BadgeAssertion.objects.get_by_type_for_user(self.student)
-        self.assertIsInstance(badge_list_by_type, list)
-        # TODO need to test this properly
+        self.assertEqual(len(badge_list_by_type), BadgeType.objects.count())
+        for entry in badge_list_by_type:
+            if entry['badge_type'] == self.badge.badge_type:
+                self.assertQuerySetEqual(entry['list'], [assertion])
+            else:
+                self.assertQuerySetEqual(entry['list'], [])
 
-    def test_badge_assertion_manager_check_for_new_assertions(self):
+    def test_check_for_new_assertions__grants_unlocked_badges_recursively(self):
+        """ check_for_new_assertions should grant badges whose prerequisites the user meets,
+        including badges unlocked by a badge granted in the same call (recursion). """
+        # chain: self.badge -> badge_a -> badge_b
+        badge_a = Recipe(Badge, xp=1).make()
+        badge_b = Recipe(Badge, xp=1).make()
+        Prereq.add_simple_prereq(badge_a, self.badge)
+        Prereq.add_simple_prereq(badge_b, badge_a)
+
+        # student hasn't earned self.badge yet, so nothing should be granted
         BadgeAssertion.objects.check_for_new_assertions(self.student)
-        # TODO need to tefrom django.contrib.auth import get_user_model
+        self.assertFalse(BadgeAssertion.objects.all_for_user_badge(self.student, badge_a, False).exists())
 
-    def test_fraction_of_active_users_granted_this(self):
+        # grant the root badge; both dependent badges should now be granted recursively
+        self.badge_assertion_recipe.make()
+        BadgeAssertion.objects.check_for_new_assertions(self.student)
+        self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_a, False).exists())
+        self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_b, False).exists())
+
+    def test_fraction_of_active_students_granted_this__matches_ratio(self):
+        """fraction/percent_of_active_students_granted_this() reflect the share of active students with the badge."""
         num_students_with_badge = 3
 
         students_with_badge = baker.make(User, _quantity=num_students_with_badge)
         self.assertEqual(len(students_with_badge), num_students_with_badge)
 
-        total_students = User.objects.filter(is_active=True).count()
+        # this class's users are all plain students or staff, so the students are the non-staff
+        total_students = User.objects.filter(is_active=True, is_staff=False).count()
 
         badge = baker.make(Badge)
 
         for student in students_with_badge:
             baker.make(BadgeAssertion, user=student, badge=badge)
 
-        fraction = badge.fraction_of_active_users_granted_this()
+        # fraction_of_active_students_granted_this() caches the active-student and
+        # holder counts for 60s; clear so counts cached by earlier tests in
+        # this process can't leak into the assertion below
+        from django.core.cache import cache
+        cache.clear()
+
+        fraction = badge.fraction_of_active_students_granted_this()
         self.assertEqual(fraction, num_students_with_badge / total_students)
 
-        percentile = badge.percent_of_active_users_granted_this()
+        percentile = badge.percent_of_active_students_granted_this()
         self.assertEqual(percentile, num_students_with_badge / total_students * 100)
 
     def test_post_save_receiver__creates_notifications(self):
@@ -372,7 +769,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(notifications.filter(verb__contains='promoted').count(), 1)
 
 
-class BadgeRarityCacheInvalidationTest(TenantTestCase):
+class BadgeRarityCacheInvalidationTest(ByteDeckTenantTestCase):
     """get_rarity() reads from the cached rarity list, so every ORM write path
     must invalidate it: save/create and deletes via the post_save/post_delete
     signals, update()/bulk_create()/bulk_update() via the BadgeRarityQuerySet
@@ -393,34 +790,34 @@ class BadgeRarityCacheInvalidationTest(TenantTestCase):
         """Populate the rarity cache so the test's write can be shown to invalidate it."""
         BadgeRarity.objects.get_rarities_cached()
 
-    def test_save_invalidates_cache(self):
+    def test_save__invalidates_cache(self):
         """Creating a BadgeRarity (via save) must invalidate the cache (post_save signal)."""
         self.warm_cache()
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.assertEqual(BadgeRarity.objects.get_rarity(0.1).pk, rarity.pk)
         self.assert_cache_matches_db()
 
-    def test_queryset_delete_invalidates_cache(self):
+    def test_queryset_delete__invalidates_cache(self):
         """Queryset .delete() must invalidate the cache (receivers disable fast-delete, so post_delete fires)."""
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.warm_cache()
         BadgeRarity.objects.filter(pk=rarity.pk).delete()
         self.assert_cache_matches_db()
 
-    def test_queryset_update_invalidates_cache(self):
+    def test_queryset_update__invalidates_cache(self):
         """Queryset .update() fires no signals; the BadgeRarityQuerySet.update override must invalidate the cache."""
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.warm_cache()
         BadgeRarity.objects.filter(pk=rarity.pk).update(percentile=0.456)
         self.assert_cache_matches_db()
 
-    def test_bulk_create_invalidates_cache(self):
+    def test_bulk_create__invalidates_cache(self):
         """bulk_create() fires no signals; the BadgeRarityQuerySet.bulk_create override must invalidate the cache."""
         self.warm_cache()
         BadgeRarity.objects.bulk_create([BadgeRarity(name='Bulk Rarity', percentile=0.123)])
         self.assert_cache_matches_db()
 
-    def test_bulk_update_invalidates_cache(self):
+    def test_bulk_update__invalidates_cache(self):
         """bulk_update() fires no signals; the BadgeRarityQuerySet.bulk_update override must invalidate the cache."""
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.warm_cache()

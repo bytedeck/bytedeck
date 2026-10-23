@@ -223,12 +223,38 @@
                  --></li>
 
                 {% if not request.user.is_staff %}
+                {% comment %} A student in more than one course has a different amount of XP in
+                   each, so they hold a rank in each (#2453). The icon shown is their highest,
+                   and the dropdown lists every course with the rank they are at in it. With one
+                   course there is nothing to choose between, so it stays a plain link. {% endcomment %}
+                {% with course_ranks=request.user.profile.course_ranks %}
+                {% if course_ranks %}
+                <li id="ranks-menu" class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button"
+                       aria-haspopup="true" aria-expanded="false"
+                       title="Rank: {{ course_ranks.0.1 }} in {{ course_ranks.0.0 }}">
+                        <i class="{{ course_ranks.0.1.fa_icon_class }}"></i><!--
+                     --><span class="visible-xs-inline-block">&nbsp;&nbsp;Ranks</span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        {% for course, rank in course_ranks %}
+                        <li>
+                            <a href="{% url 'courses:ranks' %}" title="Rank: {{ rank }}">
+                                <i class="{{ rank.fa_icon_class }} fa-fw"></i>&nbsp;&nbsp;{{ course }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </li>
+                {% else %}
                 <li>
                     <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
-                        <i class="{{request.user.profile.rank.fa_icon}}"></i>
+                        <i class="{{request.user.profile.rank.fa_icon_class}}"></i>
                         <span class="visible-xs-inline-block">&nbsp;&nbsp;{{request.user.profile.rank}}</span>
                     </a>
                 </li>
+                {% endif %}
+                {% endwith %}
                 {% endif %}
 
                 <li id="extras-menu" class="dropdown">
@@ -247,7 +273,14 @@
                     </ul>
                 </li>
 
-                <li><a href="{% url 'account_logout' %}">Sign Out</a></li>
+                <li>
+                    <a href="{% url 'account_logout' %}" class="js-signout" role="button">Sign Out</a>
+                    <!-- Sign Out is a POST so it can't be triggered by a GET (prefetch, an <img>, a
+                         cross-site link). The JS handler in custom.js submits this form on click for a
+                         one-click sign out; with JS off the link's href GETs allauth's confirmation page,
+                         whose button POSTs this same view. -->
+                    <form method="post" action="{% url 'account_logout' %}" class="js-signout-form hidden">{% csrf_token %}</form>
+                </li>
                 {% else %}
                 <!-- Unauthenticated -->
                 <li><a href="{% url 'account_signup' %}">Sign Up</a></li>

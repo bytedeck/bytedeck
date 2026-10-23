@@ -13,10 +13,15 @@ from prerequisites.admin import PrereqInline
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from quest_manager.models import Quest
 
+from utilities.fa_icon import bare_icon_name
+from .forms import BadgeRarityForm
 from .models import Badge, BadgeType, BadgeSeries, BadgeAssertion, BadgeRarity
 
 
 class BadgeRarityAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    # The admin is the only place rarities are edited, so the icon picker is wired
+    # in here rather than on a site form.
+    form = BadgeRarityForm
     list_display = ('name', 'percentile', 'color', 'fa_icon')
 
 
@@ -124,13 +129,20 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
          + badge_type_icon
         If badge type doesn't exist, it creates it.
         If staff cancels import anything created here will be rolled back automatically.
+        The icon column is reduced to the bare name the field holds, so a CSV naming it
+        "fa-gem" imports as well as one naming it "gem". Returns nothing: the row is
+        edited in place.
         """
         bt_name = row['badge_type_name']
         bt_sort = row['badge_type_sort']
         bt_icon = row['badge_type_icon']
 
         if bt_name:
-            defaults = {'fa_icon': bt_icon}
+            # A CSV can name the icon with its "fa-" prefix, so it is reduced to the
+            # bare name the field holds. No form runs here, so this is also what keeps
+            # an imported value from reaching the badge-granted notification, which is
+            # rendered |safe: bare_icon_name drops anything the field would refuse.
+            defaults = {'fa_icon': bare_icon_name(bt_icon)}
 
             # if bt_sort is None badge creation will throw an error
             if bt_sort:
@@ -149,16 +161,50 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
         # after admin has accepted the import changes
         self.generate_badge_type(row)
 
-    def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        """ https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.after_import """
-        for data_dict in dataset.dict:
-            import_id = data_dict["import_id"]
-            parent_badge = Badge.objects.get(import_id=import_id)
-            self.generate_simple_prereqs(parent_badge, data_dict)
+    def after_import(self, dataset, result, **kwargs):
+        """ https://django-import-export.readthedocs.io/en/latest/api_resources.html#import_export.resources.Resource.after_import
+
+        django-import-export 4.x passes using_transactions/dry_run via kwargs.
+        Skip prereq generation during the dry-run/preview step, mirroring
+        QuestResource.after_import.
+        """
+        if not kwargs.get("dry_run", False):
+            for data_dict in dataset.dict:
+                import_id = data_dict["import_id"]
+                parent_badge = Badge.objects.get(import_id=import_id)
+                self.generate_simple_prereqs(parent_badge, data_dict)
+
+
+# Badge.short_description holds summernote HTML; drop it from the admin export for the
+# same #2081 memory reason -- the Shared Library uses the full BadgeResource, unchanged.
+BADGE_EXPORT_EXCLUDED_HTML_FIELDS = ('short_description',)
+
+
+class BadgeAdminExportResource(BadgeResource):
+    """Export-only ``BadgeResource`` for the admin that drops the bulky HTML field.
+
+    Wired in via ``BadgeAdmin.get_export_resource_classes`` only; import keeps using the
+    full ``BadgeResource``. The column is filtered out at export time (rather than via
+    ``Meta.exclude``) because it is an already-declared field inherited from ``BadgeResource``.
+    """
+
+    def get_export_fields(self, selected_fields=None):
+        """Return the parent export fields minus the bulky summernote HTML column.
+
+        Args:
+            selected_fields: Optional subset of fields to export (passed through to the
+                parent resource); ``None`` means export all of the resource's fields.
+
+        Returns:
+            list[Field]: The parent's export fields with any field whose ``column_name``
+            is in ``BADGE_EXPORT_EXCLUDED_HTML_FIELDS`` removed.
+        """
+        fields = super().get_export_fields(selected_fields)
+        return [f for f in fields if f.column_name not in BADGE_EXPORT_EXCLUDED_HTML_FIELDS]
 
 
 class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdmin):
-    resource_class = BadgeResource
+    resource_classes = [BadgeResource]  # replaces resource_class, removed in django-import-export 4.0
     list_display = ('name', 'xp', 'published')
     inlines = [
         PrereqInline,
@@ -171,6 +217,20 @@ class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdm
     def get_export_formats(self):
         """ file formats for exporting """
         return [CSV]
+
+    def get_export_resource_classes(self, request):
+        """Export uses the slim, HTML-free resource to bound per-request memory (#2081).
+
+        Import is left on the full ``BadgeResource`` (via ``resource_classes``).
+
+        Args:
+            request: The current admin request (unused; part of the django-import-export
+                ``ExportMixin`` hook signature).
+
+        Returns:
+            list[type[Resource]]: ``[BadgeAdminExportResource]`` -- the export-only resource.
+        """
+        return [BadgeAdminExportResource]
 
 
 class BadgeSeriesAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):

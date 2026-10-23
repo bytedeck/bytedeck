@@ -24,6 +24,22 @@
     <h3>Excluded Dates</h3>
     <p>Weekends are automatically excluded in mark calculations. To exclude additional dates, add them here:</p>
 
+    {% if other_excluded_dates %}
+      {% comment %} Only shown when another semester actually has dates to bring over, so a deck
+         running one semester does not carry a button that can never do anything (#2648).
+         The title sits on the span, not the button: a disabled button receives no mouse
+         events, so a title on it would never appear, which is the state that most needs
+         explaining. The span is not disabled, so it gets the hover either way. {% endcomment %}
+      <p>
+        <span id="copy-excluded-dates-tooltip">
+          <button type="button" id="copy-excluded-dates" class="btn btn-default btn-sm" disabled>
+            <i class="fa fa-copy"></i> Copy dates from your other semesters
+          </button>
+        </span>
+      </p>
+      {{ other_excluded_dates|json_script:"other-excluded-dates" }}
+    {% endif %}
+
     <div id="form-management"> {{ formset.management_form }} </div>
     <div id="form-container">
         <div class="row">
@@ -65,6 +81,21 @@
     const formInitialForms = document.getElementById("id_form-INITIAL_FORMS");
     const initialForms = parseInt(formInitialForms.getAttribute("value"))-1;
 
+    // Put a date into a row's field, updating both the box the teacher reads and the value the
+    // form posts. The date picker moves the field's name onto a hidden input beside it and
+    // drives that input from its own dp.change event, so writing to the visible box alone
+    // shows the date and submits nothing (#2652). Going through the picker fires that event.
+    // Its script comes from a CDN, and when that has not loaded there is no hidden input:
+    // the visible box still carries the field's name, so assigning to it is what posts.
+    function setDateValue(dateInput, value) {
+        const picker = window.jQuery && jQuery(dateInput).closest(".dbdp").data("DateTimePicker");
+        if (picker) {
+            picker.date(moment(value, "YYYY-MM-DD"));
+        } else {
+            dateInput.value = value;
+        }
+    }
+
     // Parse date string as local date to avoid timezone issues
     function parseLocalDate(dateStr) {
         const [year, month, day] = dateStr.split('-').map(Number);
@@ -79,7 +110,7 @@
         return d;
     }
 
-    function AddForm() {
+    function AddForm(date, label) {
         // management form change data
         var totalForms = parseInt(formTotalForms.getAttribute("value"));
 
@@ -115,6 +146,14 @@
             copiedLabel = lastLabelInput.value;
         }
 
+        // A caller can name the row's values instead (the copy button below), in which case
+        // they stand in for the guesses above, a blank label included: a date arriving with
+        // none of its own should not inherit the label of the row above it.
+        if (date !== undefined) {
+            nextDateStr = date;
+            copiedLabel = label || '';
+        }
+
         // increment form count
         formTotalForms.setAttribute("value", totalForms + 1);
 
@@ -136,10 +175,12 @@
         // set copied values
         const newDateInput = document.querySelector(`#id_form-${newIndex}-date`);
         if (newDateInput && nextDateStr) {
-            newDateInput.value = nextDateStr;
+            setDateValue(newDateInput, nextDateStr);
         }
+        // Assigned even when blank, so a caller-supplied blank clears the label carried
+        // forward above. On a row nobody supplied values for, the field is empty either way.
         const newLabelInput = document.querySelector(`#id_form-${newIndex}-label`);
-        if (newLabelInput && copiedLabel) {
+        if (newLabelInput) {
             newLabelInput.value = copiedLabel;
         }
 
@@ -153,14 +194,21 @@
         // get the datepicker options from newly added form field
         // initialize the datepicker widget using the options from its class
         var $datepicker = $(`#id_form-${newIndex}-date`)
-        var config = JSON.parse($datepicker.attr("data-dbdp-config"));
 
-        // have to sub in `backend_date_format` if options.format does not exist
-        // Null-coalescing operator
-        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing_assignment
-        config.options.format ??= config.backend_date_format;
+        // The picker is an enhancement on a text input the teacher can type a date into, so
+        // the row works without it. Its plugin is fetched from a CDN, and on a network that
+        // cannot reach that CDN this would otherwise throw and take the caller down with it,
+        // which for the copy button below means the rest of its dates never arrive.
+        if (typeof $datepicker.datetimepicker === "function") {
+            var config = JSON.parse($datepicker.attr("data-dbdp-config"));
 
-        $datepicker.datetimepicker(config.options);
+            // have to sub in `backend_date_format` if options.format does not exist
+            // Null-coalescing operator
+            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing_assignment
+            config.options.format ??= config.backend_date_format;
+
+            $datepicker.datetimepicker(config.options);
+        }
     }
 
     function RemoveForm(index) {
@@ -172,6 +220,80 @@
         // add delete input for POST DATA
         var deleteInput = document.getElementById(`id_form-${index}-DELETE`);
         deleteInput.setAttribute("value", "on");
+    }
+
+    // Copy the excluded dates the deck's other semesters hold into this one (#2648). Only wired
+    // up when the view found some to offer; otherwise the button is not on the page at all.
+    const copyButton = document.getElementById("copy-excluded-dates");
+    if (copyButton) {
+        const copyTooltip = document.getElementById("copy-excluded-dates-tooltip");
+        const otherDates = JSON.parse(document.getElementById("other-excluded-dates").textContent);
+        const firstDayInput = document.getElementById("id_first_day");
+        const lastDayInput = document.getElementById("id_last_day");
+
+        const NO_RANGE_TITLE = "Set this semester's first and last day first, so its dates can be picked out.";
+        const READY_TITLE = "Add the dates your other semesters exclude that fall inside this one.";
+
+        // Every date here is ISO (YYYY-MM-DD), which sorts and compares as text exactly as it
+        // does as a date, so the range test needs no parsing and no timezone handling.
+        function semesterRange() {
+            const first = firstDayInput.value, last = lastDayInput.value;
+            return (first && last && first <= last) ? {first: first, last: last} : null;
+        }
+
+        function refreshCopyButton() {
+            const range = semesterRange();
+            copyButton.disabled = range === null;
+            copyTooltip.setAttribute("title", range === null ? NO_RANGE_TITLE : READY_TITLE);
+        }
+
+        // The date input of every row still on screen, in form order. A removed row is hidden
+        // rather than deleted, and its date is going away with it, so it is not one of these.
+        function visibleDateInputs() {
+            const inputs = [];
+            const totalForms = parseInt(formTotalForms.getAttribute("value"));
+            for (let i = 0; i < totalForms; i++) {
+                const dateInput = document.querySelector(`#id_form-${i}-date`);
+                const row = document.getElementById(`form-${i}-container`);
+                if (dateInput && row && row.style.display !== "none") {
+                    inputs.push(dateInput);
+                }
+            }
+            return inputs;
+        }
+
+        copyButton.addEventListener("click", function () {
+            const range = semesterRange();
+            if (range === null) {
+                return;
+            }
+
+            // A date already on the form is left alone rather than added again: a second row for
+            // it would only fail validation, and the teacher may have edited the one that is there.
+            const listed = new Set(visibleDateInputs().map(input => input.value).filter(Boolean));
+            const arriving = otherDates.filter(
+                entry => entry.date >= range.first && entry.date <= range.last && !listed.has(entry.date)
+            );
+
+            for (const entry of arriving) {
+                // Fill the blank row the formset always ends with before adding another, so
+                // copying into an empty semester does not leave a stray empty row behind.
+                const blank = visibleDateInputs().find(input => !input.value);
+                if (blank) {
+                    setDateValue(blank, entry.date);
+                    document.getElementById(blank.id.replace(/-date$/, "-label")).value = entry.label;
+                } else {
+                    AddForm(entry.date, entry.label);
+                }
+            }
+        });
+
+        // The dates are typed on this same page, so the button follows them as they are filled in.
+        for (const input of [firstDayInput, lastDayInput]) {
+            input.addEventListener("change", refreshCopyButton);
+            input.addEventListener("input", refreshCopyButton);
+        }
+        refreshCopyButton();
     }
 
 </script>

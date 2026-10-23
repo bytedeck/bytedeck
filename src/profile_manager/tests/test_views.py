@@ -1,64 +1,98 @@
 import re
 from unittest.mock import patch
-from allauth.account.models import EmailConfirmationHMAC
+from allauth.account.models import EmailAddress, EmailConfirmationHMAC
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
+from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
-from courses.models import Block, CourseStudent
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from courses.models import Block, Course, CourseStudent, Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from notifications.models import Notification
 from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
 from profile_manager.models import Profile
+from profile_manager.views import offers_yours_list
 
 from hackerspace_online.tests.utils import generate_form_data
 
 
-class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
+class ProfileViewTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, two students (one with a known password), and the active semester."""
         User = get_user_model()
 
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        # test_student1 needs a known password so tests can POST the real login form (e.g. test_profile_update_email);
+        # everything else uses force_login()
+        cls.test_password = "password"
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student', password=cls.test_password)
+        # A fixed username: left to model_bakery it is 150 random letters, which the student-list
+        # search tests could match by chance (#2766).
+        cls.test_student2 = User.objects.create_user('test_student2')
 
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
-        self.active_sem = SiteConfig.get().active_semester
+        cls.active_sem = SiteConfig.get().active_semester
 
     def tearDown(self):
+        """Clear the cache after each test."""
         cache.clear()
 
-    def test_all_profile_page_status_codes_for_anonymous(self):
+    def test_profile_detail__each_course_shows_its_own_xp(self):
+        """A student in several courses has a different amount of XP counting toward each, since
+        work can be assigned to one of them (issue #2440), so each course's progress bar is drawn
+        from that course's own XP rather than one number repeated down the page."""
+        maths = baker.make(Course, xp_for_100_percent=100)
+        art = baker.make(Course, xp_for_100_percent=100)
+        baker.make(
+            CourseStudent, user=self.test_student1, semester=self.active_sem, course=maths,
+            block=baker.make(Block), xp_adjustment=60,
+        )
+        baker.make(
+            CourseStudent, user=self.test_student1, semester=self.active_sem, course=art,
+            block=baker.make(Block),
+        )
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+
+        # the adjustment belongs to the maths registration, so all 60 of their XP counts toward it
+        xp_by_course = {registration.course: xp for registration, xp in response.context['course_xp']}
+        self.assertEqual(xp_by_course[maths], 60)
+        self.assertEqual(xp_by_course[art], 0)
+        self.assertContains(response, '> 60 / 100 XP <')
+        self.assertContains(response, '> 0 / 100 XP <')
+
+    def test_profile_pages__redirect_anonymous_to_login(self):
         """ If not logged in then all views should redirect to home page  """
 
         self.assertRedirectsLogin('profiles:profile_list')
         self.assertRedirectsLogin('profiles:profile_list_current')
         self.assertRedirectsLogin('profiles:profile_list_inactive')
         self.assertRedirectsLogin('profiles:profile_list_staff')
+        self.assertRedirectsLogin('profiles:profile_list_yours')
+        self.assertRedirectsLogin('profiles:profile_list_tas')
         self.assertRedirectsLogin('profiles:profile_list_block', args='1')
         self.assertRedirectsLogin('profiles:profile_delete', args=[1])
 
-    def test_all_profile_page_status_codes_for_students(self):
-
+    def test_profile_pages__student_access(self):
+        """Students can view their own profile pages but are blocked from staff/list/delete views."""
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         s_pk = self.test_student1.profile.pk
         s2_pk = self.test_student2.profile.pk
@@ -73,23 +107,24 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('profiles:profile_list')
         self.assert403('profiles:profile_list_inactive')
         self.assert403('profiles:profile_list_staff')
+        self.assert403('profiles:profile_list_yours')
+        self.assert403('profiles:profile_list_tas')
         self.assert403('profiles:profile_list_block', args='1')
         self.assert403('profiles:profile_delete', args=[s_pk])
 
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
 
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 403)
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assert403('profiles:comment_ban', args=[s_pk])
+        self.assert403('profiles:comment_ban_toggle', args=[s_pk])
+        self.assert403('profiles:xp_toggle', args=[s_pk])
 
         self.assert404('profiles:profile_update', args=[s2_pk])
 
-    def test_all_profile_page_status_codes_for_teachers(self):
+    def test_profile_pages__teacher_access(self):
+        """Teachers can access all profile detail, list, and management views."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         s_pk = self.test_student1.profile.pk
         # s2_pk = self.test_student2.pk
@@ -99,23 +134,162 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('profiles:profile_list')
         self.assert200('profiles:profile_list_current')
         self.assert200('profiles:profile_list_staff')
+        self.assert200('profiles:profile_list_yours')
+        self.assert200('profiles:profile_list_tas')
         self.assert200('profiles:profile_list_block', args='1')
         # profile_list_block should 404 with invalid pk kwarg, accessed via kwarg dict instead of arg or else bad request raises error
         self.assert404("profiles:profile_list_block", kwargs={"pk": "999"})
         self.assert200('profiles:profile_list_inactive')
         self.assert200('profiles:tag_chart', args=[s_pk])
         self.assert200('profiles:profile_delete', args=[s_pk])
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        # POST-only, so a GET is rejected rather than performed (#2383); each view's staff
+        # behaviour is covered by its own test below
+        self.assert405('profiles:comment_ban', args=[s_pk])
+        self.assert405('profiles:comment_ban_toggle', args=[s_pk])
+        self.assert405('profiles:xp_toggle', args=[s_pk])
 
-    def test_profile_recalculate_xp__status_codes(self):
-        """Need to test this view with students in an active course"""
-        # why testing this here?
-        self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
+    def test_recalculate_current_xp__requires_staff(self):
+        """Only staff can trigger the current-semester XP recalculation: an anonymous visitor is sent
+        to the login page and a logged-in student is refused. The staff path is covered by
+        test_recalculate_current_xp__dispatches_background_task.
+        """
+        self.assertRedirectsLogin('profiles:recalculate_xp_current')
 
-        self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.client.force_login(self.test_student1)
+        self.assert403('profiles:recalculate_xp_current')
+
+    def test_xp_toggle__flips_whether_the_student_earns_xp(self):
+        """Toggling XP off stops the student earning it, and toggling again puts them back."""
+        self.client.force_login(self.test_teacher)
+        profile = self.test_student1.profile
+        self.assertFalse(profile.not_earning_xp)
+
+        self.client.post(reverse('profiles:xp_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.not_earning_xp)
+
+        self.client.post(reverse('profiles:xp_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertFalse(profile.not_earning_xp)
+
+    def test_xp_toggle__returns_to_the_page_the_toggle_was_clicked_from(self):
+        """The toggle is a link on a student list or profile, so it sends staff back where they were."""
+        self.client.force_login(self.test_teacher)
+        previous_page = reverse('profiles:profile_list')
+
+        response = self.client.post(
+            reverse('profiles:xp_toggle', args=[self.test_student1.profile.pk]),
+            HTTP_REFERER=previous_page,
+        )
+
+        self.assertRedirects(response, previous_page)
+
+    def test_comment_ban__bans_the_student_and_stays_banned_when_repeated(self):
+        """comment_ban bans rather than toggles, so clicking it on a banned student leaves them banned."""
+        self.client.force_login(self.test_teacher)
+        profile = self.test_student1.profile
+        self.assertFalse(profile.banned_from_comments)
+
+        response = self.client.post(reverse('profiles:comment_ban', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.banned_from_comments)
+        self.assertWarningMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn(self.test_student1.username, message)
+        self.assertIn('banned from commenting publicly', message)
+
+        self.client.post(reverse('profiles:comment_ban', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.banned_from_comments)
+
+    def test_comment_ban_toggle__bans_and_unbans_the_student(self):
+        """comment_ban_toggle is the same view in toggle mode: it lifts a ban it already applied."""
+        self.client.force_login(self.test_teacher)
+        profile = self.test_student1.profile
+
+        self.client.post(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.banned_from_comments)
+
+        self.client.post(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertFalse(profile.banned_from_comments)
+
+    def test_comment_ban_toggle__lifting_a_ban_reports_success(self):
+        """Lifting a ban reports success, where applying one reports a warning."""
+        profile = self.test_student1.profile
+        profile.banned_from_comments = True
+        profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
+
+        self.assertSuccessMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn('Commenting ban removed for', message)
+        self.assertIn(self.test_student1.username, message)
+
+    def test_comment_ban__notifies_the_banned_student(self):
+        """A banned student is told they were banned, so the ban is not silent to them."""
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('profiles:comment_ban', args=[self.test_student1.profile.pk]))
+
+        notification = Notification.objects.all_for_user(self.test_student1).first()
+        self.assertIsNotNone(notification)
+        self.assertIn('banned you from making public comments', notification.verb)
+
+    def test_profile_list__shows_a_course_from_any_open_semester(self):
+        """The student list shows each student's course and group whichever open semester holds
+        their registration (#2157 Phase 3). A deck can run more than one at a time, and the list
+        already counts those students as current, so prefetching only the deck's default semester
+        left the other cohort's rows blank where their course and group should be."""
+        other_semester = baker.make('courses.Semester', status=Semester.Status.OPEN)
+        baker.make(
+            'courses.CourseStudent', user=self.test_student2, semester=other_semester,
+            course=baker.make('courses.Course', title='Robotics 12'),
+            block=baker.make('courses.Block', name='Block Z'),
+        )
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'))
+
+        self.assertContains(response, 'Robotics 12')
+        self.assertContains(response, 'Block Z')
+
+    def test_recalculate_current_xp__dispatches_background_task(self):
+        """recalculate_current_xp hands the all-student XP recompute to a background task
+        rather than looping over every active-semester profile synchronously in the request,
+        which had grown a web worker large enough to be OOM-killed (issue #2081).
+        """
+        # a student registered in the active semester so all_in_open_semesters() is non-empty
+        baker.make(
+            'courses.CourseStudent', user=self.test_student1,
+            semester=self.active_sem, course=baker.make('courses.Course'),
+        )
+        self.assertTrue(Profile.objects.all_in_open_semesters().exists())
+        self.client.force_login(self.test_teacher)
+
+        # The view must NOT recompute in-request; it must dispatch the celery task instead.
+        with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch, \
+                patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
+            response = self.client.post(reverse('profiles:recalculate_xp_current'))
+
+        self.assertEqual(response.status_code, 302)
+        mock_dispatch.assert_called_once()
+        # nothing was recomputed synchronously in the request
+        self.assertFalse(mock_invalidate.called)
+
+    def test_profile_edit_own__resolves_to_logged_in_users_own_profile(self):
+        """profile_edit_own (ProfileUpdateOwn.get_object) loads the logged-in user's own profile form."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('profiles:profile_edit_own'))
+
+        # A 200 means get_object() resolved the user's own profile and the update form rendered.
+        # ProfileUpdate exposes its forms as context['forms'] (the profile form is first).
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['forms'][0].instance, self.test_student1.profile)
 
     def test_profile_detail__courses_correct_displayed_text(self):
         """
@@ -128,8 +302,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         spk = self.test_student1.profile.pk
 
         # login as teacher/admin and check if 'add course' doesnt exists
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # no course
         request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
@@ -141,8 +314,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'Not applicable to staff users.')
 
         # login as student and check if 'add course' and 'course' exists
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # no course
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
@@ -160,8 +332,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
 
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # View profile page
         s_pk = self.test_student1.profile.pk
@@ -192,9 +363,14 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             quest_set = baker.make('quest_manager.quest', _quantity=quest_count)
 
             # add unique tag for each quest
-            [quest.tags.add(f'TAG-{str(count)}') for count, quest in enumerate(quest_set)]
+            [quest.tags.add(f'TAG-{count}') for count, quest in enumerate(quest_set)]
 
-            # have a submission for one of the quests
+            # have a submission for one of the quests. The student is registered in the
+            # semester it names, or it is not work they earned XP in this term (issue #2441)
+            baker.make(
+                'courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                semester=SiteConfig.get().active_semester,
+            )
             baker.make(
                 'quest_manager.questsubmission',
                 quest=quest_set[0],
@@ -219,7 +395,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             # should only show the tag with the approved submission
             self.assertContains(response, 'TAG-0')
             for i in range(1, quest_count, 1):
-                self.assertNotContains(response, f'TAG-{str(i)}')
+                self.assertNotContains(response, f'TAG-{i}')
 
             # for sanity check (its true by default)
             site_config = SiteConfig.get()
@@ -232,7 +408,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
             # should contains all tags including the ones that don't have a submission from the user
             for i in range(quest_count):
-                self.assertContains(response, f'TAG-{str(i)}')
+                self.assertContains(response, f'TAG-{i}')
 
         finally:
             # Ensure the setting is reverted back to its original state
@@ -240,24 +416,22 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             site_config.show_all_tags_on_profiles = original_setting
             site_config.save()
 
-    def test_student_view_marks_404_if_disabled(self):
+    def test_student_view_marks__404_if_disabled(self):
         """
         Student marks should return 404 if disabled by admin.
         """
 
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.assert404('courses:my_marks')
 
-    def test_student_view_marks_200_if_enabled(self):
+    def test_student_view_marks__200_if_enabled(self):
         """
         Student marks page should be accessible if site admin has enabled it.
         """
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         config = SiteConfig.get()
         config.display_marks_calculation = True
@@ -365,11 +539,13 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(user_instance.profile.is_TA, form_data["is_TA"])
 
     def test_password_change_status_code__anonymous(self):
+        """Anonymous users are redirected to login from the change-password view."""
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
     def test_password_change_status_code__student(self):
+        """Students are forbidden from the change-password view for any user."""
         self.client.force_login(self.test_student1)
 
         self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
@@ -377,26 +553,26 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
     def test_password_change_status_code__staff(self):
+        """Staff can change students' passwords but not another staff member's."""
         self.client.force_login(self.test_teacher)
 
         self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
-    def test_update_password(self):
+    def test_update_password__staff_changes_user_password(self):
         """
             quick test to see if staff can change their user's password using passwordchange form
         """
         User = get_user_model()
-        user_instance = User.objects.create_user(username="username", password=self.test_password)
+        user_instance = User.objects.create_user(username="username")
 
         form_data = {
             'new_password1': 'xXxnewwordpassxXx123@',
             'new_password2': 'xXxnewwordpassxXx123@',
         }
 
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # test if view accepts form data without errors
         self.client.post(reverse("profiles:change_password", kwargs={"pk": user_instance.pk}), data=form_data)
@@ -405,7 +581,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=user_instance.username, password=form_data['new_password1'])
         self.assertTrue(success)
 
-    def test_profile_list(self):
+    def test_profile_list__view_type_and_queryset(self):
         """
             quick test for ProfileList to see...
             - if profile_lists have the correct view_type
@@ -422,12 +598,14 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse("profiles:profile_list"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].LIST)
 
-        qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
-        self.assertTrue(qs.count(), 2)  # these are the test students
-        filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True)
-        self.assertFalse(filtered_qs.exists())
+        # object_list is a paginated page, so assert the total via the paginator
+        # and check the page's profiles directly (usernames 1 and 2 excluded).
+        self.assertEqual(response.context['paginator'].count, 2)  # these are the test students
+        for profile in response.context['object_list']:
+            self.assertTrue(profile.user.is_active)
+            self.assertFalse(profile.user.is_staff)
 
-    def test_profile_list_current(self):
+    def test_profile_list_current__view_type(self):
         """
             quick test for ProfileListCurrent to see...
             - if profile_lists have the correct view_type
@@ -439,7 +617,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_current"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].CURRENT)
 
-    def test_profile_list_inactive(self):
+    def test_profile_list_inactive__view_type(self):
         """
             quick test for ProfileListInactive to see...
             - if profile_lists have the correct view_type
@@ -451,7 +629,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_inactive"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].INACTIVE)
 
-    def test_profile_list_staff(self):
+    def test_profile_list_staff__view_type_and_queryset(self):
         """
             quick test for ProfileListStaff to see...
             - if profile_lists have the correct view_type
@@ -462,8 +640,141 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_staff"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].STAFF)
 
-        qs = response.context['object_list']
-        self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin
+        self.assertEqual(response.context['paginator'].count, 3)  # self.test_teacher, deck_owner, admin
+
+    def test_profile_list_staff__leaves_out_archived_staff(self):
+        """Staff lists the staff who can still sign in: an archived teacher is under Archived (#2136)."""
+        archived_teacher = baker.make(get_user_model(), is_staff=True, is_active=False)
+        self.client.force_login(self.test_teacher)
+
+        staff = self.client.get(reverse('profiles:profile_list_staff'))
+        archived = self.client.get(reverse('profiles:profile_list_inactive'))
+
+        self.assertNotIn(archived_teacher.profile, staff.context['object_list'])
+        self.assertIn(archived_teacher.profile, archived.context['object_list'])
+
+    def _register(self, student, block, semester=None):
+        """Register `student` in a new course in `block`.
+
+        Args:
+            student (User): the student to register.
+            block (Block): the group the registration is in.
+            semester (Semester): the registration's semester; the active semester when left out.
+        """
+        baker.make(CourseStudent, user=student, block=block, course=baker.make(Course), semester=semester or self.active_sem)
+
+    def test_profile_list_yours__lists_the_current_students_in_the_teachers_groups(self):
+        """Yours is the students registered in a course in an open semester, in a group the
+        requesting teacher teaches (#2136): not another teacher's group, nor the teacher's own
+        group in an archived semester."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=other_teacher)
+        self._register(self.test_student1, yours)
+        self._register(self.test_student2, theirs)
+        last_year = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        former = baker.make(get_user_model())
+        self._register(former, yours, semester=last_year)
+        self._register(former, theirs)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_yours'))
+
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].YOURS)
+        self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
+
+    def test_profile_list_yours__group_filter_offers_only_the_teachers_groups(self):
+        """Another teacher's group would filter Yours down to nobody, so it isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student2, theirs)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_yours'))
+
+        self.assertEqual(list(response.context['block_filter_choices']), [yours])
+
+    def test_profile_list_tas__lists_the_non_archived_tas(self):
+        """TAs is the non-archived students with the TA flag turned on (#2136)."""
+        Profile.objects.filter(user=self.test_student1).update(is_TA=True)
+        archived_ta = baker.make(get_user_model(), is_active=False)
+        Profile.objects.filter(user=archived_ta).update(is_TA=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_tas'))
+
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].TAS)
+        self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
+
+    def test_offers_yours_list__only_when_it_differs_from_current_and_holds_someone(self):
+        """Yours is offered when it holds some of the current students but not all of them (#2136):
+        it would otherwise be empty, or the same list as Current."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
+        cases = (
+            # (case, the teacher of each of test_student1's and test_student2's groups, expected)
+            ('teaches no group', [other_teacher, other_teacher], False),
+            ("the teacher's group holds no current student", [other_teacher, other_teacher, self.test_teacher], False),
+            ("the teacher's groups hold every current student", [self.test_teacher, self.test_teacher], False),
+            ('another teacher has a current student', [self.test_teacher, other_teacher], True),
+            ("a group without a teacher has a current student", [self.test_teacher, None], True),
+        )
+        for case, teachers, expected in cases:
+            with self.subTest(case):
+                CourseStudent.objects.all().delete()
+                Block.objects.all().delete()
+                for student, teacher in zip((self.test_student1, self.test_student2), teachers):
+                    self._register(student, baker.make(Block, current_teacher=teacher))
+                for teacher in teachers[2:]:
+                    baker.make(Block, current_teacher=teacher)  # a group with nobody in it
+                self.assertEqual(offers_yours_list(self.test_teacher), expected)
+
+    def test_offers_yours_list__not_when_the_students_are_in_both_teachers_groups(self):
+        """A student registered in another teacher's group as well as yours is on both lists, so
+        Yours is the same as Current and isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student1, theirs)
+
+        self.assertFalse(offers_yours_list(self.test_teacher))
+
+    def test_profile_list__yours_button_follows_offers_yours_list(self):
+        """The Yours button is left out where the list isn't offered, unless it is the list on show."""
+        Block.objects.all().delete()
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self.client.force_login(self.test_teacher)
+        yours_url = reverse('profiles:profile_list_yours')
+
+        self.assertNotContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
+        self.assertContains(self.client.get(yours_url), f'href="{yours_url}"')
+
+        self._register(self.test_student2, baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True)))
+        self.assertContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
+
+    def test_profile_list__each_list_button_says_who_it_holds(self):
+        """The buttons are named as on every page that offers these lists, each with its
+        description as hover text in the deck's own words (#2136)."""
+        config = SiteConfig.get()
+        config.custom_name_for_student = 'Learner'
+        config.custom_name_for_group = 'Block'
+        config.save()
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self._register(self.test_student2, baker.make(Block, current_teacher=None))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_current'))
+
+        for name, description in (
+            ('Yours', 'Learners registered in a course in an open semester, in a block you are assigned to as the teacher'),
+            ('Current', 'All learners registered in a course in an open semester (includes all of yours)'),
+            ('All', 'All non-archived learners (includes all current learners)'),
+            ('Staff', 'All non-archived staff accounts'),
+            ('TAs', 'All learners with the TA (Teaching Assistant) flag turned on, who can draft quests'),
+            ('Archived', 'Archived accounts, staff and learners.'),
+        ):
+            with self.subTest(name):
+                self.assertRegex(response.content.decode(), rf'title="{re.escape(description)}[^"]*"\s+class="btn [^"]*">{name}</a>')
 
     def test_profile_list_block__get_queryset(self):
         """ProfileListBlock view's get queryset method should return a queryset containing only students in active semester and the desired block"""
@@ -478,8 +789,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # get object queryset from profile list of the new block and assert empty
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
-        testblock_queryset = response.context['object_list']
-        self.assertEqual(testblock_queryset.count(), 0)
+        self.assertEqual(response.context['paginator'].count, 0)
 
         # populate block with active coursestudent objects
         baker.make(CourseStudent, user=baker.make(User), block=testblock, semester=self.active_sem)
@@ -487,12 +797,470 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # get response and assert two active students in queryset + queryset is correct
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
-        testblock_queryset = response.context['object_list']
-        self.assertEqual(testblock_queryset.count(), 2)
-        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
+        # object_list is a page, so the total comes from the paginator; compare the page's
+        # profiles by pk rather than with assertQuerySetEqual, which needs a queryset.
+        self.assertEqual(response.context['paginator'].count, 2)
+        # queryset specifications: profile objects that are: in an open semester, and a part of a coursestudent object that's in the desired block
+        expected = Profile.objects.filter(
+            user__in=[cs.user for cs in CourseStudent.objects.filter(block=testblock, semester=self.active_sem)]
+        )
+        self.assertEqual(
+            {profile.pk for profile in response.context['object_list']},
+            set(expected.values_list('pk', flat=True)),
+        )
 
-    def test_profile_update_email(self):
+    def test_profile_list_block__block_and_semester_match_the_same_registration(self):
+        """A student currently taking a course, whose registration in *this* block was in a
+        semester that has since been archived, is not in this block now. Matching the block
+        and the open semester on separate registrations would list them anyway."""
+        self.client.force_login(self.test_teacher)
+        testblock = baker.make(Block)
+        student = baker.make(get_user_model())
+        # in this block last year...
+        baker.make(CourseStudent, user=student, block=testblock, semester=baker.make(Semester, status=Semester.Status.ARCHIVED))
+        # ...and taking a course now, in a different block
+        baker.make(CourseStudent, user=student, block=baker.make(Block), semester=self.active_sem)
+
+        response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
+
+        self.assertNotIn(student.profile, response.context['object_list'])
+
+    def test_profile_list_block__spans_every_open_semester(self):
+        """A block can hold students from more than one open semester once a deck runs two
+        cohorts, and the list shows all of them."""
+        self.client.force_login(self.test_teacher)
+        testblock = baker.make(Block)
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        here_now = baker.make(CourseStudent, user=baker.make(get_user_model()), block=testblock, semester=self.active_sem)
+        other_cohort = baker.make(CourseStudent, user=baker.make(get_user_model()), block=testblock, semester=other_semester)
+
+        response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
+
+        self.assertIn(here_now.user.profile, response.context['object_list'])
+        self.assertIn(other_cohort.user.profile, response.context['object_list'])
+
+    def test_profile_list__is_paginated(self):
+        """ProfileList paginates server-side: only paginate_by profiles load per request, so a
+        deck with more students than paginate_by spills onto additional pages."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # setUpTestData already made 2 students; add enough to need a second page.
+        baker.make(User, _quantity=per_page)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertTrue(response.context['is_paginated'])
+        self.assertEqual(response.context['paginator'].count, per_page + 2)
+        self.assertEqual(response.context['paginator'].num_pages, 2)
+        # a single page only renders paginate_by profiles, not the whole deck
+        self.assertEqual(len(response.context['object_list']), per_page)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'page': 2})
+        self.assertEqual(len(response.context['object_list']), 2)
+
+    def test_profile_list__search_filters_across_all_students(self):
+        """The ?q= search runs server-side across every SEARCH_FIELDS column (case-insensitive,
+        partial) and before pagination, so a uniquely-matching student is found even when it would
+        otherwise fall beyond the first page; a non-match returns nothing."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # Fill a whole page with students whose first name sorts ahead of the first-name target
+        # below, so that target is pushed onto a later page under the default (first-name) ordering.
+        # Their usernames are fixed: left to model_bakery each is 150 random letters, and usernames
+        # are searched too, so a short term like "zebed" could turn up inside one by chance (#2766).
+        for i in range(per_page):
+            User.objects.create_user(f'filler{i}', first_name='AAAA')
+
+        # One target per searchable column, each carrying a value that collides with nothing else.
+        first_target = User.objects.create_user('zzz_first', first_name='Zebediah')
+        last_target = User.objects.create_user('zzz_last', last_name='Qwlastname')
+        pref_target = User.objects.create_user('zzz_pref')
+        pref_target.profile.preferred_name = 'Qwpreferred'
+        pref_target.profile.save()
+        alias_target = User.objects.create_user('zzz_alias')
+        alias_target.profile.alias = 'Qwaliasname'
+        alias_target.profile.save()
+        cpf_target = User.objects.create_user('zzz_cpf')
+        cpf_target.profile.custom_profile_field = 'Qwcustomfield'
+        cpf_target.profile.save()
+
+        self.client.force_login(self.test_teacher)
+
+        # The first-name target sorts last, so an unfiltered page one does not contain it...
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertNotIn(first_target.profile.pk, {p.pk for p in response.context['object_list']})
+        # ...yet a search still finds it, proving the filter runs across the whole set before paginating.
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'zebed'})
+        self.assertEqual(response.context['search_query'], 'zebed')
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, first_target.profile.pk)
+
+        # Every configured search column matches (partial, case-insensitive): last/preferred/alias/
+        # custom-profile-field, plus username.
+        for term, target in [
+            ('qwlastn', last_target),      # last name
+            ('qwprefer', pref_target),     # preferred name
+            ('qwaliasn', alias_target),    # alias
+            ('qwcustomf', cpf_target),     # custom profile field
+            ('zzz_last', last_target),     # username
+        ]:
+            response = self.client.get(reverse("profiles:profile_list"), {'q': term})
+            self.assertEqual(response.context['paginator'].count, 1, msg=f'q={term!r}')
+            self.assertEqual(list(response.context['object_list'])[0].pk, target.profile.pk, msg=f'q={term!r}')
+
+        # a non-match returns nothing
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'no-such-student'})
+        self.assertEqual(response.context['paginator'].count, 0)
+
+    def test_profile_list__sort_orders_across_all_students(self):
+        """The ?sort=/?order= params reorder the whole queryset server-side and before pagination,
+        so the sort extreme lands on the correct page (not merely reordering the current one); an
+        unknown sort or order falls back to the defaults."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # A full page of mid-XP students, so a single XP extreme must cross the page boundary.
+        for filler in baker.make(User, _quantity=per_page):
+            filler.profile.xp_cached = 50
+            filler.profile.save()
+        p1 = self.test_student1.profile
+        p1.xp_cached = 5
+        p1.save()
+        p2 = self.test_student2.profile
+        p2.xp_cached = 99
+        p2.save()
+        # The unique maximum: it must appear on page one when sorting XP descending and be pushed to
+        # the last page when ascending -- only possible if sorting happens before pagination.
+        top = User.objects.create_user('mmm_top').profile
+        top.xp_cached = 1000
+        top.save()
+
+        self.client.force_login(self.test_teacher)
+
+        # Descending: the maximum leads page one, and the page itself is ordered high-to-low.
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'desc'})
+        self.assertEqual(response.context['current_sort'], 'xp')
+        self.assertEqual(response.context['current_order'], 'desc')
+        page_one = list(response.context['object_list'])
+        self.assertEqual(page_one[0].pk, top.pk)
+        xps = [profile.xp_cached for profile in page_one]
+        self.assertEqual(xps, sorted(xps, reverse=True))
+        num_pages = response.context['paginator'].num_pages
+
+        # Ascending: the maximum is no longer on page one -- it has moved to the last page.
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'asc'})
+        self.assertNotIn(top.pk, {profile.pk for profile in response.context['object_list']})
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'asc', 'page': num_pages})
+        self.assertIn(top.pk, {profile.pk for profile in response.context['object_list']})
+
+        # an invalid sort/order silently falls back to the defaults
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'not-a-field', 'order': 'sideways'})
+        self.assertEqual(response.context['current_sort'], 'first')
+        self.assertEqual(response.context['current_order'], 'asc')
+
+    def test_profile_list__sort_puts_null_values_last(self):
+        """Sorting a nullable column (e.g. Mark) keeps students who have a value at the top in
+        both directions; unset (NULL) students sort last rather than dominating a descending sort."""
+        User = get_user_model()
+        high = User.objects.create_user('aaa_high').profile  # username sorts first, so only the sort matters
+        high.mark_cached = 80
+        high.save()
+        low = User.objects.create_user('aaa_low').profile
+        low.mark_cached = 20
+        low.save()
+        # test_student1 / test_student2 keep mark_cached = None
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'mark', 'order': 'desc'})
+        marks = [profile.mark_cached for profile in response.context['object_list']]
+        self.assertEqual(marks, [80, 20, None, None])
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'mark', 'order': 'asc'})
+        marks = [profile.mark_cached for profile in response.context['object_list']]
+        self.assertEqual(marks, [20, 80, None, None])
+
+    def test_profile_list__sort_by_preferred_name_falls_back_to_first_name(self):
+        """Sorting by the Preferred Name column orders by preferred_name, falling back to
+        first_name when it's blank -- matching what get_preferred_name() displays."""
+        s1 = self.test_student1
+        s1.first_name = 'Bob'
+        s1.save()
+        s1.profile.preferred_name = ''  # blank -> falls back to 'Bob'
+        s1.profile.save()
+        s2 = self.test_student2
+        s2.first_name = 'Alice'
+        s2.save()
+        s2.profile.preferred_name = 'Zara'  # shown instead of 'Alice'
+        s2.profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'preferred', 'order': 'asc'})
+        names = [profile.get_preferred_name() for profile in response.context['object_list']]
+        self.assertEqual(names, ['Bob', 'Zara'])
+
+    def test_profile_list__non_staff_cannot_sort_by_staff_only_columns(self):
+        """ProfileListCurrent is open to any authenticated user, so a student may only sort by the
+        always-visible name columns. Requesting a staff-only (last_active/last_sub/username) or
+        privacy-gated (xp/mark) column silently falls back to the default sort, so its ordering
+        can't leak to students; staff keep full sorting."""
+        self.client.force_login(self.test_student1)
+        for forbidden in ('last_active', 'last_sub', 'username', 'xp', 'mark'):
+            response = self.client.get(reverse("profiles:profile_list_current"), {'sort': forbidden, 'order': 'asc'})
+            self.assertEqual(response.context['current_sort'], 'first', msg=f"student must not sort by {forbidden}")
+
+        # an allowed name column still works for the student
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last')
+
+        # staff can sort by the staff-only columns
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_active', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last_active')
+
+    def test_profile_detail__staff_see_when_the_student_was_last_active(self):
+        """A student's profile shows staff when the student last used the deck rather than when
+        they last signed in, which can be weeks earlier (#2849)."""
+        from datetime import timedelta
+        from django.utils import timezone
+        Profile.objects.filter(user=self.test_student1).update(last_active=timezone.now() - timedelta(days=3))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+        self.assertContains(response, 'Last Active: ')
+        self.assertContains(response, '3\xa0days ago)')
+        self.assertNotContains(response, 'Last Login')
+
+    def test_profile_detail__never_active_reads_never(self):
+        """A student who has never used the deck shows "Never" for it."""
+        Profile.objects.filter(user=self.test_student1).update(last_active=None)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+        self.assertContains(response, 'Last Active: Never')
+
+    def test_profile_list__last_active_never_fallback(self):
+        """The staff Last Active cell shows 'Never' for a student who has never used the deck,
+        mirroring the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
+        from django.utils import timezone
+        now = timezone.now()
+        # give both students a last submission (Last Quest shows a date, not "Never")
+        # while leaving last_active unset, so the only "Never" comes from Last Active
+        for student in (self.test_student1, self.test_student2):
+            self.assertIsNone(student.profile.last_active)
+            student.profile.time_of_last_submission = now
+            student.profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertContains(response, "Never", count=2)  # one per student, from Last Active only
+
+    def test_profile_list__block_filter_narrows_to_that_group(self):
+        """The ?block= filter shows only the students registered in that group, and runs
+        before pagination so a match beyond page one is still found."""
+        from profile_manager.views import ProfileList
+        User = get_user_model()
+        target_block = baker.make(Block)
+        other_block = baker.make(Block)
+
+        # A full page of students in the other group, so the target cannot be on page one
+        # by accident.
+        for _ in range(ProfileList.paginate_by):
+            baker.make(CourseStudent, user=baker.make(User), block=other_block, semester=self.active_sem)
+        in_group = baker.make(CourseStudent, user=baker.make(User), block=target_block, semester=self.active_sem)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'), {'block': target_block.pk})
+
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, in_group.user.profile.pk)
+
+    def test_profile_list__block_filter_counts_a_twice_registered_student_once(self):
+        """A student registered in the group for two courses is listed once, so the filter
+        cannot inflate the page counts by joining through their registrations."""
+        User = get_user_model()
+        block = baker.make(Block)
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, block=block, semester=self.active_sem, _quantity=1)
+        # a second registration in the same group, in another open semester
+        baker.make(
+            CourseStudent, user=student, block=block,
+            semester=baker.make(Semester, status=Semester.Status.OPEN),
+        )
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'), {'block': block.pk})
+
+        self.assertEqual(response.context['paginator'].count, 1)
+
+    def test_profile_list__block_filter_combines_with_search_and_sort(self):
+        """Filtering, searching and sorting all apply together, so narrowing to a group and
+        then searching does not search outside it."""
+        User = get_user_model()
+        block = baker.make(Block)
+        wanted = User.objects.create_user('bf_in_group', first_name='Findme')
+        baker.make(CourseStudent, user=wanted, block=block, semester=self.active_sem)
+        decoy = User.objects.create_user('bf_elsewhere', first_name='Findme')
+        baker.make(CourseStudent, user=decoy, block=baker.make(Block), semester=self.active_sem)
+        self.client.force_login(self.test_teacher)
+
+        # the search alone finds both...
+        response = self.client.get(reverse('profiles:profile_list'), {'q': 'findme'})
+        self.assertEqual(response.context['paginator'].count, 2)
+
+        # ...and with the group filter on, only the one in that group
+        response = self.client.get(
+            reverse('profiles:profile_list'),
+            {'q': 'findme', 'block': block.pk, 'sort': 'last', 'order': 'desc'},
+        )
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, wanted.profile.pk)
+        # the sort links and the clear-search link carry the group forward
+        self.assertContains(response, f'block={block.pk}')
+
+    def test_profile_list__block_filter_offers_only_currently_running_groups(self):
+        """The dropdown lists the groups running in an open semester, which are exactly the
+        ones the filter can return students for."""
+        User = get_user_model()
+        running = baker.make(Block)
+        baker.make(CourseStudent, user=baker.make(User), block=running, semester=self.active_sem)
+        finished = baker.make(Block)
+        baker.make(
+            CourseStudent, user=baker.make(User), block=finished,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        empty = baker.make(Block)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'))
+
+        offered = {block.pk for block in response.context['block_filter_choices']}
+        self.assertIn(running.pk, offered)
+        self.assertNotIn(finished.pk, offered)
+        self.assertNotIn(empty.pk, offered)
+
+    def test_profile_list__invalid_block_filter_falls_back_to_everybody(self):
+        """An unknown, non-numeric or not-running block id widens the list back out rather
+        than erroring or filtering to nobody."""
+        finished = baker.make(Block)
+        baker.make(
+            CourseStudent, user=baker.make(get_user_model()), block=finished,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self.client.force_login(self.test_teacher)
+        unfiltered = self.client.get(reverse('profiles:profile_list')).context['paginator'].count
+
+        for bad in ('999999', 'not-a-number', '', str(finished.pk)):
+            with self.subTest(block=bad):
+                response = self.client.get(reverse('profiles:profile_list'), {'block': bad})
+                self.assertEqual(response.context['paginator'].count, unfiltered)
+
+    def test_profile_list__block_filter_is_staff_only(self):
+        """A student never gets the group filter, and cannot apply one by hand.
+
+        ProfileListCurrent is open to any authenticated user, but the group column is
+        rendered only to staff, so offering the filter would let a student partition their
+        classmates by something they cannot see.
+        """
+        User = get_user_model()
+        block = baker.make(Block)
+        classmate = baker.make(User)
+        baker.make(CourseStudent, user=classmate, block=block, semester=self.active_sem)
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, block=baker.make(Block), semester=self.active_sem)
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('profiles:profile_list_current'))
+        self.assertNotIn('block_filter_choices', response.context)
+        self.assertNotContains(response, 'id="block-filter"')
+
+        # applying one by hand is ignored rather than honoured
+        unfiltered = response.context['paginator'].count
+        filtered = self.client.get(reverse('profiles:profile_list_current'), {'block': block.pk})
+        self.assertEqual(filtered.context['paginator'].count, unfiltered)
+
+    def test_profile_list__block_filter_absent_from_the_lists_that_cannot_use_it(self):
+        """The block, staff and inactive lists offer no group filter: the first is already
+        one group, and the other two render no group column."""
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=baker.make(get_user_model()), block=block, semester=self.active_sem)
+        self.client.force_login(self.test_teacher)
+
+        for name, args in (
+            ('profiles:profile_list_block', [block.pk]),
+            ('profiles:profile_list_staff', []),
+            ('profiles:profile_list_inactive', []),
+        ):
+            with self.subTest(view=name):
+                response = self.client.get(reverse(name, args=args))
+                self.assertNotIn('block_filter_choices', response.context, msg=name)
+
+    def test_profile_list__filters_sit_in_the_table_toolbar(self):
+        """The group filter and search box share the table's toolbar row, at the right of it.
+
+        bootstrap-table relocates whatever element data-toolbar names into the table's own
+        toolbar, and .bt-toolbar-filter right-aligns that row, which is what puts the search
+        where every other table in the app puts its search. The attribute and the form's id
+        are the only thing connecting the two, so a rename on either side silently undoes the
+        layout, and dropping the class silently moves the search back to the left.
+        """
+        self.client.force_login(self.test_teacher)
+        html = self.client.get(reverse('profiles:profile_list')).content.decode()
+
+        toolbar = re.search(r"""data-toolbar=['"]([^'"]+)['"]""", html)
+        self.assertIsNotNone(toolbar, 'the student table declares no data-toolbar')
+        self.assertEqual(toolbar.group(1), '#profile-list-filters')
+
+        form = re.search(r"""<form[^>]*id="profile-list-filters"[^>]*>""", html)
+        self.assertIsNotNone(form, 'the filter form is not on the page')
+        # As a class token, not a substring of the whole tag: the latter would also be
+        # satisfied by a longer class that merely starts the same way, or by the name
+        # turning up in some other attribute.
+        classes = re.search(r"""\sclass=["']([^"']*)["']""", form.group(0))
+        self.assertIsNotNone(classes, 'the filter form carries no class attribute')
+        self.assertIn('bt-toolbar-filter', classes.group(1).split())
+
+    def test_profile_list__non_staff_cannot_search_by_username(self):
+        """A student may not search the username column, which is rendered only to staff.
+
+        Without this the list is a lookup that confirms a classmate's username from a
+        guess, the same leak the staff-only sorting already closes for ordering.
+        """
+        User = get_user_model()
+        target = User.objects.create_user('secret_username_abc', first_name='Publicname')
+        baker.make(CourseStudent, user=target, block=baker.make(Block), semester=self.active_sem)
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, block=baker.make(Block), semester=self.active_sem)
+        self.client.force_login(student)
+
+        # the name a student can actually read still searches
+        by_name = self.client.get(reverse('profiles:profile_list_current'), {'q': 'publicname'})
+        self.assertEqual(by_name.context['paginator'].count, 1)
+
+        # the username does not
+        by_username = self.client.get(reverse('profiles:profile_list_current'), {'q': 'secret_username_abc'})
+        self.assertEqual(by_username.context['paginator'].count, 0)
+
+        # ...and staff keep it
+        self.client.force_login(self.test_teacher)
+        as_staff = self.client.get(reverse('profiles:profile_list_current'), {'q': 'secret_username_abc'})
+        self.assertEqual(as_staff.context['paginator'].count, 1)
+
+    def test_profile_list__pagination_querystring_preserves_search_and_sort(self):
+        """The querystring used to build pagination links keeps the active search/sort but drops page."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'foo', 'sort': 'xp', 'order': 'desc', 'page': 1})
+        querystring = response.context['querystring']
+        self.assertIn('q=foo', querystring)
+        self.assertIn('sort=xp', querystring)
+        self.assertIn('order=desc', querystring)
+        self.assertNotIn('page=', querystring)
+
+    def test_profile_update__email_confirmation_flow(self):
         """
         Test that updating your email sends a confirmation link and logging in will
         have a reminder to verify email address if not yet verified.
@@ -528,7 +1296,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1.refresh_from_db()
         self.assertEqual(self.test_student1.email, email)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(message, f"Confirmation e-mail sent to {email}.")
+        self.assertEqual(message, f"Confirmation email sent to {email}.")
 
         # begin test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
         self.client.logout()
@@ -543,7 +1311,13 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             mock_messages_info.assert_called()
             message = mock_messages_info.call_args[0][1]
 
-        self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
+        # The reminder names the address and carries an actionable "Re-send verification link"
+        # pointing at the resend endpoint, flagged safe so the snippet renders the anchor (#2233).
+        resend_url = reverse('profiles:profile_resend_email_verification', args=[self.test_student1.profile.pk])
+        self.assertIn(f"Please verify your email address: {self.test_student1.email}", message)
+        self.assertIn(resend_url, message)
+        self.assertIn("Re-send verification link", message)
+        self.assertEqual(mock_messages_info.call_args.kwargs.get('extra_tags'), 'safe')
         self.client.logout()
         # end test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
 
@@ -645,7 +1419,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Should now use the new email
         self.assertEqual(self.test_student1.email, new_email)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(message, f"Confirmation e-mail sent to {new_email}.")
+        self.assertEqual(message, f"Confirmation email sent to {new_email}.")
 
         # Revert back to the original email, ignore the confirmation email
         form_data = generate_form_data(model_form=ProfileForm)
@@ -662,8 +1436,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_update_profile__custom_label_displayed(self):
         """student profile update view should change instances of "student" to match custom label set in siteconfig"""
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # Change custom_name_for_student to a non-default option
         config = SiteConfig.get()
@@ -678,24 +1451,24 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, "Your marks will be visible to other customstudents through the customstudent list.")
 
 
-class ProfileDeleteTests(TenantTestCase):
+class ProfileDeleteTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         """
         Create test data using model_bakery.
         Since Profile is auto-created via a post_save signal, we only create Users.
         """
-        self.User = get_user_model()
-        self.client = TenantClient(self.tenant)
+        cls.User = get_user_model()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
-        self.student = self.User.objects.create_user('test_student')
+        cls.teacher = cls.User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = cls.User.objects.create_user('test_student')
 
         # URL for deleting the student's profile
-        self.delete_url = reverse("profiles:profile_delete", kwargs={"pk": self.student.profile.pk})
+        cls.delete_url = reverse("profiles:profile_delete", kwargs={"pk": cls.student.profile.pk})
 
-    def test_teacher_can_delete_profile(self):
+    def test_profile_delete__teacher_can_delete(self):
         """Ensure that teacher (staff) users can delete a profile and its associated user."""
         self.client.force_login(self.teacher)
 
@@ -708,9 +1481,8 @@ class ProfileDeleteTests(TenantTestCase):
         # Ensure redirect to success_url after deletion
         self.assertRedirects(response, reverse("profiles:profile_list"))
 
-    def test_student_cannot_delete_profile(self):
+    def test_profile_delete__student_cannot_delete(self):
         """Ensure that student (non-staff) users cannot delete profiles."""
-        # student2 = baker.make(self.User)
         self.client.force_login(self.student)  # Log in as student (non-staff user)
 
         response = self.client.post(self.delete_url)
@@ -722,7 +1494,7 @@ class ProfileDeleteTests(TenantTestCase):
         # Ensure access is denied (403 Forbidden)
         self.assertEqual(response.status_code, 403)
 
-    def test_deleting_non_existent_profile_returns_404(self):
+    def test_profile_delete__non_existent_returns_404(self):
         """Ensure that trying to delete a non-existent profile results in a 404 error."""
         self.client.force_login(self.teacher)
 
@@ -730,3 +1502,247 @@ class ProfileDeleteTests(TenantTestCase):
         response = self.client.post(non_existent_url)
 
         self.assertEqual(response.status_code, 404)
+
+
+class ProfileArchiveTests(ByteDeckTenantTestCase):
+    """Archiving replaces deleting a student (issue #2182): staff deactivate (archive) a student
+    instead of deleting outright, and can then restore or delete the archived student."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher plus two students (the target and a second non-staff actor)."""
+        cls.User = get_user_model()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.teacher = cls.User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = cls.User.objects.create_user('test_student')
+        cls.other_student = cls.User.objects.create_user('other_student')
+
+        cls.archive_url = reverse("profiles:profile_archive", args=[cls.student.profile.pk])
+        cls.restore_url = reverse("profiles:profile_restore", args=[cls.student.profile.pk])
+        cls.detail_url = reverse("profiles:profile_detail", args=[cls.student.profile.pk])
+        cls.delete_url = reverse("profiles:profile_delete", args=[cls.student.profile.pk])
+
+    def test_profile_archive__staff_deactivates_student(self):
+        """A staff request to profile_archive deactivates the student (is_active=False) and redirects."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(self.archive_url)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+        self.assertEqual(response.status_code, 302)
+
+    def test_profile_restore__staff_reactivates_archived_student(self):
+        """A staff request to profile_restore reactivates a previously-archived student (is_active=True)."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.teacher)
+        response = self.client.post(self.restore_url)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+        self.assertEqual(response.status_code, 302)
+
+    def test_profile_archive__refuses_staff_accounts(self):
+        """Archiving a staff account is refused, leaving that account active."""
+        staff_target = self.User.objects.create_user('other_teacher', is_staff=True)
+        self.client.force_login(self.teacher)
+        self.client.post(reverse("profiles:profile_archive", args=[staff_target.profile.pk]))
+        staff_target.refresh_from_db()
+        self.assertTrue(staff_target.is_active)
+
+    def test_profile_archive__non_staff_forbidden(self):
+        """A non-staff user cannot archive: access is forbidden and the target stays active."""
+        self.client.force_login(self.other_student)
+        response = self.client.post(self.archive_url)
+        self.student.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(self.student.is_active)
+
+    def test_profile_restore__non_staff_forbidden(self):
+        """A non-staff user cannot restore: access is forbidden and the target stays archived."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.other_student)
+        response = self.client.post(self.restore_url)
+        self.student.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.student.is_active)
+
+    def test_profile_detail__active_student_shows_archive_not_delete(self):
+        """Staff viewing an active student's detail get the Archive action, with Delete gated away."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.detail_url)
+        self.assertContains(response, self.archive_url)
+        self.assertNotContains(response, self.delete_url)
+
+    def test_profile_detail__archived_student_shows_restore_and_delete(self):
+        """Staff viewing an archived student's detail get Restore and Delete, but not Archive again."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.detail_url)
+        self.assertContains(response, self.restore_url)
+        self.assertContains(response, self.delete_url)
+        self.assertNotContains(response, self.archive_url)
+
+
+class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
+    """Dedicated, isolated tests for the ``oauth_merge_account`` view.
+
+    The view lets a user whose Google-login email matches an existing (but unverified)
+    local account decide whether to link the Google account to that local account
+    (``submit=yes``) or decline and sign up separately (``submit=no``). The full Google
+    callback flow that lands a user here is covered end-to-end in
+    ``hackerspace_online.tests.test_forms``; these tests instead drive the view directly
+    by seeding the session the OAuth adapter would have populated
+    (``merge_with_user_id`` + a serialized ``socialaccount_sociallogin``), so the view has
+    intentional coverage independent of that larger signup flow.
+    """
+
+    def setUp(self):
+        """Create a teacher (required before other users, as profile creation notifies staff),
+        a local user with an unverified email, and the Google SocialApp."""
+        self.User = get_user_model()
+        self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
+        self.user = self.User.objects.create_user('existing_student', email='student@example.com')
+        self._setup_social_app()
+
+    def tearDown(self):
+        """Clear the cache after each test."""
+        cache.clear()
+
+    def _setup_social_app(self):
+        """Create the Google SocialApp in the public schema and propagate the provider so
+        ``SocialLogin.serialize()``/``deserialize()`` work (mirrors test_forms setup)."""
+        with schema_context(get_public_schema_name()):
+            app = SocialApp.objects.create(
+                provider='google',
+                name='Test Google App',
+                client_id='test_client_id',
+                secret='test_secret',
+            )
+            app.sites.add(Site.objects.get_current())
+        SiteConfig.get()._propagate_google_provider()
+
+    def _social_login(self, email):
+        """Build a SocialLogin the way the Google provider would for the given email."""
+        provider = SocialApp.objects.filter(provider='google').first().get_provider(request=None)
+        return SocialLogin(
+            provider=provider,  # required by serialize() since django-allauth 65
+            user=self.User(email=email, first_name='Given', last_name='Family'),
+            account=SocialAccount(provider='google', extra_data={'email': email}),
+            email_addresses=[EmailAddress(email=email, verified=True, primary=True)],
+        )
+
+    def _seed_merge_session(self, email=None):
+        """Populate the session as the adapter does before redirecting to the merge page."""
+        email = email or self.user.email
+        session = self.client.session
+        session['merge_with_user_id'] = self.user.pk
+        session['socialaccount_sociallogin'] = self._social_login(email).serialize()
+        session.save()
+
+    def test_oauth_merge_account__get_renders_merge_page(self):
+        """GET shows the merge confirmation page with the matched account's username and email."""
+        self._seed_merge_session()
+        response = self.assert200('profiles:oauth_merge_account')
+        self.assertEqual(response.context['other_account_username'], self.user.username)
+        self.assertEqual(response.context['email_address'], self.user.email)
+
+    def test_oauth_merge_account__post_yes_links_account_verifies_email_and_logs_in(self):
+        """Clicking Yes links the Google account to the local user, marks their email
+        verified+primary, clears the merge session keys, and logs them in."""
+        self._seed_merge_session()
+        self.assertFalse(SocialAccount.objects.filter(user=self.user, provider='google').exists())
+
+        response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'yes'})
+
+        # The Google account is now linked to the local user...
+        self.assertTrue(SocialAccount.objects.filter(user=self.user, provider='google').exists())
+        # ...their email is verified and primary...
+        self.assertTrue(
+            EmailAddress.objects.filter(user=self.user, email=self.user.email, verified=True, primary=True).exists()
+        )
+        # ...they are logged in...
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+        # ...and the merge session data has been popped so it doesn't leak.
+        self.assertNotIn('merge_with_user_id', self.client.session)
+        self.assertNotIn('socialaccount_sociallogin', self.client.session)
+        self.assertEqual(response.status_code, 302)
+
+    def test_oauth_merge_account__post_no_clears_email_and_redirects_to_signup(self):
+        """Clicking No removes the conflicting email from the local user and sends them to the
+        social signup page to create a separate account."""
+        self._seed_merge_session()
+        response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'no'})
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, '')
+        self.assertFalse(self.user.emailaddress_set.filter(email='student@example.com').exists())
+        self.assertRedirects(response, reverse('socialaccount_signup'), fetch_redirect_response=False)
+
+    def test_oauth_merge_account__missing_session_user_returns_404(self):
+        """With no ``merge_with_user_id`` in the session, ``get_object_or_404`` short-circuits to a
+        404 before any POST handling — which is why the view's own ``if not merge_with_user_id``
+        guard can never be reached."""
+        self.assert404('profiles:oauth_merge_account')
+
+
+class StateChangingProfileViewsRequirePostTests(ByteDeckTenantTestCase):
+    """The profile views that change a student's account must not act on a GET (#2383).
+
+    Django's CSRF protection deliberately does not cover GET, so a view that mutates on GET can
+    be triggered by a teacher following a link or merely loading a page with an <img> pointing at
+    it. Each of these now answers 405 and leaves the student alone.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and the student these views would act on."""
+        User = get_user_model()
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = User.objects.create_user('test_student')
+
+    def setUp(self):
+        """Log the teacher in, so only the request method decides the outcome."""
+        self.client.force_login(self.teacher)
+
+    def test_profile_archive__get_is_rejected_and_leaves_the_student_active(self):
+        """Loading the archive url can't deactivate a student."""
+        self.assert405('profiles:profile_archive', args=[self.student.profile.pk])
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+
+    def test_profile_restore__get_is_rejected_and_leaves_the_student_archived(self):
+        """Loading the restore url can't reactivate an archived student."""
+        self.student.is_active = False
+        self.student.save()
+
+        self.assert405('profiles:profile_restore', args=[self.student.profile.pk])
+
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+
+    def test_xp_toggle__get_is_rejected_and_leaves_xp_earning_alone(self):
+        """Loading the xp toggle url can't stop a student earning XP."""
+        self.assert405('profiles:xp_toggle', args=[self.student.profile.pk])
+        self.student.profile.refresh_from_db()
+        self.assertFalse(self.student.profile.not_earning_xp)
+
+    def test_comment_ban__get_is_rejected_and_leaves_the_student_unbanned(self):
+        """Loading the ban url can't ban a student from commenting."""
+        self.assert405('profiles:comment_ban', args=[self.student.profile.pk])
+        self.student.profile.refresh_from_db()
+        self.assertFalse(self.student.profile.banned_from_comments)
+
+    def test_comment_ban_toggle__get_is_rejected_and_leaves_the_student_unbanned(self):
+        """The toggle form of the ban is closed the same way."""
+        self.assert405('profiles:comment_ban_toggle', args=[self.student.profile.pk])
+        self.student.profile.refresh_from_db()
+        self.assertFalse(self.student.profile.banned_from_comments)
+
+    def test_recalculate_current_xp__get_is_rejected_and_dispatches_nothing(self):
+        """Loading the recalculate url can't queue the all-student XP recompute."""
+        with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch:
+            self.assert405('profiles:recalculate_xp_current')
+
+        self.assertFalse(mock_dispatch.called)

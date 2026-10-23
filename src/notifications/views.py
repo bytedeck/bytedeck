@@ -1,12 +1,14 @@
 import json
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import Http404, HttpResponseRedirect, redirect, render
+from django.shortcuts import Http404, HttpResponseRedirect, get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from tenant.views import non_public_only_view
 
 from hackerspace_online.decorators import xml_http_request_required
@@ -54,19 +56,27 @@ def list_unread(request):
 @non_public_only_view
 @login_required
 def read_all(request):
-    notifications = Notification.objects.all_unread(request.user)
-
-    for note in notifications:
-        note.unread = False
-        note.time_read = timezone.now()
-        note.save()
-
+    # mark every unread notification read in a single UPDATE instead of
+    # saving each row individually.
+    Notification.objects.all().mark_all_read(request.user)
     return redirect('notifications:list')
 
 
 @non_public_only_view
 @login_required
 def read(request, id):
+    """Mark the requester's own notification `id` as read, then redirect onward.
+
+    `id` is the notification's primary key (from the URL). The notification is
+    marked read only when it belongs to `request.user`; another user's id raises
+    a 404. On success the view redirects to the `?next=` URL when that URL is
+    safe, meaning a same-deck link (relative, or the current host) or one whose
+    host is in `settings.NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS` (github.com by
+    default, for the release-announcement notice). Any other `next` (or none)
+    falls back to the notifications list, so a crafted `next` can't turn this
+    into an open redirect. A missing or deleted notification id also redirects
+    to the list, with an error message. Returns an HttpResponseRedirect.
+    """
     try:
         next = request.GET.get('next', None)
         notification = Notification.objects.get(id=id)
@@ -74,7 +84,12 @@ def read(request, id):
             notification.unread = False
             notification.time_read = timezone.now()
             notification.save()
-            if next is not None:
+            # Only follow ?next= when it stays on this deck or points at an
+            # explicitly trusted host (github.com, for the release-announcement
+            # notice); anything else falls back to the list so a crafted link
+            # can't turn this into an open redirect.
+            allowed_hosts = {request.get_host(), *settings.NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS}
+            if next and url_has_allowed_host_and_scheme(next, allowed_hosts=allowed_hosts, require_https=request.is_secure()):
                 return HttpResponseRedirect(next)
             else:
                 return HttpResponseRedirect(reverse('notifications:list'))
@@ -94,7 +109,12 @@ def ajax(request):
     if request.method == "POST":
 
         limit = 15
-        notifications = Notification.objects.all_unread(request.user)
+        # get_link() reads the sender/action/target generic FKs of each
+        # notification, so prefetch them to avoid 3 extra queries per row
+        # (this endpoint fires on essentially every authenticated page load).
+        notifications = Notification.objects.all_unread(request.user).prefetch_related(
+            'sender_object', 'target_object', 'action_object',
+        )
         count = notifications.count()
         # limit number of items else the list in the menu will go off
         # the bottom of the screen and can't get the links at the bottom...
@@ -124,10 +144,22 @@ def ajax(request):
 @non_public_only_view
 @login_required
 def ajax_mark_read(request):
+    """Mark one of the requesting user's own notifications as read.
+
+    Scoped to the recipient so a user can't mark (and so hide) another user's
+    notification, and so an id that doesn't exist is a 404 rather than an
+    unhandled DoesNotExist.
+    """
     if request.method == "POST":
 
-        id = request.POST.get('id', None)
-        n = Notification.objects.get(id=id)
+        # the id is client-supplied: a missing or non-numeric one would raise
+        # ValueError in the pk lookup below (a 500), so turn it away as a 404 first.
+        try:
+            id = int(request.POST.get('id', ''))
+        except (TypeError, ValueError):
+            raise Http404("No valid notification id provided.")
+
+        n = get_object_or_404(Notification, id=id, recipient=request.user)
         n.mark_read()
         return JsonResponse(data={})
     else:

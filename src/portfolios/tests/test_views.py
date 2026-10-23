@@ -1,15 +1,14 @@
 from django.utils import timezone
 from io import BytesIO
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
-from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.files.uploadedfile import InMemoryUploadedFile, SimpleUploadedFile
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
-from portfolios.models import Portfolio
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from portfolios.models import Artwork, Portfolio
+from portfolios.views import is_acceptable_vid_type
 
 User = get_user_model()
 
@@ -35,7 +34,7 @@ def generate_test_png_file():
     return uploaded_file
 
 
-class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
+class PortfolioViewTests(ByteDeckTenantTestCase):
     """ url(r'^$', views.PortfolioList.as_view(), name='list'),
         url(r'^public/$', views.public_list, name='public_list'),
         url(r'^create/$', views.PortfolioCreate.as_view(), name='create'),
@@ -52,14 +51,38 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         url(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_student = baker.make(User)
-        self.portfolio = baker.make('portfolios.Portfolio', user=self.test_student)
-        self.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=self.portfolio)
-        self.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=self.test_student))
+    @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT in a per-run temp dir before any uploads happen.
 
-    def test_all_portfolio_view_status_codes_for_anonymous(self):
+        The uploads these tests make (e.g. clip.mp4) otherwise land in the
+        project's real _media_uploads and stay there: on the NEXT run Django's
+        storage dedupes the repeat filename to clip_XXXX.mp4, so the view titles
+        the Artwork "clip_XXXX" and the get(title="clip") assertions error --
+        the suite passes once, then fails on every rerun in the same workspace.
+        A throwaway MEDIA_ROOT keeps runs deterministic and the repo clean.
+        """
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-portfolios-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student with a portfolio, one artwork, and a commented document."""
+        cls.test_student = baker.make(User)
+        cls.portfolio = baker.make('portfolios.Portfolio', user=cls.test_student)
+        cls.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=cls.portfolio)
+        cls.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=cls.test_student))
+
+    def test_all_portfolio_view_status_codes__for_anonymous(self):
         ''' If not logged in then all views should redirect to login, EXCEPT the public list and public urls '''
 
         self.assert200('portfolios:public_list')
@@ -75,7 +98,7 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('portfolios:art_update', args=[self.art.pk])
 
     def test_all_portfolio_view_status_codes_for_students__own_portfolio(self):
-
+        """A student can access, edit, and add art to their own portfolio views."""
         self.client.force_login(self.test_student)
 
         self.assert200('portfolios:public_list')
@@ -96,7 +119,7 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         )
 
     def test_all_portfolio_view_status_codes_for_students__others_portfolio(self):
-
+        """A student cannot access another student's unshared portfolio or art views."""
         # create a new user and try to access the test student's portfolio and art
         self.client.force_login(baker.make(User))
 
@@ -114,8 +137,8 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert404('portfolios:art_update', args=[self.art.pk])
         self.assert404('portfolios:art_add', args=[self.doc.pk])
 
-    def test_all_portfolio_view_status_codes_for_staff(self):
-
+    def test_all_portfolio_view_status_codes__for_staff(self):
+        """Staff can access, edit, and add art to any student's portfolio views."""
         self.client.force_login(baker.make(User, is_staff=True))
 
         self.assert200('portfolios:public_list')
@@ -134,6 +157,41 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
             response=self.client.get(reverse('portfolios:art_add', args=[self.doc.pk])),
             expected_url=reverse('portfolios:detail', args=[self.portfolio.pk])
         )
+
+    def test_portfolio_tables__load_bootstrap_table(self):
+        """The portfolios list and a portfolio's edit page both mark a table up for
+        bootstrap-table, so both load its assets. Without them the table stayed hidden behind the
+        loading spinner until its fallback timer, then showed raw, with no search, sorting or
+        column picker (#2691)."""
+        self.client.force_login(baker.make(User, is_staff=True))
+        for url in (reverse('portfolios:list'), reverse('portfolios:edit', args=[self.portfolio.pk])):
+            with self.subTest(url=url):
+                self.assertTemplateUsed(self.client.get(url), 'snippets/bootstrap_table.html')
+
+    def test_edit__lists_the_art_in_a_table(self):
+        """A portfolio with art lists it in the edit page's table, behind its loading spinner."""
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(reverse('portfolios:edit', args=[self.portfolio.pk]))
+
+        self.assertContains(response, 'class="bt-loading"')
+        self.assertContains(response, f'<td>{self.art.title}</td>', html=True)
+        self.assertNotContains(response, 'No art has been added to this portfolio.')
+
+    def test_edit__an_empty_portfolio_says_so_in_place_of_the_table(self):
+        """A portfolio with no art says so in a paragraph, and the edit page draws no art table.
+
+        The message cannot be a row of the table: text in a <tr> with no cell is not valid table
+        markup, so a browser moves it out above the table, and bootstrap-table then draws an empty
+        table under it (#2691)."""
+        empty_portfolio = baker.make('portfolios.Portfolio', user=baker.make(User))
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(reverse('portfolios:edit', args=[empty_portfolio.pk]))
+
+        self.assertContains(response, '<p>No art has been added to this portfolio.</p>', html=True)
+        self.assertNotContains(response, '<table')
+        self.assertNotContains(response, 'class="bt-loading"')
 
     def test_DetailView__listed_locally(self):
         """When a portfolio is listed locally, other users should be able to access it"""
@@ -177,9 +235,6 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
             reverse('portfolios:edit', args=[self.portfolio.pk]),
             data=form_data
         )
-        # form = response.context['form']
-        # if not form.is_valid():
-        #     print(form.errors)  # Print the validation errors
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('portfolios:detail', args=[self.portfolio.pk]))
 
@@ -211,3 +266,61 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
+
+    def test_ArtworkUpdateView__post(self):
+        """A valid ArtworkUpdate POST saves and redirects to the owner's portfolio edit page."""
+        self.client.force_login(self.test_student)
+        form_data = {
+            'title': "Updated Title",
+            'portfolio': self.portfolio,
+            'date': timezone.now().date(),
+            'video_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        }
+        response = self.client.post(reverse('portfolios:art_update', args=[self.art.pk]), data=form_data)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
+        self.art.refresh_from_db()
+        self.assertEqual(self.art.title, "Updated Title")
+
+    def test_ArtworkDeleteView__post(self):
+        """An ArtworkDelete POST removes the art and redirects to the owner's portfolio edit page."""
+        self.client.force_login(self.test_student)
+        response = self.client.post(reverse('portfolios:art_delete', args=[self.art.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
+        self.assertFalse(Artwork.objects.filter(pk=self.art.pk).exists())
+
+    def test_is_acceptable_vid_type__accepts_video_extensions_only(self):
+        """is_acceptable_vid_type recognises video file extensions and rejects others."""
+        self.assertTrue(is_acceptable_vid_type("clip.mp4"))
+        self.assertTrue(is_acceptable_vid_type("clip.webm"))
+        self.assertFalse(is_acceptable_vid_type("picture.png"))
+
+    def test_art_add__video_document_creates_video_artwork(self):
+        """Adding art from a video-file comment document creates an Artwork with a video (not image)."""
+        self.client.force_login(self.test_student)
+        video_doc = baker.make(
+            'comments.Document',
+            docfile=SimpleUploadedFile("clip.mp4", b"fake-video-bytes", content_type="video/mp4"),
+            comment=baker.make('comments.Comment', user=self.test_student),
+        )
+
+        response = self.client.get(reverse('portfolios:art_add', args=[video_doc.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        artwork = Artwork.objects.get(title="clip")
+        self.assertTrue(artwork.video_file)
+        self.assertFalse(artwork.image_file)
+
+    def test_art_add__unsupported_format_returns_404(self):
+        """Adding art from a comment document that is neither an image nor a video is rejected (404)."""
+        self.client.force_login(self.test_student)
+        text_doc = baker.make(
+            'comments.Document',
+            docfile=SimpleUploadedFile("notes.txt", b"not media", content_type="text/plain"),
+            comment=baker.make('comments.Comment', user=self.test_student),
+        )
+
+        self.assert404('portfolios:art_add', args=[text_doc.pk])

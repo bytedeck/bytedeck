@@ -3,7 +3,7 @@ language: "en-US"
 early_access: false
 reviews:
   profile: "chill"
-  request_changes_workflow: false
+  request_changes_workflow: true
   high_level_summary: true
   poem: false
   review_status: true
@@ -18,7 +18,7 @@ reviews:
           - Ensure each method has a clear, detailed docstring explaining its purpose, parameters, and return values. Enhance existing docstrings for clarity and completeness.
           - Do not suggest adding type annotations.
           - Review Django querysets for potential performance improvements and suggest optimizations where applicable.
-          - Ensure that for every model.save() there is a model.full_clean() that precedes it.
+          - Ensure that for every model.save() in application (non-test) code there is a model.full_clean() that precedes it. Do not request model.full_clean() in test files (e.g. tests/, test_*.py, *_test.py, tests.py); tests intentionally build objects directly and are not required to call full_clean().
           - Avoid adding generic exception handling (e.g., `except Exception`) in test files. Each test failure should be addressed by the developer with specific exception handling or fixes.
           - Avoid adding comments relating to importing modules.
     - path: "tests/*.py"

@@ -1,15 +1,38 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import QuerySet
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from badges.models import Badge
 from prerequisites.models import Prereq, HasPrereqsMixin
-from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_all_users, update_quest_conditions_for_user
+from prerequisites.tasks import (
+    update_conditions_for_quest,
+    update_quest_conditions_all_users,
+    update_quest_conditions_for_user,
+)
 from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
+from utilities.signals import disable_for_loaddata
 
 User = get_user_model()
+
+
+def _delete_originated_from_user(origin):
+    """True when a delete cascade was started by deleting a User (issue #1754).
+
+    Django's pre_delete/post_delete signals carry an ``origin`` kwarg: the instance or
+    queryset ``.delete()`` was called on. When a user is deleted the cascade removes all
+    their QuestSubmissions/BadgeAssertions/CourseStudents, and every one of those
+    post_delete signals carries the User as the origin. Recomputing the available-quest
+    cache for a user who is being removed is pointless (and the cascade would otherwise
+    queue dozens of tasks), so we use the origin to tell a user-deletion cascade apart
+    from a direct delete of a single submission/badge (which should still recompute).
+    """
+    if origin is None:
+        return False
+    origin_model = origin.model if isinstance(origin, QuerySet) else type(origin)
+    return issubclass(origin_model, User)
 
 
 # @receiver([post_save, post_delete], sender=BadgeAssertion)
@@ -21,6 +44,7 @@ User = get_user_model()
 
 
 @receiver([post_save, post_delete], dispatch_uid="prerequisites.signals.update_cache_triggered_by_task_completion")
+@disable_for_loaddata
 def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs):
     """ When a user completes a task (e.g. earns a badge, has a quest submission approved or rejected, or joins a course)
     Recalculate what is available to them.
@@ -45,6 +69,12 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
         if isinstance(instance, QuestSubmission) and (instance.is_completed is False or instance.is_approved is False):
             return
 
+        # Skip when this row is being removed as part of deleting its user: recomputing the
+        # available-quest cache for a user who is being deleted is pointless, and the delete
+        # cascade fires this signal once per submission/badge/course-student (issue #1754).
+        if _delete_originated_from_user(kwargs.get('origin')):
+            return
+
         update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default')
 
 
@@ -56,11 +86,13 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
 
 # @receiver([post_save, post_delete], sender=Prereq)
 @receiver([post_save, post_delete], sender=Badge, dispatch_uid="prerequisites.signals.update_conditions_met")
+@disable_for_loaddata
 def update_conditions_met(sender, instance, *args, **kwargs):
     update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
 @receiver([post_save], sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quest_without_prereqs")
+@disable_for_loaddata
 def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest does not contain any prerequisites
@@ -70,6 +102,7 @@ def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **k
 
 
 @receiver(post_save, sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quests_available_outside_course")
+@disable_for_loaddata
 def update_cache_triggered_by_quests_available_outside_course(sender, instance, created, update_fields, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest is available outside a course
@@ -79,18 +112,25 @@ def update_cache_triggered_by_quests_available_outside_course(sender, instance, 
 
 
 @receiver([post_save, post_delete], sender=Prereq, dispatch_uid="prerequisites.signals.update_cache_triggered_by_prereq")
+@disable_for_loaddata
 def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
+
+    Badge prereq changes are intentionally NOT auto-granted here: a teacher may tweak a
+    badge's prerequisites several times while building it, and auto-granting on each change
+    could grant the badge before it is ready. Instead the teacher runs a grant-check on
+    demand from the badge page (see badges.views.badge_grant_qualifying, issue #1157).
     """
     if isinstance(instance.parent_object, Quest):
-        # # The parent_object itself being deleted could have cascaded to delete the sender Prereq, so it parent might not exist.
-        # Cover this instance in a post_delete signal receiver for Quest objects.
-        if instance.parent_object:
+        # The enclosing isinstance() already guarantees parent_object is a (truthy) Quest, so this
+        # inner guard is always True here and has no false branch to exercise.
+        if instance.parent_object:  # pragma: no branch
             update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.parent_object.id, 'start_from_user_id': 1}, queue='default')
 
 
 @receiver(post_save, sender=Prereq)
+@disable_for_loaddata
 def on_quest_badge_save_with_rank_prereq(sender, instance, *args, **kwargs):
     """ Handles the post-save signal for Prereq objects to ensure the creation of a CytoScape map if certain conditions are met.
 

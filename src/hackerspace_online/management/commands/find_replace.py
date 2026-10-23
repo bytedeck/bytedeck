@@ -67,7 +67,7 @@ class Command(BaseCommand):
                         field: Field
                         for field in model._meta.get_fields():
                             if type(field) in self.field_types_to_check:
-                                # https://docs.djangoproject.com/en/2.2/ref/models/database-functions/#replace
+                                # https://docs.djangoproject.com/en/5.2/ref/models/database-functions/#replace
                                 model.objects.update(**{field.name: Replace(field.name, Value(find_str), Value(replace_str))})
                                 # print("Updated: ", num_updates)
                                 print("Field: ", field)

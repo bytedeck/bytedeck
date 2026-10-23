@@ -1,9 +1,11 @@
 import json
 import random
 import string
+from unittest.mock import Mock
 
 from django import forms
 from django.core import signing
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils.encoding import smart_str
@@ -12,14 +14,13 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
-from utilities.models import MenuItem
+from utilities.models import MenuItem, VideoResource
 from utilities.fields import GFKChoiceField
+from utilities.views import QuerySetSequenceAutoResponseView
 from utilities.widgets import GFKSelect2Widget
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
@@ -52,19 +53,22 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
         return str(obj.name).upper()
 
 
-class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
+class TestAutoResponseView(ByteDeckTenantTestCase):
+    """Tests the generic autocomplete endpoint: field-id validation, 404s, and pagination."""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
-        self.groups = Group.objects.bulk_create(
+    @classmethod
+    def setUpTestData(cls):
+        """Create 100 groups to search over via the auto-response JSON endpoint."""
+        cls.groups = Group.objects.bulk_create(
             [Group(pk=pk, name=random_string(50)) for pk in range(100)]
         )
 
     def _ct_pk(self, obj):
+        """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
-    def test_get(self):
+    def test_autoresponse__valid_field_id_returns_group(self):
+        """A valid signed field_id returns matching group results as JSON."""
         group = self.groups[0]
         form = GFKSelect2WidgetForm()
         assert form.as_p()
@@ -76,26 +80,30 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         assert data['results']
         assert {'id': self._ct_pk(group), 'text': smart_str(group)} in data['results'][0]['children']
 
-    def test_no_field_id(self):
+    def test_autoresponse__no_field_id_returns_404(self):
+        """A request missing field_id returns 404."""
         group = self.groups[0]
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'term': group.name})
         assert response.status_code == 404
 
-    def test_wrong_field_id(self):
+    def test_autoresponse__wrong_field_id_returns_404(self):
+        """An unsigned/invalid field_id returns 404."""
         group = self.groups[0]
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'field_id': 123, 'term': group.name})
         assert response.status_code == 404
 
-    def test_field_id_not_found(self):
+    def test_autoresponse__field_id_not_found_returns_404(self):
+        """A validly signed field_id with no cached widget returns 404."""
         group = self.groups[0]
         field_id = signing.dumps(123456789)
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 404
 
-    def test_pagination(self):
+    def test_autoresponse__pagination(self):
+        """Results are paginated, reporting 'more' and 404ing on out-of-range pages."""
         url = reverse('utilities:querysetsequence_auto-json')
         widget = GFKSelect2Widget(
             max_results=10,
@@ -120,7 +128,8 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         data = json.loads(response.content.decode('utf-8'))
         assert data['more'] is False
 
-    def test_label_from_instance(self):
+    def test_autoresponse__label_from_instance(self):
+        """A custom widget's label_from_instance is applied to the returned option text."""
         url = reverse('utilities:querysetsequence_auto-json')
 
         form = GFKSelect2WidgetForm()
@@ -128,7 +137,6 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         assert form.as_p()
         field_id = signing.dumps(form.fields['f'].widget.uuid)
 
-        # artist = artists[0]
         group = self.groups[0]
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 200
@@ -137,7 +145,8 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         assert data['results']
         assert {'id': self._ct_pk(group), 'text': smart_str(group.name.upper())} in data['results'][0]['children']
 
-    def test_url_check(self):
+    def test_autoresponse__url_mismatch_returns_404(self):
+        """A cached widget whose URL no longer matches the endpoint returns 404."""
         from django_select2.cache import cache
 
         group = self.groups[0]
@@ -152,27 +161,46 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 404
 
+    def test_get_model_name__proxy_model_uses_concrete_parents_verbose_name(self):
+        """For a proxy model, get_model_name resolves to the concrete parent's verbose_name.
 
-class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
+        No real proxy model exists in the codebase, so the proxy is simulated with a
+        stand-in whose ._meta reports proxy=True and a concrete parent (Group).
+        """
+        proxy = Mock()
+        proxy._meta.proxy = True
+        proxy._meta.parents = {Group: object()}
+        self.assertEqual(QuerySetSequenceAutoResponseView().get_model_name(proxy), Group._meta.verbose_name)
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    def test_get_model_name__proxy_without_parents_falls_back_to_own_verbose_name(self):
+        """A proxy model with no parents falls through the IndexError guard and keeps its own verbose_name."""
+        proxy = Mock()
+        proxy._meta.proxy = True
+        proxy._meta.parents = {}
+        proxy._meta.verbose_name = "widget thing"
+        self.assertEqual(QuerySetSequenceAutoResponseView().get_model_name(proxy), "widget thing")
 
-        # need a teacher and a student with known password so tests can log in as each
-        self.test_password = "password"
+
+class MenuItemViewTests(ByteDeckTenantTestCase):
+    """Tests the menu-item CRUD views, their access rules, and the leading-slash validation error."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and a student for role-based access checks."""
+        # need a teacher and a student so tests can log in as each via force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login '''
         self.assertRedirectsLogin('utilities:menu_items')
         self.assertRedirectsLogin('utilities:menu_item_create')
         self.assertRedirectsLogin('utilities:menu_item_update', args=[1])
         self.assertRedirectsLogin('utilities:menu_item_delete', args=[1])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
         ''' If not logged in as admin then all views should redirect to 403 '''
         self.client.force_login(self.test_student)
 
@@ -182,18 +210,17 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:menu_item_update', args=[1])
         self.assert403('utilities:menu_item_delete', args=[1])
 
-    def test_MenuItemList_view(self):
+    def test_MenuItemListView__admin_can_view(self):
         ''' Admin should be able to view menu item list '''
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('utilities:menu_items'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('utilities:menu_items')
 
-    def test_MenuItemCreate_view(self):
+    def test_MenuItemCreateView__admin_can_create(self):
         ''' Admin should be able to create a menu item '''
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
-            'fa_icon': 'fa-gift',
+            'fa_icon': 'gift',
             'url': reverse('courses:ranks'),
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -209,7 +236,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
-            'fa_icon': 'fa-gift',
+            'fa_icon': 'gift',
             'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -220,13 +247,13 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
 
-    def test_MenuItemUpdate_view(self):
+    def test_MenuItemUpdateView__admin_can_update(self):
         """ Admin should be able to update a Menu Item """
         self.client.force_login(self.test_teacher)
         # set label and icon to something they wouldn't normally be
         data = {
             'label': 'My Updated Name',
-            'fa_icon': 'fa-bath',
+            'fa_icon': 'bath',
             'url': reverse('courses:ranks'),
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -242,7 +269,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'My Updated Name',
-            'fa_icon': 'fa-bath',
+            'fa_icon': 'bath',
             'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -254,7 +281,8 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, leading_slash_error)
 
 
-class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
+class FlatPageViewTests(ByteDeckTenantTestCase):
+    """Tests access to the flat-page views for anonymous users and students."""
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
@@ -282,19 +310,18 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         return flatpage
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, a student, and login-required and public flatpages."""
         User = get_user_model()
 
-        self.test_password = "password"
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
 
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        cls.flatpage_nonlogin = [FlatPageViewTests.create_flatpage(registration_required=False) for i in range(3)]
+        cls.flatpage_login = [FlatPageViewTests.create_flatpage(registration_required=True) for i in range(3)]
 
-        self.flatpage_nonlogin = [FlatPageViewTests.create_flatpage(registration_required=False) for i in range(3)]
-        self.flatpage_login = [FlatPageViewTests.create_flatpage(registration_required=True) for i in range(3)]
-
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous(self):
         """
             Redirects to admin or returns 200 if user is not logged in
         """
@@ -305,12 +332,11 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('utilities:flatpage_edit', args=[1])
         self.assertRedirectsLogin('utilities:flatpage_delete', args=[1])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
         """
             Redirects to 403 or returns 200 if user is is_staff=False
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.assert200('utilities:flatpage_list')
 
@@ -319,12 +345,11 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:flatpage_edit', args=[1])
         self.assert403('utilities:flatpage_delete', args=[1])
 
-    def test_all_page_status_codes_for_staff(self):
+    def test_all_page_status_codes__staff(self):
         """
             Should return 200 for all cases
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         pk = FlatPage.objects.first().pk
 
@@ -333,7 +358,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('utilities:flatpage_edit', args=[pk])
         self.assert200('utilities:flatpage_delete', args=[pk])
 
-    def test_login_requirements_for_flatpage(self):
+    def test_flatpage_access__login_requirements(self):
         """
             Flatpage with login required can only be accessed by users,
             while flatpages without can be accessed by all
@@ -355,8 +380,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertRedirectsLoginURL(flatpage.get_absolute_url())
 
         # With logging in
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # no login required
         for flatpage in self.flatpage_nonlogin:
@@ -370,8 +394,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Confirm that all flatpages are properly displayed
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         response = self.client.get(reverse('utilities:flatpage_list'))
 
@@ -382,8 +405,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Can create flatpage and access it
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
         data = {
             'url': '/flatpagecreate-test/',
             'title': 'flatpagecreate-test-title',
@@ -409,8 +431,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Confirm that flatpages are being updated using update view
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         pre_update_data = {
             'url': '/pre_update_data-test-url/',
@@ -453,8 +474,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Confirm that flatpages are being properly deleted
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         flatpage = FlatPageViewTests.create_flatpage()
         absolute_url = flatpage.get_absolute_url()
@@ -477,3 +497,84 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # page does not exist
         self.assert404URL(absolute_url)
+
+
+class VideosViewTests(ByteDeckTenantTestCase):
+    """The Video Resources page (utilities:videos): lists videos and accepts uploads from staff."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT in a per-run temp dir so uploaded videos don't leak into the repo.
+
+        The upload test writes a clip file; without a throwaway MEDIA_ROOT it would land
+        in the project's real media dir and Django would dedupe the filename on reruns.
+        """
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-utilities-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher (who may manage videos) and a student (who may not)."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+    def test_videos__anonymous_is_redirected_to_login(self):
+        """An anonymous visitor can't reach the page: the upload form writes to the deck's storage."""
+        self.assertRedirectsLogin('utilities:videos')
+
+    def test_videos__anonymous_post_does_not_upload(self):
+        """An anonymous POST is turned away at the login redirect without saving the file."""
+        upload = SimpleUploadedFile("anon.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'Anonymous Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(VideoResource.objects.filter(title='Anonymous Clip').exists())
+
+    def test_videos__student_get_is_forbidden(self):
+        """A logged-in student can't even read the page: it is the staff upload form."""
+        self.client.force_login(self.test_student)
+        self.assert403('utilities:videos')
+
+    def test_videos__student_post_does_not_upload(self):
+        """A logged-in student gets a 403 and their upload is not saved."""
+        self.client.force_login(self.test_student)
+        upload = SimpleUploadedFile("student.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'Student Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(VideoResource.objects.filter(title='Student Clip').exists())
+
+    def test_videos__get_lists_existing_video_resources(self):
+        """A teacher's GET renders the videos page and includes existing VideoResources in the context."""
+        self.client.force_login(self.test_teacher)
+        video = VideoResource.objects.create(
+            title="Intro Video",
+            video_file=SimpleUploadedFile("intro.mp4", b"fake video bytes", content_type="video/mp4"),
+        )
+        response = self.assert200('utilities:videos')
+        self.assertTemplateUsed(response, 'utilities/videos.html')
+        self.assertIn(video, list(response.context['videos']))
+
+    def test_videos__post_valid_form_creates_video_resource(self):
+        """A teacher's POST with a title and an uploaded file saves a new VideoResource and re-renders the page."""
+        self.client.force_login(self.test_teacher)
+        upload = SimpleUploadedFile("clip.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'My Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(VideoResource.objects.filter(title='My Clip').exists())

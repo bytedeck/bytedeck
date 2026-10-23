@@ -241,6 +241,16 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
     width: 100%;
 }
 
+/* Notifications can embed images from quest/badge content. html_strip() already
+   shrinks them to ~20px tall, but cap them here too so an unusually wide image can
+   never push the dropdown out of shape (issue #1761). */
+.notification-dropdown img {
+    max-width: 100%;
+    max-height: 24px;
+    width: auto;
+    height: auto;
+}
+
 .navbar-mobile-xp > li > a, .navbar-nav > li.navbar-xp > a {
     padding-top: 14px;
     padding-bottom: 13px;
@@ -326,6 +336,15 @@ img.note-float-right, img.pull-right {
 
 img.note-float-left, img.pull-left {
     margin-right: 10px;
+}
+
+/* An image on a line of its own at the right, as Bootstrap 3's center-block puts one in the center:
+   the editor's image menu aligns an image with either (#2910). Being a block, it is placed by its
+   margins, since a paragraph's text-align moves only inline content. */
+img.img-align-right {
+    display: block;
+    margin-left: auto;
+    margin-right: 0;
 }
 
 /*************** Lists *******************/
@@ -560,9 +579,17 @@ iframe.summernotewidget.form-control {
 .panel-summernote #div_id_attachments,
 .panel-summernote #div_id_award,
 .panel-summernote #div_id_awards,
+.panel-summernote #div_id_course,
 .panel-summernote #div_id_xp_requested {
     margin-left: 15px;
     margin-right: 15px;
+}
+
+/* The "Additional Submission Comments" heading sits directly inside the padding-less
+   .panel-summernote, so it needs the same 15px left inset as the summernote form fields to line
+   up with the question labels above it instead of jamming against the panel's left edge. */
+.submission-comments-heading {
+    margin-left: 15px;
 }
 
 .multifileinput {
@@ -605,6 +632,17 @@ form > div.alert.alert-block.alert-danger {
   margin-top: 8px;
 }
 
+/************TABLES *************************/
+
+/* Summary row at the bottom of a facts table (e.g. "Remaining students" on the
+   subscription page): set off from the rows above by a heavier rule, matching the
+   2px weight Bootstrap uses under a thead. Width-only override, so each theme
+   keeps its own table border color. */
+.table > tbody > tr.total-row > th,
+.table > tbody > tr.total-row > td {
+    border-top-width: 2px;
+}
+
 /******* Accordian ***********************/
 
 .panel-heading-tall {
@@ -629,6 +667,12 @@ form > div.alert.alert-block.alert-danger {
 
 /*Make clickable accordian tabs change to pointer cursor*/
 .accordian-trigger {
+    cursor: pointer;
+}
+
+/* A help icon that opens a popover: an <a> with no href gets no pointer of its own, so
+   nothing would suggest it can be clicked. */
+.bt-help-popover {
     cursor: pointer;
 }
 
@@ -712,6 +756,11 @@ hr.tightest {
     padding-bottom: 5px;
 }
 
+/* A comment's attached files, both posted (comments/comments.html) and still on a submission's
+   draft (quest_manager/snippets/draft_attachments.html), drawn alike (#2752). */
+ul.file-links {
+    list-style-type: circle;
+}
 li.file-link {
     margin-bottom: 5px;
 }
@@ -761,13 +810,46 @@ h3.comment-heading {
     margin-top: 25px;
 }
 
+/* A popover's title is an h3, and bootstrap appends the popover beside its trigger, so a popover
+   opened inside a panel picks up the panel's h3 spacing above and opens with a band of empty
+   space over its title. Popovers set their own spacing. */
+.panel-body .popover-title {
+    margin-top: 0;
+}
+
 .comment-content {
     /* prevent long urls from breaking out of container or forcing a scrollbar */
     overflow-wrap: anywhere;
+    /* Keep a comment's own drawing inside its own box. Comment HTML is written by students
+       and may carry inline CSS, including the relative positioning the maths needs, and a
+       relatively positioned block keeps its space in the flow while painting wherever its
+       offsets put it: over the author's name and the staff flag, delete and ban buttons,
+       which this template renders above the content. Clipping here is what makes those
+       offsets safe to allow at all. */
+    overflow: hidden;
 }
 
 .comment-content img {
     max-width: 100%;
+}
+
+/* A display equation is one unbroken line (KaTeX sets white-space: nowrap on it), so one
+   wider than the comment runs past the edge and the clipping above would simply cut it off,
+   with nothing to say the rest is there. Scrolling it keeps all of it reachable. This is a
+   scroll container, so it clips its own contents too: an author who puts this class on
+   something else gets a box that scrolls, not one that paints over the page. */
+.comment-content .katex-display {
+    overflow-x: auto;
+}
+
+/* The editor's Insert Math button (summernote-math.js) keeps each formula's LaTeX source in a
+   span beside it, so the formula can be opened and edited again. The plugin hides that span
+   with an inline display: none, but the HTML sanitizer doesn't allow "display", so a comment
+   or a submission has lost that style by the time it's shown, and the source would sit next
+   to the formula it draws (#2874). Hiding it here covers what's already saved too, on every
+   page and inside the editor. */
+.note-math .note-latex {
+    display: none;
 }
 
 /***********ACCORDIAN COMMENTS *******************************/
@@ -835,26 +917,44 @@ h3 > img#banner {
     background-color: transparent;
 }
 
-.list-group-item.left-side, .list-group-item.right-side {
-  margin: 0;
-  float: left;
-  border-bottom: none;
+/* A sidebar row with a "more" menu, the ⋮ at its right end, such as Quests and Badges for a
+   teacher. The row is a single list-group-item, so it takes the list's colours as a whole,
+   the current page's included, and its link and its ⋮ fill it between them: the ⋮ is part of
+   the row rather than a button of its own beside it (#1133). The row's text colour, and its
+   highlight when pointed at, are the ones its neighbouring links have, in custom.css and
+   custom_slate.css. */
+.list-group-item.sidebar-menu-row {
+    display: flex;
+    padding: 0;
 }
 
-.list-group-item.left-side {
-  border-top-right-radius: 0px ;
-  width: 80%;
+/* The sidebar's list is also a Bootstrap .nav, which paints the links of an open menu's row
+   (".nav .open > a") and would grey the row out while its menu is showing. These rules come
+   later and are as specific, so the row keeps its own colours. */
+.sidebar-menu .sidebar-menu-row > a,
+.sidebar-menu .sidebar-menu-row > a:hover,
+.sidebar-menu .sidebar-menu-row > a:focus {
+    color: inherit;
+    background-color: transparent;
+    border-color: transparent;
+    text-decoration: none;
 }
 
-.list-group-item.right-side {
-  width: 20%;
-  border-top-right-radius: 4px;
-  border-top-left-radius: 0px;
-  border-bottom-right-radius: 0px;
-  border-bottom-left-radius: 0px;
-  border-left: none;
-  padding-left:0px;
-  padding-right: 0px;
+.sidebar-menu-row-link {
+    flex: 1;
+    padding: 10px 15px;
+}
+
+.sidebar-menu-row-toggle {
+    width: 20%;
+    padding: 10px 0;
+    text-align: center;
+}
+
+/* The focus ring stays for someone moving through the page by keyboard, but doesn't ring the
+   ⋮ after a click, when Bootstrap focuses it as the menu opens. */
+.sidebar-menu-row-toggle:focus:not(:focus-visible) {
+    outline: none;
 }
 
 
@@ -895,7 +995,41 @@ div.btn-group.action-btn-group {
     display: inline-block;
 }
 
+/* A dropdown item that posts instead of linking (e.g. Publish an announcement) is a button in a
+   form, so give it the layout Bootstrap gives `.dropdown-menu > li > a`. Colours are theme
+   specific, so they live in custom.css and custom_slate.css beside this rule. */
+.dropdown-menu > li > .dropdown-post-form {
+    margin: 0;
+}
+
+.dropdown-menu > li > .dropdown-post-form > .btn-link {
+    display: block;
+    width: 100%;
+    padding: 3px 20px;
+    clear: both;
+    font-weight: normal;
+    line-height: 1.42857143;
+    text-align: left;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.dropdown-menu > li > .dropdown-post-form > .btn-link:hover,
+.dropdown-menu > li > .dropdown-post-form > .btn-link:focus {
+    text-decoration: none;
+}
+
 /*Make the container act like container-fluid at small and medium sizes*/
+
+/************ XP PROGRESS CHART **********************/
+
+/* The course picker above a multicourse student's progress chart (#2453): one button per
+   course, sitting between the chart's tab strip and the chart's own panel, so it needs a
+   little air on both sides to read as belonging to neither. */
+.xp-chart-courses {
+    margin: 8px 0;
+}
+
 
 /*LESS to mimic Bootstrap without importing the less files.*/
 /*@screen-xs-max: 767px;
@@ -1006,10 +1140,36 @@ div.btn-group.action-btn-group {
         float: none !important;
     }
 
+    /* A floated image sits on a line of its own too, with the text below it: beside an image of a
+       fixed width, a phone has room for a column of text too narrow to read (#2918). The editor's
+       Float Left and Float Right put the float in the image's style, which only !important outranks. */
+    img.note-float-left, img.note-float-right, img.pull-left, img.pull-right {
+        display: block;
+        float: none !important;
+        margin-left: 0;
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+
 
     #main-container {
         padding-left: 7px;
         padding-right:7px;
+    }
+
+    /* The container's 7px padding halves Bootstrap's 15px gutter, so the grid inside it is halved
+       to match. A row's negative margin has to equal the padding around it: at Bootstrap's -15px,
+       every row would stick out 8px past both edges of the screen and every page would scroll
+       sideways (#2750). Content stays where it is; only the gap between side-by-side columns
+       narrows. */
+    #main-container .row {
+        margin-left: -7px;
+        margin-right: -7px;
+    }
+
+    #main-container .row > [class*="col-"] {
+        padding-left: 7px;
+        padding-right: 7px;
     }
 
     .navbar-brand > img {
@@ -1108,3 +1268,227 @@ div.btn-group.action-btn-group {
 
 
 
+
+/* === #1981: prevent the bootstrap-table "flash of unstyled table" ================= */
+/* Data tables (data-toggle="table") are server-rendered as a plain <table>, so the browser
+   paints the raw, unstyled table first and then — a second or two later on large tables —
+   bootstrap-table tears it down and rebuilds it (pagination, search, fixed layout). That
+   rebuild is the visible "jump", and while a large table parses the page looks blank/broken.
+   A "Loading content..." spinner (.bt-loading) is server-rendered right before each such
+   table (snippets/table_loading.html), so it's on screen from the very first paint — a
+   JS-inserted spinner would arrive too late, after the raw table has already been parsed.
+   This <head> CSS hides the raw table until custom.js reveals it. */
+table[data-toggle="table"] {
+    /* Out of flow while hidden so a big table reserves no tall blank gap under the spinner. */
+    position: absolute;
+    visibility: hidden;
+}
+/* The table is revealed ONLY by the .bt-reveal class, which custom.js adds in the same step that
+   it hides the spinner. Revealing it automatically as soon as bootstrap-table wrapped it (via a
+   `.bootstrap-table table` rule) let the table appear a frame before the spinner was hidden, so the
+   table then jumped up when the spinner vanished (issue #1981). One JS-driven reveal keeps the
+   swap atomic. .bt-reveal also covers tables bootstrap-table never initializes (6s fallback), so
+   data is never left hidden. */
+table[data-toggle="table"].bt-reveal {
+    position: static;
+    visibility: visible;
+}
+
+/* Server-rendered loading spinner shown in the table's place, using the same
+   fa-spinner / "Loading content..." markup as the collapsed quest rows. */
+.bt-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    color: #999;
+}
+
+/* #2115: a filter dropdown dropped into a bootstrap-table toolbar via data-toolbar. Give the
+   toolbar element the .bt-toolbar-filter class and the search box stays rightmost (as on every
+   other table) with the filter beside it on the left, and a gap between them. Reusable by any
+   bootstrap-table that wants an inline filter. Scoped with :has() so ONLY toolbars that actually
+   contain a filter become flex — search-only and column-toggle tables are left untouched. */
+.fixed-table-toolbar:has(.bt-toolbar-filter) {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 15px;
+}
+/* bootstrap-table's stylesheet gives .fixed-table-toolbar a clearfix ::after. A flex container
+   counts that pseudo-element as an item, so the gap above puts 15px of empty space after the
+   last control and the row stops short of the table's right edge. Flex needs no clearfix, so
+   drop it and the controls end flush right, level with the search box on every other table.
+   Scoped under .bootstrap-table to match the specificity of the rule it overrides
+   (`.bootstrap-table .fixed-table-toolbar::after`), since that stylesheet is loaded per page
+   and so comes after this one. */
+.bootstrap-table .fixed-table-toolbar:has(.bt-toolbar-filter)::after {
+    display: none;
+}
+/* The filter's label, on either kind of toolbar: the student list drops its filter into a
+   bootstrap-table toolbar, the quest approvals put theirs in a .list-search-form, and it is
+   the same control naming the same thing, so it reads the same on both. Normal weight
+   because it labels the control beside it rather than a field being filled in. */
+.bt-toolbar-filter label,
+.list-search-form label {
+    margin-right: 4px;
+    font-weight: normal;
+}
+
+
+/* #811: rendered rich-text content (Summernote HTML) is sometimes shown inside a Bootstrap
+   .list-group, which is itself a <ul>. That makes a content list a *nested* <ul>, so the
+   browser marks its top level with the level-2 style (hollow circle) instead of level-1
+   (solid disc) — and one level deeper again. The templates wrap every such rendered block in
+   a .user-content container, so we re-establish depth-correct bullets counting from the
+   content list itself. Scoping to .user-content (rather than the container the content
+   happens to sit in) keeps this off Bootstrap's own component lists and doesn't depend on
+   the content lists lacking a class. */
+.user-content ul {
+    list-style-type: disc;
+}
+.user-content ul ul {
+    list-style-type: circle;
+}
+.user-content ul ul ul {
+    list-style-type: square;
+}
+
+/* The submission form's attachments (#2749): the files saved with the draft, as a bulleted list
+   like a posted comment's (#2752), and below them the button that adds more. */
+.bt-attachments-add .help-block {
+    margin-bottom: 0;
+}
+/* The file input is operated through the button beside it: clipped rather than hidden, so it
+   still takes keyboard focus, with the browser's own "No file chosen" out of the way. */
+.bt-attachments-add input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+/* the focus ring the clipped input cannot show, on the button that stands for it */
+.bt-attachments-add input[type="file"]:focus + label {
+    outline: 5px auto -webkit-focus-ring-color;
+    outline-offset: -2px;
+}
+
+
+/* Answer tables (questions/snippets/comment_answers.html): keep a long unbroken answer or URL
+   from widening its column and overflowing the panel. table-layout: fixed pins the
+   Question / answer columns to their set widths so content wraps to fit, and pre blocks wrap
+   long code lines instead of overflowing. */
+.question-answers {
+    table-layout: fixed;
+}
+.question-answers th,
+.question-answers td {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.question-answers pre {
+    white-space: pre-wrap;
+}
+
+/* Submission question blocks (quest_manager/submission.html) render as a Bootstrap list-group, so
+   the questions read as one connected list (single hairline borders between items, no inter-item
+   gaps) rather than separate padded .well cards. Trim the answer field's trailing form-group
+   margin so each item closes up right after the field instead of carrying a tall empty band. */
+.question-submission-form .form-group {
+    margin-bottom: 0;
+}
+
+/* Inline stacked icon: renders a two-glyph fa-stack (e.g. the archive + up-arrow
+   "restore from archive" button) at the same 1em footprint as the single-glyph
+   icons beside it, instead of the default 2em fa-stack that would make its button
+   taller and wider than its neighbours. Both stacked glyphs stay at fa-stack-1x. */
+.fa-stack.fa-stack-inline {
+    width: 1em;
+    height: 1em;
+    line-height: 1em;
+    vertical-align: -0.075em;
+}
+/* "Restore from archive" icon: a dark up arrow sits inside the white archive box
+   so restore is visibly distinct from a plain archive icon. FontAwesome's archive
+   glyph is a solid lid over a hollow (outlined) box body, so the box interior is
+   just the button colour showing through; a dark arrow reads clearly against both
+   the white lid and the coloured interior (a same-colour arrow would disappear).
+   Shrunk and nudged down so the arrow sits within the box. Both glyphs stay
+   fa-stack-1x. */
+.fa-stack.fa-stack-inline .fa-stack-1x:last-child {
+    color: #1a1a1a;
+    font-size: 0.7em;
+    top: 0.12em;
+}
+
+
+/* #2379: a server-side search box above a list (the Library's quest tab), as opposed to
+   bootstrap-table's own client-side box that lives inside .fixed-table-toolbar. It sits
+   right-aligned like the built-in one, so the two read as the same control wherever a
+   page has both, with a gap before the table beneath it. Reusable by any list that
+   searches on the server. */
+.list-search-form {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    /* 15px between controls, the same space .bt-toolbar-filter puts between the student
+       list's group filter and its search, so a page carrying both reads as one row rather
+       than two controls stuck together. A form holding only a search has nothing to space. */
+    gap: 15px;
+    margin-bottom: 10px;
+}
+/* Wide enough for the placeholder naming what the box searches, which is the only thing
+   telling the reader that the search reaches past the quest names. Scoped to the search
+   box's own input group, so a filter dropdown standing beside it in the same form keeps the
+   width of its options, as the same filter does on the student list (#2721). */
+.list-search-form .input-group .form-control {
+    min-width: 320px;
+}
+/* On a phone that minimum is wider than the screen once the search and clear buttons
+   are added, which pushes the page into a horizontal scroll, so let it shrink there. */
+@media (max-width: 480px) {
+    .list-search-form .input-group {
+        width: 100%;
+    }
+    .list-search-form .input-group .form-control {
+        min-width: 0;
+    }
+}
+
+
+/* A question's file shown where it is read (questions/snippets/question_file.html): a
+   student's image, video or audio answer, and the teacher's solution file. Sized to sit in
+   the answer table without pushing the page wide, and to stay whole on a phone. */
+.question-media {
+    max-width: 100%;
+    max-height: 300px;
+    margin-bottom: 4px;
+}
+/* The same file in a narrow table cell (the Solution column of the question list), where it
+   stands in for its own download link rather than being read at full size. */
+.question-media-thumb {
+    max-width: 100%;
+    max-height: 40px;
+}
+
+/* The bar under a file being attached by a draft save (#784): a slim Bootstrap progress bar on a
+   line of its own, inside the note's paragraph under the file input. */
+.draft-upload-progress {
+    display: block;
+    height: 6px;
+    max-width: 320px;
+    margin: 4px 0 0;
+}
+
+/* The Unflag button's icon (#824): a flag struck through by a red "no" sign, the sign drawn twice
+   the flag's size and the pair scaled down to sit in a button beside single icons. */
+.fa-stack.unflag-icon {
+    font-size: 0.63em;
+}
+.fa-stack.unflag-icon .fa-ban {
+    color: tomato;
+}

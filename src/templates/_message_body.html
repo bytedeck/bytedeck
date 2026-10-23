@@ -1,0 +1,14 @@
+{% comment %}
+  The one place that decides whether a django message's markup renders, shared by every
+  template that displays messages (the deck's messages-snippet.html and the public
+  tenant's base.html), so a second renderer cannot quietly escape differently.
+
+  `message.message` rather than `message`: the inner value keeps its safeness, so a message
+  built with format_html renders its markup and a plain string is escaped. Rendering
+  `message` would escape both, because Message itself is not a safe string (#2498).
+
+  The `safe` tag is the escape hatch for a plain string meant to carry markup. It is matched
+  against the tags as a list, not as a substring of `message.tags`: that string joins every
+  tag together, so `extra_tags='unsafe'` would contain "safe" and turn escaping off.
+{% endcomment %}
+{% if message.extra_tags and 'safe' in message.extra_tags.split %}{{ message|safe }}{% else %}{{ message.message }}{% endif %}

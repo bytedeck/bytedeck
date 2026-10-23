@@ -59,6 +59,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 build/
 develop-eggs/
 dist/
@@ -108,3 +109,9 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Claude Code hook runtime state (per-session mtime cache)
+.claude/.cache/
+
+# redis persistence file dropped by a locally-run redis-server
+dump.rdb

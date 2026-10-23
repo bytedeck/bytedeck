@@ -1,51 +1,186 @@
+from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.test import SimpleTestCase
+from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
+from allauth.socialaccount.models import SocialAccount
 from model_bakery import baker
 from model_bakery.recipe import Recipe
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
 from courses.models import CourseStudent, Semester
 from notifications.models import Notification
 from portfolios.models import Portfolio
-from profile_manager.models import Profile, smart_list
+from profile_manager.models import (
+    Profile,
+    email_confirmed_handler,
+    post_delete_user,
+    smart_list,
+    user_directory_path,
+    user_logged_out_handler,
+)
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class ProfileTestModel(TenantTestCase):
+class ProfileTestModel(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, a student user/profile, and active/inactive semesters."""
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.user = baker.make(User)
         # Profiles are created automatically with each user, so we only need to access profiles via users
-        self.profile = self.user.profile
+        cls.profile = cls.user.profile
 
-        self.active_sem = SiteConfig.get().active_semester
+        cls.active_sem = SiteConfig.get().active_semester
 
         # Why is this required?  Why can't I just baker.make(Semester)?  For some reason when I
         # use baker.make(Semester) it tried to duplicate the pk, using pk=1 again?!
-        self.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
+        cls.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
 
     def create_active_course_registration(self):
         return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem, course=baker.make('courses.Course'))
 
-    def test_profile_creation(self):
+    # ---- user_directory_path ------------------------------------------------
+
+    def test_user_directory_path__nests_under_username_customstyles(self):
+        """user_directory_path builds '<username>/customstyles/<filename>' for custom-style uploads."""
+        self.assertEqual(
+            user_directory_path(self.profile, "theme.css"),
+            f"{self.user.username}/customstyles/theme.css",
+        )
+
+    # ---- num_hidden_quests / hide_quest / unhide_quest ----------------------
+
+    def test_num_hidden_quests__available_only_false_counts_all_hidden(self):
+        """num_hidden_quests(available_only=False) counts every hidden quest without filtering to available ones."""
+        self.profile.hidden_quests = "1,2,3"
+        self.assertEqual(self.profile.num_hidden_quests(available_only=False), 3)
+
+    def test_hide_quest__already_hidden_is_noop(self):
+        """Hiding a quest that's already in the hidden list doesn't duplicate it."""
+        self.profile.hidden_quests = "5"
+        self.profile.save()
+        self.profile.hide_quest(5)
+        self.assertEqual(self.profile.get_hidden_quests_as_list(), ["5"])
+
+    def test_unhide_quest__not_hidden_is_noop(self):
+        """Unhiding a quest that isn't hidden leaves the hidden list unchanged."""
+        self.profile.hidden_quests = "5"
+        self.profile.save()
+        self.profile.unhide_quest(9)
+        self.assertEqual(self.profile.get_hidden_quests_as_list(), ["5"])
+
+    # ---- post_delete_user signal -------------------------------------------
+
+    def test_post_delete_user__deletes_associated_user(self):
+        """Deleting a Profile cascades to delete its associated User."""
+        user = baker.make(User)
+        user_pk = user.pk
+        user.profile.delete()
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    def test_post_delete_user__swallows_error_when_user_already_gone(self):
+        """If the cascade user delete raises (already deleted / mid-delete), post_delete_user swallows it."""
+        user = baker.make(User)
+        profile = user.profile
+        with patch.object(User, "delete", side_effect=ObjectDoesNotExist):
+            profile.delete()  # must not propagate the error
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_post_delete_user__no_user_is_a_noop(self):
+        """post_delete_user does nothing when the deleted profile has no associated user."""
+        instance = Mock(user=None)
+        post_delete_user(sender=Profile, instance=instance)  # must not raise
+
+    # ---- login/logout signal handlers --------------------------------------
+
+    def test_user_logged_out_handler__clears_recently_signed_up_flag(self):
+        """Logging out removes the recently_signed_up_with_email flag from the request when present."""
+        request = SimpleNamespace(recently_signed_up_with_email=True)
+        user_logged_out_handler(request=request, user=self.user)
+        self.assertFalse(hasattr(request, "recently_signed_up_with_email"))
+
+    # ---- email_confirmed_handler -------------------------------------------
+
+    def test_email_confirmed_handler__deletes_other_emails_ignoring_emailless_social(self):
+        """Confirming an email promotes it to primary and deletes the user's other non-primary emails;
+        a social account whose extra_data carries no email contributes nothing to the exclusion set."""
+        user = baker.make(User)
+        # a social account with no 'email' in extra_data -> not added to the social-email exclusion set
+        SocialAccount.objects.create(user=user, provider="google", extra_data={})
+        keep = user.emailaddress_set.create(email="new@example.com", verified=True, primary=False)
+        drop = user.emailaddress_set.create(email="old@example.com", verified=True, primary=False)
+
+        email_confirmed_handler(email_address=keep)
+
+        self.assertTrue(user.emailaddress_set.filter(pk=keep.pk, primary=True).exists())
+        self.assertFalse(user.emailaddress_set.filter(pk=drop.pk).exists())
+
+    def test_mark_cached__stores_marks_above_999_9(self):
+        """A profile mark above the old 999.9 ceiling saves and round-trips instead
+        of raising DataError -- regression for #2035, where an uncapped early-semester
+        mark projects to thousands of percent and overflowed the max_digits=4 column."""
+        profile = self.user.profile
+        profile.mark_cached = Decimal("1500.0")
+        profile.save()  # would raise DataError on the old max_digits=4 field
+        profile.refresh_from_db()
+        self.assertEqual(profile.mark_cached, Decimal("1500.0"))
+
+    def test_profile_creation__on_user_create(self):
         """Profile is automatically created when a user is created in setUp()"""
         self.assertIsInstance(self.user.profile, Profile)
         self.assertEqual(str(self.user.profile), self.user.username)
 
-    def test_profile_deletion(self):
+    def _new_user_notifications_for(self, user):
+        """Return the 'New user registered' notifications whose target is this user's profile.
+
+        Args:
+            user: the User whose profile is the notification target to filter on.
+
+        Returns:
+            A lazy Notification QuerySet of the matching 'New user registered' notifications.
+        """
+        return Notification.objects.filter(
+            verb__icontains="New user registered",
+            target_content_type=ContentType.objects.get_for_model(Profile),
+            target_object_id=user.profile.id,
+        )
+
+    def test_create_profile__notifies_staff_when_a_student_registers(self):
+        """Creating a student (non-staff) user fires the 'New user registered' notification to staff."""
+        student = baker.make(User)  # non-staff, non-superuser by default
+        self.assertTrue(self._new_user_notifications_for(student).exists())
+
+    def test_create_profile__notifies_staff_when_a_teacher_is_added(self):
+        """A staff (teacher) account is created administratively, but it still fires the
+        'New user registered' notification: only the superuser system account is suppressed (#2320)."""
+        teacher = baker.make(User, is_staff=True)
+        self.assertTrue(self._new_user_notifications_for(teacher).exists())
+
+    def test_create_profile__no_notification_for_superuser_account(self):
+        """A superuser account (the deck's system admin, created automatically at deck creation) does
+        not fire the 'New user registered' notification, since it is not a real registration (#2320)."""
+        admin = baker.make(User, is_superuser=True)
+        self.assertFalse(self._new_user_notifications_for(admin).exists())
+
+    def test_profile_deletion__cascades_to_user(self):
         """When a profile is deleted, via queryset (admin) or directly, the user should be deleted too. """
         Profile.objects.filter(pk=self.profile.pk).delete()
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
 
-    def test_profile_alias_clipped(self):
+    def test_alias_clipped__truncates_long_alias(self):
+        """alias_clipped() returns a placeholder when empty and truncates aliases past the max length."""
         max_len = 16
         self.assertEqual(self.profile.alias_clipped(), "-")
 
@@ -55,13 +190,16 @@ class ProfileTestModel(TenantTestCase):
         self.profile.alias = "Super duper duper long alias that's super duper long"
         self.assertEqual(len(self.profile.alias_clipped()), max_len)
 
-    def test_profile_num_hidden_quests(self):
+    def test_num_hidden_quests__zero_by_default(self):
+        """A new profile has no hidden quests."""
         self.assertEqual(self.profile.num_hidden_quests(), 0)
 
-    def test_profile_get_hidden_quests_as_list(self):
+    def test_get_hidden_quests_as_list__empty_by_default(self):
+        """A new profile's hidden quest list is empty."""
         self.assertEqual(self.profile.get_hidden_quests_as_list(), [])
 
-    def test_profile_hidden_quests(self):
+    def test_hidden_quests__hide_unhide_and_count(self):
+        """Hiding, unhiding, and querying hidden quests behave consistently."""
         self.create_active_course_registration()
         num_to_hide = 3
         quests_to_hide = baker.make('quest_manager.quest', _quantity=num_to_hide)
@@ -84,7 +222,7 @@ class ProfileTestModel(TenantTestCase):
         self.profile.unhide_quest(quest_hidden.id)
         self.assertFalse(self.profile.is_quest_hidden(quest_hidden))
 
-    def test_num_hidden_quests_doesnt_include_unavailable(self):
+    def test_num_hidden_quests__excludes_unavailable(self):
         """If a hidden quest has been made unavailable for some reason (published=False, etc) then it shouldn't count"""
         self.create_active_course_registration()
         quest = baker.make('quest_manager.quest', name='Hide Me')
@@ -98,7 +236,8 @@ class ProfileTestModel(TenantTestCase):
         quest.save()
         self.assertEqual(self.profile.num_hidden_quests(), 0)
 
-    def test_profile_current_courses(self):
+    def test_current_courses__returns_active_registrations(self):
+        """current_courses() returns each active-semester course registration for the profile."""
         # no current courses to start
         self.assertFalse(self.profile.current_courses().exists())
         # add one and test
@@ -111,54 +250,95 @@ class ProfileTestModel(TenantTestCase):
             [course_registration, course_registration2]
         )
 
-    def test_profile_has_current_course(self):
+    def test_has_current_course__true_when_registered(self):
+        """has_current_course is False until the student registers in the active semester."""
         self.assertFalse(self.profile.has_current_course)
         self.create_active_course_registration()
         profile = Profile.objects.get(pk=self.profile.id)  # Refresh profile to avoid cached_property
         self.assertTrue(profile.has_current_course)
 
-    def test_profile_has_past_courses(self):
+    def test_has_past_courses__true_when_registered_in_inactive_semester(self):
+        """has_past_courses becomes True once the student has a registration in an inactive semester."""
         self.assertFalse(self.profile.has_past_courses)
         baker.make('courses.CourseStudent', user=self.user, semester=self.inactive_sem)
         profile = Profile.objects.get(pk=self.profile.id)  # Refresh profile to avoid cached_property
         self.assertTrue(profile.has_past_courses)
 
-    def test_profile_blocks(self):
+    def test_blocks__none_until_registered(self):
+        """blocks() is None until the student registers in a course."""
         self.assertIsNone(self.profile.blocks())
         self.create_active_course_registration()
         self.assertIsNotNone(self.profile.blocks())
         # TODO fully test this with multiple blocks
 
-    def test_profile_teachers(self):
+    def test_teachers__empty_until_registered(self):
+        """teachers() is empty before registration, yields a single None while the current
+        course's block has no teacher, and yields the teacher once one is assigned."""
         self.assertEqual(list(self.profile.teachers()), [])
         course_registration = self.create_active_course_registration()
-        # Still no teachers since no teacher assign to this course's block yet
-        # why is this a list of None instead of just empty? SQLite thing?
+        # Registered, but the course's block has no teacher yet, so teachers() -- which reads
+        # block__current_teacher -- yields a single None (one current course, no teacher).
         self.assertEqual(list(self.profile.teachers()), [None])
-
         self.assertTrue(self.profile.has_current_course)
-        course_registration.block = baker.make('courses.block', current_teacher=self.teacher)
 
-        # TODO should have teachers now... why not working? Should not be None...
-        # self.assertEqual(list(self.profile.teachers()), [None])
+        # Assign AND persist a block with a teacher (the DB query only sees a saved block);
+        # teachers() now lists that teacher.
+        course_registration.block = baker.make('courses.Block', current_teacher=self.teacher)
+        course_registration.save()
+        self.assertEqual(list(self.profile.teachers()), [self.teacher.id])
 
-    def test_profile_current_teachers(self):
+    def test_current_teachers__empty_until_teacher_assigned(self):
+        """current_teachers() stays empty until a teacher is assigned to the student's block,
+        then includes that teacher."""
         self.assertFalse(self.profile.current_teachers().exists())
 
         course_registration = self.create_active_course_registration()
 
-        # Still no teachers since no teacher assign to this course's block yet
+        # Still no teachers since no teacher is assigned to this course's block yet.
         self.assertFalse(self.profile.current_teachers().exists())
 
-        course_registration.block = baker.make('courses.block', current_teacher=self.teacher)
+        # Assign AND persist a block with a teacher (an in-memory assignment isn't visible to the
+        # DB query behind current_teachers()); the teacher now shows up.
+        course_registration.block = baker.make('courses.Block', current_teacher=self.teacher)
+        course_registration.save()
+        self.assertIn(self.teacher, self.profile.current_teachers())
 
-        # print(course_registration)
-        # print(self.profile.current_teachers()) # why is this empty?!?!
-
-    def test_rank(self):
+    def test_rank__default_for_new_user(self):
         """ By default a new user has a rank"""
         default_starting_rank = "Digital Noob"
         self.assertEqual(self.profile.rank().name, default_starting_rank)
+
+    def test_course_ranks__is_empty_without_a_second_course(self):
+        """One course holds all of a student's XP, so its rank is the rank they already have.
+        There is nothing to list, and the navbar keeps its single icon (issue #2453)."""
+        self.assertEqual(self.profile.course_ranks(), [])
+
+        self.create_active_course_registration()
+
+        self.assertEqual(self.profile.course_ranks(), [])
+
+    def test_course_ranks__gives_each_course_its_own_rank_highest_first(self):
+        """A student in two courses has different XP in each, so they are at a different rank
+        in each. The list leads with the highest, which is the one the navbar shows closed."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        maths_registration, _art_registration = (
+            baker.make('courses.CourseStudent', user=self.user, course=course,
+                       block=baker.make('courses.Block'), semester=self.active_sem)
+            for course in (maths, art)
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=60),
+            registration=maths_registration, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        course_ranks = self.profile.course_ranks()
+
+        # 60 XP all against Maths reaches the deck's second rank there, while Art, holding
+        # none of it, is still at the starting rank
+        self.assertEqual([course for course, rank in course_ranks], [maths, art])
+        self.assertEqual([rank.name for course, rank in course_ranks], ['Digital Novice', 'Digital Noob'])
 
     def test_mark__no_courses(self):
         """A student not in any current courses should return None"""
@@ -166,90 +346,214 @@ class ProfileTestModel(TenantTestCase):
         self.assertFalse(self.profile.current_courses().exists())
         self.assertIsNone(self.profile.mark())
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__single_course(self, mock_current_courses):
-        mock_coursestudent = Mock()
-        mock_coursestudent.calc_mark.return_value = 125
-        mock_current_courses.return_value = [mock_coursestudent]
-        self.assertEqual(self.profile.mark(), 125)
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__single_course(self, fraction_complete):
+        """mark() works the student's XP into a percentage of what their course is out of."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__multiple_courses(self, mock_current_courses):
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 87
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 87 / 2)
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertEqual(self.profile.mark(), 10)
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__cap_100(self, mock_current_courses):
-        """Test that mark() caps at 100 if that SiteConfig option is set"""
-        config = SiteConfig.get()
-        config.cap_marks_at_100_percent = True
-        config.save()
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_xp_invalidate_cache__stores_a_mark_worked_out_from_the_new_total(self, fraction_complete):
+        """mark_cached has to be the mark for the XP just counted, not the one before it.
 
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 125
+        The mark now comes from the student's registration, which reads xp_cached back out of
+        the database, so the new total has to be saved before the mark is asked for."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
 
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1]
-        self.assertEqual(self.profile.mark(), 100)
+        self.profile.xp_invalidate_cache()
 
-        # Add a second course, should not be capped anymore
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 125 / 2)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.xp_cached, 50)
+        self.assertEqual(self.profile.mark_cached, 10)
 
-        # What if both are over 100?
-        mock_coursestudent1.calc_mark.return_value = 225
-        self.assertEqual(self.profile.mark(), 100)
+    def test_xp_invalidate_cache__caches_the_mark_as_it_is_shown(self):
+        """The cached mark decides the student's mark range, so it is the mark as they are shown
+        it, to one decimal place with a half rounded up (#2826): 72.44996% is shown as 72.4% and
+        cached as 72.4, short of a 72.5% range, and 72.45% is shown and cached as 72.5. The
+        instance holds the same value as the saved row."""
+        for mark, cached in ((72.44996, Decimal('72.4')), (72.45, Decimal('72.5'))):
+            with self.subTest(mark=mark), patch('profile_manager.models.Profile.mark', return_value=mark):
+                self.profile.xp_invalidate_cache()
+                self.assertEqual(self.profile.mark_cached, cached)
+                self.profile.refresh_from_db()
+                self.assertEqual(self.profile.mark_cached, cached)
 
-        # NEED TO RETURN SiteConfig object back to original state for other tests!
-        config.cap_marks_at_100_percent = False
-        config.save()
+    def test_xp_invalidate_cache__names_the_patch_behind_a_mark_that_is_not_a_number(self):
+        """A mark that is not a number cannot be stored, and the error says why.
+
+        Saving a CourseStudent refreshes the cached mark, and the mark reaches
+        CourseStudent.xp(), so a test that patches the XP split after it has already created
+        a registration puts a MagicMock into mark_cached. What that produces on its own is
+        "FieldError: Aggregate functions are not allowed in this query", raised from
+        Profile.save() and naming nothing that led there (issue #2486). The check names the
+        cause and the helper that avoids it."""
+        with patch('profile_manager.models.Profile.mark', return_value=Mock()):
+            with self.assertRaisesMessage(TypeError, 'patch_registration_xp'):
+                self.profile.xp_invalidate_cache()
+
+    def test_xp_invalidate_cache__stores_a_mark_of_none(self):
+        """None is a mark in its own right, not a failed one: a student in no course has no
+        percentage, and so does one whose every course is run on XP alone (issue #403). The
+        check on the mark has to let it through rather than treating it as a bad value."""
+        self.profile.xp_invalidate_cache()
+
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.mark_cached)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__skips_a_course_run_on_xp_alone(self, fraction_complete):
+        """A course can be run on XP alone and have no mark at all (issue #403). A student who
+        holds one of those and a graded course still has a mark, so the one number reported here
+        comes from the graded one however the two happen to sort."""
+        # ordered by block name, so the XP-only course is the one that sorts first
+        for_joy = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', uses_marks=False),
+            block=baker.make('courses.Block', name='A block'),
+        )
+        graded = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', xp_for_100_percent=1000),
+            block=baker.make('courses.Block', name='B block'),
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            registration=graded, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        self.assertEqual(list(self.profile.current_courses())[0], for_joy)
+        self.assertIsNone(for_joy.mark())
+        # 50 XP halfway through the semester projects to 100, out of the graded course's 1000
+        self.assertEqual(self.profile.mark(), 10)
+
+    def test_mark__none_when_every_course_is_run_on_xp_alone(self):
+        """With nothing but ungraded courses there is no mark to report, which is not the same
+        as a mark of zero: the places that show one show nothing instead."""
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', uses_marks=False), block=baker.make('courses.Block'),
+        )
+
+        self.assertIsNone(self.profile.mark())
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__multiple_courses(self, fraction_complete):
+        """A student in several courses has a mark in each, so this one number is the first
+        registration's, whole. Each registration's XP is already only its own share, so nothing
+        is divided a second time here (issue #2440 moved the split from the mark into the XP)."""
+        # distinct blocks: registrations are ordered by block name, and two rows with the same
+        # ordering key can come back in either order, which would make this test flaky
+        first_registration = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='A block'),
+        )
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='B block'),
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            registration=first_registration, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+        registrations = list(self.profile.current_courses())
+
+        self.assertEqual(registrations[0], first_registration)
+        self.assertEqual(self.profile.mark(), registrations[0].mark())
+        # the courses really do differ, so returning the first one's mark is a choice and not a
+        # coincidence of both being the same number
+        self.assertNotEqual(registrations[0].mark(), registrations[1].mark())
 
 
 class SmartListTests(SimpleTestCase):
+    """Covers the module-level smart_list value parser."""
 
-    def test_smart_list_empty(self):
+    def test_smart_list__empty_inputs(self):
+        """smart_list() returns an empty list for empty/None-like inputs."""
         self.assertEqual(smart_list(''), [])
         self.assertEqual(smart_list([]), [])
         self.assertEqual(smart_list('[]'), [])
         self.assertEqual(smart_list(None), [])
 
-    def test_smart_list_csv(self):
+    def test_smart_list__csv_string(self):
+        """smart_list() splits a comma-separated string into a list of strings."""
         self.assertEqual(smart_list('1,2,3'), ['1', '2', '3'])
 
-    def test_smart_list_csv_delimeter(self):
+    def test_smart_list__custom_delimiter(self):
+        """smart_list() splits on a custom delimiter when provided."""
         self.assertEqual(smart_list('1;2;3', delimiter=';'), ['1', '2', '3'])
 
-    def test_smart_list_csv_to_int(self):
+    def test_smart_list__with_func(self):
+        """smart_list() applies the given func to each element."""
         self.assertEqual(smart_list('1,2,3', func=lambda x: int(x)), [1, 2, 3])
 
-    def test_smart_list_tuple(self):
+    def test_smart_list__tuple_input(self):
+        """smart_list() converts a tuple into a list."""
         self.assertEqual(smart_list((1, 2, 3)), [1, 2, 3])
 
-    def test_smart_list_list(self):
+    def test_smart_list__list_input(self):
+        """smart_list() returns a list unchanged."""
         self.assertEqual(smart_list([1, 2, 3]), [1, 2, 3])
 
-    def test_smart_list_int(self):
+    def test_smart_list__single_int(self):
+        """smart_list() wraps a single int in a list."""
         self.assertEqual(smart_list(1), [1])
 
+    def test_smart_list__parses_bracketed_delimited_string(self):
+        """A bracketed, comma-separated string is split and mapped by func."""
+        self.assertEqual(smart_list("[1, 2, 3]", func=int), [1, 2, 3])
 
-class UserDeletionTest(TenantTestCase):
+    def test_smart_list__empty_after_stripping_returns_empty_list(self):
+        """A bracket/whitespace-only string that strips to empty returns an empty list."""
+        self.assertEqual(smart_list("[   ]"), [])
 
-    def setUp(self):
+    def test_smart_list__raises_valueerror_for_unparseable_type(self):
+        """An unsupported value type raises ValueError."""
+        with self.assertRaises(ValueError):
+            smart_list(3.14)
+
+    def test_smart_list__raises_valueerror_when_func_fails_on_an_element(self):
+        """A per-element func that raises is re-raised as a ValueError."""
+        with self.assertRaises(ValueError):
+            smart_list("x,y", func=int)
+
+
+class UserDeletionTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student and related objects (badge, comment, notification, etc.) to test cascade deletion."""
         # Create a student user to be deleted
-        self.student = baker.make(User)
+        cls.student = baker.make(User)
 
         # Create related objects for student user
-        self.badge_assertion = baker.make('BadgeAssertion', user=self.student)
-        self.comment = baker.make('Comment', user=self.student)
-        self.course_student = baker.make('CourseStudent', user=self.student)
-        self.notification = baker.make('Notification', recipient=self.student)
-        self.portfolio = baker.make('Portfolio', user=self.student)
-        self.quest_submission = baker.make('QuestSubmission', user=self.student)
+        cls.badge_assertion = baker.make('BadgeAssertion', user=cls.student)
+        # Give the GFK-bearing models explicit, real targets so baker doesn't fill
+        # them with a random (possibly table-less) model under the reused schema.
+        user_ct = ContentType.objects.get_for_model(User)
+        cls.comment = baker.make('Comment', user=cls.student, target_content_type=None)
+        cls.course_student = baker.make('CourseStudent', user=cls.student)
+        cls.notification = baker.make(
+            'Notification', recipient=cls.student,
+            sender_content_type=user_ct, sender_object_id=cls.student.id,
+        )
+        cls.portfolio = baker.make('Portfolio', user=cls.student)
+        cls.quest_submission = baker.make('QuestSubmission', user=cls.student)
 
-    def test_delete_student_and_cascade(self):
+    def test_delete_student__cascades_to_related_objects(self):
+        """Deleting a student also deletes their badge, comment, registration, notification, portfolio, and submission."""
         # Ensure that the related objects exist before deletion
         self.assertTrue(self.badge_assertion.pk)
         self.assertTrue(self.comment.pk)
@@ -271,3 +575,117 @@ class UserDeletionTest(TenantTestCase):
         self.assertRaises(Notification.DoesNotExist, self.notification.refresh_from_db)
         self.assertRaises(Portfolio.DoesNotExist, self.portfolio.refresh_from_db)
         self.assertRaises(QuestSubmission.DoesNotExist, self.quest_submission.refresh_from_db)
+
+
+class ProfileNameMethodsTest(ByteDeckTenantTestCase):
+    """Covers Profile's display-name variants and small string helpers."""
+
+    def setUp(self):
+        """A user with a real first/last name whose auto-created profile we exercise."""
+        self.user = baker.make(User, first_name="Jane", last_name="Doe")
+        self.profile = self.user.profile
+
+    def test_str__includes_preferred_name_and_alias(self):
+        """__str__ shows 'Preferred (First) Last, aka <clipped alias>' when all are set: the
+        preferred name leads, as it does everywhere else the student is named (#2807)."""
+        self.profile.preferred_name = "Janey"
+        self.profile.alias = "JD"
+        self.assertEqual(str(self.profile), "Janey (Jane) Doe, aka JD")
+
+    def test_teacher_name__first_and_last_without_a_preferred_name(self):
+        """With no preferred name there is nothing to put in brackets."""
+        self.assertEqual(self.profile.teacher_name(), "Jane Doe")
+
+    def test_teacher_name__no_trailing_space_without_a_last_name(self):
+        """A student who has given only first names is named by those alone."""
+        self.user.last_name = ""
+        self.profile.preferred_name = "Janey"
+        self.assertEqual(self.profile.teacher_name(), "Janey (Jane)")
+
+    def test_teacher_name__username_before_a_first_name_is_given(self):
+        """A new student with no names yet is shown by their username, alias or not."""
+        self.user.first_name = ""
+        self.profile.alias = "JD"
+        self.assertEqual(self.profile.teacher_name(), self.user.username)
+        self.assertEqual(str(self.profile), self.user.username)
+
+    def test_get_preferred_name__prefers_preferred_over_first_name(self):
+        """get_preferred_name returns the preferred name when one is set."""
+        self.profile.preferred_name = "Janey"
+        self.assertEqual(self.profile.get_preferred_name(), "Janey")
+
+    def test_preferred_full_name__appends_last_name(self):
+        """With no preferred name, preferred_full_name is the first + last name."""
+        self.assertEqual(self.profile.preferred_full_name(), "Jane Doe")
+
+    def test_public_name__internal_only_returns_formal_name(self):
+        """When preferred_internal_only is set, the public name falls back to the formal name."""
+        self.profile.preferred_internal_only = True
+        self.assertEqual(self.profile.public_name(), self.user.get_full_name())
+
+    def test_internal_name__appends_clipped_alias(self):
+        """internal_name appends ', aka <alias>' when an alias is set."""
+        self.profile.alias = "JD"
+        self.assertEqual(self.profile.internal_name(), "Jane Doe, aka JD")
+
+    def test_formal_name__is_users_full_name(self):
+        """formal_name is the user's full name."""
+        self.assertEqual(self.profile.formal_name(), "Jane Doe")
+
+    def test_get_avatar_url__returns_avatar_url_when_set(self):
+        """get_avatar_url returns the avatar's own url once an avatar is set."""
+        self.profile.avatar = "avatars/jane.png"
+        self.assertTrue(self.profile.get_avatar_url().endswith("avatars/jane.png"))
+
+
+class ProfileManagerAndQuerySetTest(ByteDeckTenantTestCase):
+    """Covers the ProfileManager / ProfileQuerySet filter helpers."""
+
+    def test_all_visible__filters_visible_to_other_students(self):
+        """all_visible() returns only profiles flagged visible to other students."""
+        Profile.objects.all().update(visible_to_other_students=True)
+        self.assertTrue(Profile.objects.all_visible().exists())
+
+    def test_all_inactive__includes_profiles_of_inactive_users(self):
+        """all_inactive() returns the profiles of users whose accounts are inactive."""
+        inactive_user = baker.make(User, is_active=False)
+        self.assertIn(inactive_user.profile, Profile.objects.all_inactive())
+
+    def test_queryset__announcement_email_filter(self):
+        """The announcement_email queryset filter selects profiles opted into announcement emails."""
+        Profile.objects.all().update(get_announcements_by_email=True)
+        self.assertTrue(Profile.objects.get_queryset().announcement_email().exists())
+
+
+class ProfileMiscMethodsTest(ByteDeckTenantTestCase):
+    """Covers gone_stale, xp_to_next_rank, and xp_since_last_rank."""
+
+    def setUp(self):
+        """A user whose auto-created profile we exercise."""
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_gone_stale__true_with_no_submissions(self):
+        """A profile that has never submitted a quest is considered stale."""
+        self.profile.time_of_last_submission = None
+        self.assertTrue(self.profile.gone_stale())
+
+    def test_gone_stale__true_when_last_submission_over_five_days_ago(self):
+        """A profile whose last submission was more than five days ago is stale."""
+        self.profile.time_of_last_submission = timezone.now() - timezone.timedelta(days=6)
+        self.assertTrue(self.profile.gone_stale())
+
+    def test_gone_stale__false_when_last_submission_is_recent(self):
+        """A profile that submitted a quest just now is not stale."""
+        self.profile.time_of_last_submission = timezone.now()
+        self.assertFalse(self.profile.gone_stale())
+
+    def test_xp_to_next_rank__zero_when_maxed_out(self):
+        """When there is no next rank (maxed out), xp_to_next_rank is 0."""
+        with patch.object(Profile, 'next_rank', return_value=None):
+            self.assertEqual(self.profile.xp_to_next_rank(), 0)
+
+    def test_xp_since_last_rank__zero_when_rank_lookup_fails(self):
+        """xp_since_last_rank swallows a failed rank lookup and returns 0."""
+        with patch.object(Profile, 'rank', side_effect=Exception("boom")):
+            self.assertEqual(self.profile.xp_since_last_rank(), 0)

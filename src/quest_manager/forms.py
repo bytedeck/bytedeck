@@ -5,14 +5,51 @@ from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
-from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
+from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget, Select2Widget
 
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
-from utilities.fields import RestrictedMultiFileFormField
+from comments.sanitize import sanitize_comment_html
+from utilities.fields import ALL_SCRIPT_CAPABLE_TYPES, RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
+from courses.forms import XPCourseChoiceMixin
+from courses.models import CourseStudent
+
 from .models import Category, Quest, CommonData
+
+
+#: Quest fields a student TA may not set. A TA works on drafts, so whether a quest is
+#: visible to students (``published``), who may keep editing it (``editor``), whether it is
+#: filed away (``archived``) and whether it escapes course enrolment
+#: (``available_outside_course``) all stay with the teacher.
+TA_RESTRICTED_QUEST_FIELDS = ('published', 'editor', 'archived', 'available_outside_course')
+
+
+def remove_layout_fields(layout_object, field_names):
+    """Remove the named fields from a crispy-forms layout tree, in place.
+
+    Used when a form subclass drops fields the shared layout still names, so crispy is
+    never asked to render a field the form does not have.
+
+    Args:
+        layout_object: a crispy ``Layout`` (or any nested layout object). Objects without
+            a ``fields`` list, such as ``HTML``, are left alone.
+        field_names: an iterable of field names to drop wherever they appear in the tree.
+
+    Returns:
+        None. The layout is modified in place.
+    """
+    fields = getattr(layout_object, 'fields', None)
+    if fields is None:
+        return
+
+    layout_object.fields = [
+        field for field in fields
+        if not (isinstance(field, str) and field in field_names)
+    ]
+    for child in layout_object.fields:
+        remove_layout_fields(child, field_names)
 
 
 class BadgeLabel:
@@ -58,17 +95,20 @@ class QuestForm(forms.ModelForm):
         ),
     )
 
+    # Declared here rather than generated from the model, so Meta.widgets doesn't reach it: its
+    # searchable dropdown is set on the field itself.
     campaign = forms.ModelChoiceField(
         queryset=Category.objects.all(),
         required=False,
-        limit_choices_to={'published': True}
+        limit_choices_to={'published': True},
+        widget=Select2Widget(attrs={'data-theme': 'bootstrap'}),
     )
 
     class Meta:
         model = Quest
         fields = ('name', 'published', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
-                  'campaign', 'common_data', 'submission_details', 'instructor_notes',
+                  'campaign', 'common_data', 'submission_details', 'instructor_notes', 'quick_reply',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
                   'map_transition', 'tags',
                   'new_quest_prerequisite',
@@ -101,16 +141,26 @@ class QuestForm(forms.ModelForm):
             'date_expired': DatePickerInput(),
             'time_expired': TimePickerInput(),
 
-            # TODO: Campaign Autocomplete
-            # 'campaign': autocomplete.ModelSelect2(url='quests:category_autocomplete'),
-            # 'common_data': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
-            # 'specific_teacher_to_notify': Select2Widget(),
+            # Searchable dropdowns. Their options come with the page, so each field keeps its
+            # queryset: active Common Quest Info only, and staff only for the teacher to notify.
+            'common_data': Select2Widget(attrs={'data-theme': 'bootstrap'}),
+            'specific_teacher_to_notify': Select2Widget(attrs={'data-theme': 'bootstrap'}),
 
-            # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
             'tags': BootstrapTaggitSelect2Widget(attrs={'data-theme': 'bootstrap'})
         }
 
     def __init__(self, *args, **kwargs):
+        """Build the quest form's crispy layout.
+
+        Beyond the model fields, the layout carries the form's action buttons (cancel and submit,
+        repeated top and bottom) and links out to the two parts of a quest configured on their own
+        pages: prerequisites and submission questions. Both of those need a saved quest to attach
+        to, so on the create form they render as disabled placeholders explaining why.
+
+        Args:
+            *args: positional arguments passed through to ``forms.ModelForm``.
+            **kwargs: keyword arguments passed through to ``forms.ModelForm``.
+        """
         super().__init__(*args, **kwargs)
 
         self.fields['common_data'].label = 'Common Quest Info'
@@ -123,6 +173,18 @@ class QuestForm(forms.ModelForm):
             'Edit Prerequisites</a>' \
             '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
             'before you can add prerequisites.">Edit Prerequisites</button>' \
+            '{% endif %} '
+
+        # Questions are managed on their own page, so link to it from the form where the rest of
+        # the quest is configured (#2347); the detail page's "Submission Questions" panel is the
+        # other way in. Staff-only, because every view in the questions app requires staff and
+        # TAQuestForm inherits this layout, so an unguarded button would 403 for a TA.
+        questions_btn = '{% if request.user.is_staff %}' \
+            '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'questions:list\' object.id %}">' \
+            'Manage Questions</a>' \
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
+            'before you can add submission questions.">Manage Questions</button>' \
+            '{% endif %}' \
             '{% endif %}'
 
         self.helper = FormHelper()
@@ -130,6 +192,7 @@ class QuestForm(forms.ModelForm):
             HTML(cancel_btn),
             HTML(submit_btn),
             HTML(prereqs_btn),
+            HTML(questions_btn),
             Div(
                 'name',
                 'xp',
@@ -146,6 +209,7 @@ class QuestForm(forms.ModelForm):
                 'max_repeats',
                 'hours_between_repeats',
                 'tags',
+                'quick_reply',
                 Accordion(
                     AccordionGroup(
                         "Basic Prerequisites",
@@ -205,26 +269,96 @@ class QuestForm(forms.ModelForm):
                 "either turn Hidable off or turn Blocking off."
             )
 
+        # make sure repeat_per_semester isn't combined with unlimited repeats (issue #1531):
+        # unlimited repeats never run out, so a per-semester reset would do nothing, and the
+        # combination made the quest never repeatable, causing 404s for returning students.
+        max_repeats = cleaned_data.get('max_repeats')
+        repeat_per_semester = cleaned_data.get('repeat_per_semester')
+
+        if max_repeats == -1 and repeat_per_semester:
+            raise ValidationError(
+                "A quest with unlimited repeats (Max Repeats = -1) cannot also use "
+                "'Repeat per semester', because unlimited repeats never run out and a "
+                "new semester would have nothing to reset. Either set Max Repeats to "
+                "the number of repeats allowed each semester, or turn off 'Repeat per "
+                "semester' (in the Advanced section) to keep unlimited repeats."
+            )
+
 
 class TAQuestForm(QuestForm):
-    """ Modified QuestForm that removes some fields TAs should not be able to set. """
+    """QuestForm for a student TA, with the fields a TA may not set left off the form entirely.
+
+    Those fields (``TA_RESTRICTED_QUEST_FIELDS``) are not bound, so a hand-made POST cannot
+    reach them: an unbound field is one a ``ModelForm`` never writes to its instance. Editing
+    therefore leaves whatever the teacher set in place, and creating falls back to the model
+    defaults. ``QuestFormViewMixin.form_valid`` still forces ``published`` and ``editor`` for a
+    TA, which keeps a TA's quest a draft of their own no matter which form or view saved it.
+    """
+
+    class Meta(QuestForm.Meta):
+        fields = tuple(f for f in QuestForm.Meta.fields if f not in TA_RESTRICTED_QUEST_FIELDS)
+
     def __init__(self, *args, **kwargs):
+        """Build the TA form, then drop the restricted fields from the inherited layout.
+
+        Args:
+            *args: positional arguments passed through to ``QuestForm``.
+            **kwargs: keyword arguments passed through to ``QuestForm``.
+        """
         super().__init__(*args, **kwargs)
-        # SET published here to?
-        self.fields['published'].widget = forms.HiddenInput()
-        self.fields['available_outside_course'].widget = forms.HiddenInput()
-        self.fields['archived'].widget = forms.HiddenInput()
-        self.fields['editor'].widget = forms.HiddenInput()
+        # QuestForm's layout names fields this form doesn't have, so take them back out
+        remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
-class SubmissionForm(forms.Form):
+class SanitizeCommentTextMixin:
+    """Sanitizes HTML entered in a form's `comment_text` field.
+
+    Comment text is written by anyone, including students, and is rendered with |safe,
+    so it must be sanitized or an injected script runs for whoever reads the comment
+    (issue #1343). It carries rich HTML from the Summernote editor, so the sanitizer is
+    an allow-list rather than a blanket escape: legitimate formatting survives while
+    scripts and event-handler attributes do not (issue #2113).
+
+    Every form with a `comment_text` field needs this, the Summernote-backed ones
+    included. The Summernote "Safe" widget bleaches on its way in but allows every
+    attribute (see `ByteDeckSummernoteSafeInplaceWidget.value_from_datadict`), so it
+    stops a `<script>` tag and not an `onerror=`.
+    """
+
+    def clean_comment_text(self):
+        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
+        return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
+
+
+class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    registration = forms.ModelChoiceField(queryset=CourseStudent.objects.none(), required=False)
+
+    # The comment's attachments take web files (SVG, HTML, XML, MHTML) as well as everything
+    # else. This is the general "hand in your work" box, which whole cohorts of existing quests
+    # ask for a page or a drawing through, and refusing those types here stopped students
+    # handing that work in at all. A file question is the place to ask for one type rather than
+    # any, and that is where the narrower rule lives: its "Also allow file types that can carry
+    # a script" box is off by default, so a question asking for an image still takes only images.
+    #
+    # The cost is that an attachment here is linked at its storage URL and opens in the page, so
+    # a student can hand in a file that runs their script in the session of whoever opens it,
+    # usually their teacher. Serving these as downloads instead, the way a question's file answer
+    # already is, is the graceful version of the restriction and is tracked separately (#2726).
     attachments = RestrictedMultiFileFormField(
         required=False,
         max_upload_size=16777216,
+        script_capable_types=ALL_SCRIPT_CAPABLE_TYPES,
         label="Attach files",
-        help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
+        # Says what the list above the button does not: the limits, and that a file is stored
+        # the moment it is chosen rather than when the quest is handed in (#2749).
+        help_text=(
+            "Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file. "
+            "They are saved with your draft as soon as you choose them."
+        ),
     )
 
 
@@ -259,7 +393,7 @@ class SubmissionFormStaff(SubmissionForm):
         )
 
 
-class SubmissionReplyForm(forms.Form):
+class SubmissionReplyForm(SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
 
@@ -267,18 +401,59 @@ class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
     pass
 
 
-class SubmissionQuickReplyForm(forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
+    """A teacher's reply to one quest submission, rendered once per row on the approvals page."""
+
+    comment_text = forms.CharField(
+        label='', required=False,
+        # autocomplete="off" asks the browser not to remember what was typed here. Replies are
+        # written about one specific submission, so a browser refilling the box on a reload is
+        # never what a teacher wants, and the approvals list is rebuilt on every load (#2685).
+        widget=forms.Textarea(attrs={'rows': 2, 'autocomplete': 'off'}),
+    )
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
-    def __init__(self, *args, **kwds):
+    def __init__(self, *args, award_choices=None, **kwds):
+        """Build the form, optionally reusing an award list that has already been fetched.
+
+        Args:
+            *args: positional arguments passed through to ``forms.Form``.
+            **kwds: keyword arguments passed through to ``forms.Form``.
+            award_choices: the `(value, label)` pairs to offer in the award select, from
+                `build_award_choices()`. `Badge.objects.all_manually_granted()` costs a
+                prerequisite count per badge, so a page rendering one of these per row fetches
+                the list once and hands the same pairs to every row. This sets the select's
+                options only, which is all a form being rendered needs; a form that has to
+                clean a submitted award leaves it out and gets the queryset that validates it.
+
+        Returns:
+            None.
+        """
         super().__init__(*args, **kwds)
-        self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        if award_choices is None:
+            self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        else:
+            # Assigning .queryset instead would re-run the query for every row: ModelChoiceField
+            # copies what it is given, and the copy carries no result cache.
+            self.fields['award'].choices = award_choices
+
+    @classmethod
+    def build_award_choices(cls):
+        """Fetch the award select's options once, for a page that renders many of these forms.
+
+        Returns:
+            list[tuple]: `(value, label)` pairs to pass back in as `award_choices`.
+        """
+        return list(cls().fields['award'].choices)
 
 
-class SubmissionQuickReplyFormStudent(forms.Form):
+class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    registration = forms.ModelChoiceField(queryset=CourseStudent.objects.none(), required=False)
 
 
 class CommonDataForm(forms.ModelForm):

@@ -1,0 +1,36 @@
+{% comment %}
+  A column heading that sorts the whole list, for any table paginated on the server.
+
+  bootstrap-table's own `data-sortable` reorders the rows the browser is holding, which on
+  a paginated table is one page. This links back to the view instead, so the ordering is
+  applied to every row before the page is cut from it.
+
+  Requires in the context:
+    sort_column (str): the column key currently ordering the list, '' when the list is in
+      its own default order.
+    sort_descending (bool): whether that column is applied in reverse.
+
+  Takes:
+    column (str): this column's key, one of those the view offers.
+    label (str): the heading text.
+
+  `page` is dropped from every link, because page 3 of a list ordered by name holds
+  different rows than page 3 of the same list ordered by XP: carrying the number over
+  would land the reader somewhere they did not ask to be. Every other parameter is kept,
+  so a search stays applied while its results are reordered.
+{% endcomment %}
+{% if column != sort_column %}
+  <a href="{% querystring sort=column page=None %}" title="Sort by {{ label }}">
+    {{ label }} <i class="fa fa-fw fa-sort text-muted"></i>
+  </a>
+{% elif sort_descending %}
+  <a href="{% querystring sort=column page=None %}" title="Sorted by {{ label }}, reversed. Click to restore the order.">
+    {{ label }} <i class="fa fa-fw fa-sort-desc"></i>
+  </a>
+{% else %}
+  {% with reversed_column="-"|add:column %}
+    <a href="{% querystring sort=reversed_column page=None %}" title="Sorted by {{ label }}. Click to reverse the order.">
+      {{ label }} <i class="fa fa-fw fa-sort-asc"></i>
+    </a>
+  {% endwith %}
+{% endif %}

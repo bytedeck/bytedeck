@@ -1,12 +1,17 @@
 import os
+import posixpath
+import warnings
+from functools import partial
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import models, transaction
+from django.utils.deconstruct import deconstructible
 from django.utils.html import escape
 from utilities.html import urlize
+from utilities.uploads import UploadToOwnFolder, is_own_folder
 
 from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
@@ -15,6 +20,11 @@ from django.db.models.signals import pre_delete
 # from quest_manager.models import Quest
 
 # Create your models here.
+
+#: The class of a list of details the app adds below what a comment's author wrote, under a rule
+#: of its own: a quest's hand-in choices (quest_manager.views.complete). The comment template
+#: reads it, through Comment.has_details, to draw one rule below a comment rather than two.
+COMMENT_DETAILS_CLASS = "comment-details"
 
 
 class CommentQuerySet(models.query.QuerySet):
@@ -34,7 +44,29 @@ class CommentManager(models.Manager):
         return qs.select_related('user')
 
     def all_with_target_object(self, object):
-        return self.get_queryset().get_object_target(object).get_no_parents()
+        """Return the target's top-level comments, ready for the comments template.
+
+        That template reads each comment's attached documents and its published question answers
+        (with their questions), so both are prefetched here rather than left to each caller.
+        Without it every rendered comment costs two extra queries, and an announcements page
+        showing a hundred comments pays two hundred of them (#2168).
+
+        Args:
+            object: the model instance the comments target, such as a QuestSubmission or an
+                Announcement.
+
+        Returns:
+            QuerySet[Comment]: the comments targeting the object, excluding replies.
+        """
+        from questions.models import QuestionSubmission
+
+        return self.get_queryset().get_object_target(object).get_no_parents().prefetch_related(
+            "document_set",
+            models.Prefetch(
+                "question_submissions",
+                queryset=QuestionSubmission.objects.select_related("question"),
+            ),
+        )
 
     # def all(self):
     #     return self.get_queryset.get_active().get_no_parents()
@@ -61,13 +93,24 @@ class CommentManager(models.Manager):
         if parent is not None:
             comment.parent = parent
 
+        comment.full_clean()
         comment.save(using=self._db)
 
         # add anchor target to Comment path now that id assigned when saved
         comment.path += "#comment-" + str(comment.id)
+        comment.full_clean()
         comment.save(using=self._db)
 
         return comment
+
+
+# BeautifulSoup warns when the markup it is handed looks more like a URL or a file name than
+# HTML, in case the caller meant to open it rather than parse it. Every parse in this app is of
+# HTML or text a person typed, never a location, and a comment that is nothing but a link is how
+# a student hands in a Google Doc, so the approvals page logged the warning for those (#1280). The
+# filter is process-wide, which also covers the app's other parses of typed text, and unlike
+# warnings.catch_warnings() it is safe under uwsgi's threads.
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 def clean_html(text, convert_newlines=True):
@@ -81,7 +124,7 @@ def clean_html(text, convert_newlines=True):
     # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
 
     soup = BeautifulSoup(text, "html.parser")
-    text_nodes = soup.find_all(text=True)
+    text_nodes = soup.find_all(string=True)
     # https://stackoverflow.com/questions/53588107/prevent-beautifulsoups-find-all-from-converting-escaped-html-tags/53592575?noredirect=1#comment94061687_53592575
     # text_nodes2 = [escape(x) for x in soup.strings]
     for textNode in text_nodes:
@@ -94,8 +137,10 @@ def clean_html(text, convert_newlines=True):
         urlized_text = urlize(escaped_text, trim_url_limit=50)
         textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
 
-    # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
-    soup = BeautifulSoup(soup.renderContents(), "html.parser", from_encoding="UTF-8")
+    # Parse the result again, so the links urlize wrote into the text nodes above are tags the
+    # steps below can find. Reading it back from text keeps bs4 from decoding bytes, which logs a
+    # decoding warning for an empty comment, as every new draft is (#1280).
+    soup = BeautifulSoup(soup.decode_contents(), "html.parser")
 
     # All links in comments: force open in new tab
     links = soup.find_all('a')
@@ -106,9 +151,14 @@ def clean_html(text, convert_newlines=True):
     # https://stackoverflow.com/questions/55619920/how-to-fix-missing-ul-tags-in-html-list-snippet-with-python-and-beautiful-soup
     ulgroup = 0
     uls = []
-    for li in soup.findAll('li'):
-        previous_element = li.findPrevious()
-        # if <li> already wrapped in <ul>, do nothing
+    for li in soup.find_all('li'):
+        # An <li> already in a list is left alone. Its parent is what says so: the element before
+        # it only does for a list's first item, since a later item follows the last tag inside
+        # the item before it (a <b>, say), and an <ol>'s items would read as bare as well.
+        if li.parent and li.parent.name in ('ul', 'ol'):
+            continue
+        previous_element = li.find_previous()
+        # a bare <li> straight after a <ul> start tag is left where it is
         if previous_element and previous_element.name == 'ul':
             continue
         # if <li> is the first element of a <li> group, wrap it in a new <ul>
@@ -131,7 +181,10 @@ class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
     path = models.CharField(max_length=350)
-    text = models.TextField()
+    # blank is allowed because a draft comment (e.g. a quest submission's draft_comment)
+    # is created empty before the student has typed anything; full_clean() would otherwise
+    # reject it (issue #1630).
+    text = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     active = models.BooleanField(default=True)
@@ -149,6 +202,18 @@ class Comment(models.Model):
 
     def __str__(self):
         return self.text
+
+    @property
+    def has_details(self):
+        """Whether this comment ends with details the app listed below its author's words.
+
+        Those come with a rule above them, so whatever follows the comment (its attached files)
+        needs no second one.
+
+        Returns:
+            bool: True when the text holds a COMMENT_DETAILS_CLASS list.
+        """
+        return f'class="{COMMENT_DETAILS_CLASS}"' in (self.text or '')
 
     def get_target_object(self):
         if self.target_object_id is not None:
@@ -171,11 +236,41 @@ class Comment(models.Model):
 
     def flag(self):
         self.flagged = True
+        self.full_clean()
         self.save()
 
     def unflag(self):
         self.flagged = False
+        self.full_clean()
         self.save()
+
+    def move_attachments_to_new_folder(self):
+        """Move this comment's attached files, together, into a new folder of their own (#2861).
+
+        Called once one of them has been removed. A student who removes their `style.css` and
+        attaches a corrected one would otherwise store it at the address the removed one had,
+        where the CDN can go on serving the removed file for up to a day (#2805). With the rest
+        moved to a new folder, the replacement joins them at an address no file has had, and
+        their page still finds its stylesheet beside it.
+
+        Each old file is deleted once the transaction commits, as a removed file is: storage
+        isn't transactional, so a rollback must not leave a row naming a file already gone. A
+        file already missing from storage has nothing to copy, and its row is pointed at the new
+        folder all the same: a row left naming the old folder would offer it to the next upload
+        (see ``Document.shared_folder``), putting a replacement back at the removed file's address.
+        """
+        field = Document._meta.get_field('docfile')
+        folder = field.upload_to.new_folder()
+        for document in self.document_set.order_by('pk'):
+            storage, old_name = document.docfile.storage, document.docfile.name
+            new_name = posixpath.join(folder, posixpath.basename(old_name))
+            if storage.exists(old_name):
+                with storage.open(old_name) as stored:
+                    new_name = storage.save(new_name, stored, max_length=field.max_length)
+                transaction.on_commit(partial(storage.delete, old_name))
+            document.docfile.name = new_name
+            document.full_clean()
+            document.save(update_fields=['docfile'])
 
     def get_children(self):
         if self.is_child():
@@ -199,10 +294,58 @@ class Comment(models.Model):
 
 
 # Document Handler ############################################
+@deconstructible
+class UploadToCommentFolder(UploadToOwnFolder):
+    """An ``upload_to`` that keeps the files attached to one comment together, in a folder of
+    their own (#2861).
+
+    A student handing in a web page attaches its HTML file and the stylesheet it links to by a
+    relative address, such as `style.css`, and the page finds it only if both sit in the same
+    folder. So a file joins the folder of the files already on its comment, whether it came with
+    them or with a later draft save, and only a comment's first file gets a new folder.
+    """
+
+    def __call__(self, instance, filename):
+        """Return the path an upload is stored at: its comment's folder, or a new one, then its name.
+
+        Args:
+            instance (Document): the document the file belongs to.
+            filename (str): the name the file was uploaded under.
+
+        Returns:
+            str: the path, relative to the storage's root.
+        """
+        folder = instance.shared_folder()
+        if folder:
+            return posixpath.join(folder, filename)
+        return super().__call__(instance, filename)
+
+
 class Document(models.Model):
-    docfile = models.FileField(upload_to='documents/%Y/%m/%d')
+    # 255, not FileField's default 100: the path holds a dated folder and a folder of its own
+    # before the name, and a name too long for the rest is cut short (see chosen_name)
+    docfile = models.FileField(upload_to=UploadToCommentFolder('documents/%Y/%m/%d'), max_length=255)
     # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)
+
+    def shared_folder(self):
+        """Return the folder this document's file shares with the other files on its comment.
+
+        Only a folder of their own counts. Files stored before every upload got one sit straight
+        in their day's folder (#2805), among everyone's uploads from that day, and a new file
+        must not join them there.
+
+        Returns:
+            str | None: the folder, relative to the storage's root, or None when the comment has
+            no other file in one, or the document is on no comment.
+        """
+        if self.comment_id is None:
+            return None
+        names = Document.objects.filter(comment_id=self.comment_id).exclude(pk=self.pk).order_by('pk')
+        for name in names.values_list('docfile', flat=True):
+            if is_own_folder(posixpath.dirname(name)):
+                return posixpath.dirname(name)
+        return None
 
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!

@@ -575,8 +575,11 @@ class Prereq(IsAPrereqMixin, models.Model):
         if not isinstance(prereq_object, IsAPrereqMixin):
             raise TypeError("prereq_object does not implement IsAPrereqMixin")
 
-        # prereq_object can be sent empty for convenience
-        if not parent_object or not prereq_object:
+        # prereq_object can be sent empty for convenience.
+        # Unreachable in practice: the isinstance() guards above already reject None/invalid
+        # objects with a TypeError, and any model instance that passes them is truthy, so this
+        # falsy-guard never fires. Kept as defensive code; excluded from coverage.
+        if not parent_object or not prereq_object:  # pragma: no cover
             return None
 
         new_prereq = cls(
@@ -604,6 +607,14 @@ class PrereqAllConditionsMet(models.Model):
     ids = models.TextField(default='[]')  # str representation of a list of ids for the model, e.g '[25, 34, 55, 56, 77]'
     model_name = models.CharField(max_length=256)  # model name as a string with .get_model_name()
 
+    class Meta:
+        constraints = [
+            # Only one cache object should exist per user per model.  Duplicates (created by
+            # concurrently running celery tasks) caused MultipleObjectsReturned errors (issue #520),
+            # and with this constraint get_or_create()/update_or_create() are safe from that race.
+            models.UniqueConstraint(fields=['user', 'model_name'], name='unique_user_model_name')
+        ]
+
     def add_id(self, new_id):
         ids = self.get_ids()
         if new_id not in ids:
@@ -617,9 +628,14 @@ class PrereqAllConditionsMet(models.Model):
             self.set_ids(ids)
 
     def get_ids(self):
+        """Parse the stored ``ids`` text into a list of ids, or an empty list if blank."""
         if self.ids:
             return json.loads(self.ids)
-        return PrereqAllConditionsMet.ids.default
+        # Empty/blank ``ids`` -> an empty list (matches the field default '[]' and the
+        # list return type of the branch above). The previous ``PrereqAllConditionsMet.ids.default``
+        # raised AttributeError (a class-level field access yields a DeferredAttribute, which has
+        # no ``.default``); it never fired only because ``ids`` defaults to '[]' and is thus truthy.
+        return []
 
     def set_ids(self, id_list=None):
         if id_list is None:

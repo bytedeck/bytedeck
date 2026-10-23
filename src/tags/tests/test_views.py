@@ -3,21 +3,22 @@ import json
 from django import forms
 from django.core import signing
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from django.utils.text import slugify
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
 from tags.forms import TagForm
+from tags.views import TagDetailStudent
 from tags.widgets import TaggitSelect2Widget
 from taggit.forms import TagField
 from taggit.models import Tag
 from siteconfig.models import SiteConfig
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 User = get_user_model()
 
@@ -28,14 +29,15 @@ class TaggitSelect2WidgetForm(forms.Form):
     )
 
 
-class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
+class AutoResponseViewTests(ByteDeckTenantTestCase):
+    """Tests the tag autocomplete endpoint and who is allowed to query it."""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
+    @classmethod
+    def setUpTestData(cls):
+        """Create a tag for the autocomplete view tests."""
         Tag.objects.create(name="test-tag")
 
-    def test_autocomplete_view(self):
+    def test_autocomplete_view__accessible(self):
         """ Make sure our custom django-select2 view for tag widget is accessible"""
         url = reverse('tags:auto-json')
         form = TaggitSelect2WidgetForm()
@@ -70,21 +72,27 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(data['results'][0]['text'], 'test-tag')
 
 
-class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
+class TagCRUDViewTests(ByteDeckTenantTestCase):
+    """Tests the tag list/create/update/delete views, their access rules, and the staff-only admin buttons."""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
+        """Create teacher/student users and a tag for the CRUD view tests."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+        # the registration is what makes the deck's semester theirs (issue #2441), so the
+        # work stamped with it below counts toward the XP these views total by tag
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
 
-        self.test_password = "password"
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password)
-
-        self.tag = Tag.objects.create(name="test-tag")
+        cls.tag = Tag.objects.create(name="test-tag")
 
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""
-        self.assert302('tags:list')
-        self.assert302('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
+        self.assertRedirectsLogin('tags:list')
+        self.assertRedirectsLogin('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
         self.assertRedirectsLogin('tags:detail_staff', args=[self.tag.pk])
         self.assertRedirectsLogin('tags:create')
         self.assertRedirectsLogin('tags:update', args=[self.tag.pk])
@@ -112,7 +120,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('tags:update', args=[self.tag.pk])
         self.assert200('tags:delete', args=[self.tag.pk])
 
-    def test_ListView(self):
+    def test_ListView__displays_all_tags(self):
         """Make sure list view displays all tags correctly"""
         baker.make(Tag, _quantity=5)
 
@@ -182,7 +190,12 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
                 is_approved=True,
                 semester=SiteConfig().get().active_semester,
             )
-            baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
+            baker.make(
+                'badges.badgeassertion', badge=badge_set[0], user=self.test_student,
+                # as create_assertion() does: the field is nullable, so an unstamped
+                # assertion belongs to no semester and wouldn't count toward this one
+                semester=SiteConfig().get().active_semester,
+            )
 
         self.client.force_login(self.test_student)
         response = self.client.get(reverse('tags:detail_student', args=[self.tag.pk, self.test_student.pk]))
@@ -241,7 +254,68 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         for i in range(2, num_subs, 1):
             self.assertContains(response, f'{repeatable_quest.name} ({i}) ({repeatable_quest.xp} XP)', html=True)
 
-    def test_CreateView(self):
+    def test_get_quest_submissions__query_count_flat_as_submissions_grow(self):
+        """get_quest_submissions counts submissions per quest in memory and
+        select_relates the quest, so its query count does not grow with the
+        number of submissions (it previously ran a COUNT and loaded the quest
+        per submission)."""
+        repeatable_quest = baker.make('quest_manager.quest', max_repeats=-1, xp=1)
+        repeatable_quest.tags.add(self.tag.name)
+
+        def add_submissions(n):
+            for _ in range(n):
+                baker.make(
+                    'quest_manager.questsubmission',
+                    quest=repeatable_quest, user=self.test_student,
+                    is_completed=True, is_approved=True,
+                    semester=SiteConfig.get().active_semester,
+                )
+
+        view = TagDetailStudent()
+        view.user = self.test_student
+        view.object = self.tag
+
+        add_submissions(2)
+        view.get_quest_submissions()  # warm caches
+        with CaptureQueriesContext(connection) as few_queries:
+            view.get_quest_submissions()
+
+        add_submissions(4)
+        with CaptureQueriesContext(connection) as many_queries:
+            view.get_quest_submissions()
+
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def test_get_badge_assertions__query_count_flat_as_assertions_grow(self):
+        """get_badge_assertions counts assertions per badge in memory and
+        select_relates the badge, so its query count does not grow with the
+        number of assertions."""
+        badge = baker.make('badges.badge', xp=1)
+        badge.tags.add(self.tag.name)
+
+        def add_assertions(n):
+            for _ in range(n):
+                baker.make(
+                    'badges.badgeassertion', badge=badge, user=self.test_student,
+                    semester=SiteConfig.get().active_semester,
+                )
+
+        view = TagDetailStudent()
+        view.user = self.test_student
+        view.object = self.tag
+
+        add_assertions(2)
+        view.get_badge_assertions()  # warm caches
+        with CaptureQueriesContext(connection) as few_queries:
+            view.get_badge_assertions()
+
+        add_assertions(4)
+        with CaptureQueriesContext(connection) as many_queries:
+            view.get_badge_assertions()
+
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def test_CreateView__creates_tag(self):
         """Make sure create view can create tags"""
         form_data = generate_form_data(model_form=TagForm)
 
@@ -254,7 +328,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         Invalid slug names provided to Tag CreateView should be rejected
         validators that must be passed:
-        validate_slug https://docs.djangoproject.com/en/4.2/ref/validators/#validate-slug
+        validate_slug https://docs.djangoproject.com/en/5.2/ref/validators/#validate-slug
         validate_unique_slug (custom validator, located at tags.forms.validate_unique_slug)
         """
 
@@ -275,7 +349,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, 'Tag name too similar to existing tag: test-tag')
         self.assertFalse(Tag.objects.filter(name='TEST-TAG').exists())
 
-    def test_UpdateView(self):
+    def test_UpdateView__changes_name_and_slug(self):
         """Make sure update view can change name + update slug"""
         form_data = generate_form_data(model_form=TagForm)
 
@@ -287,7 +361,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(form_data['name'].lower(), tag.name)
         self.assertEqual(form_data['name'].lower(), tag.slug)
 
-    def test_DeleteView(self):
+    def test_DeleteView__deletes_tag(self):
         """Make sure delete view can delete tag"""
         self.client.force_login(self.test_teacher)
         self.client.post(reverse('tags:delete', args=[self.tag.pk]))

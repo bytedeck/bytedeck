@@ -16,7 +16,7 @@ RemainAfterExit=yes
 WorkingDirectory=/home/ubuntu/bytedeck
 # WorkingDirectory=/usr/share/nginx/hackerspace
 ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d
-ExecStop=/usr/bin/docker compose down
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml down
 TimeoutStartSec=0
 
 [Install]

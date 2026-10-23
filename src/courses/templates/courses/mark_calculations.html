@@ -16,192 +16,283 @@ for {{user}}
   <p>Hello {{ user.profile.get_preferred_name }},
     {% if not courses %}
       I can't calculate your mark because you haven't joined a course for this
-      semester yet. Please <a href="{% url 'courses:create' %}">go here</a>
-      and join your course.</p>
-    {% elif obj.semester.days_so_far < 0 %}
+      semester yet.
+      {% if config.has_no_open_semester %}
+        No semester is open yet, so you can't join one: ask your teacher to open one.</p>
+      {% else %}
+        Please <a href="{% url 'courses:create' %}">go here</a>
+        and join your course.</p>
+      {% endif %}
+    {% elif semester.days_so_far < 0 %}
       I can't calculate your mark because semester hasn't started yet!  According
       to my records, the semester is scheduled to start on
-      <strong>{{ obj.semester.first_day }}</strong>.</p>
+      <strong>{{ semester.first_day }}</strong>.</p>
     {% else %}
-      {% if num_courses == 1 %}
+      {% if no_course_uses_marks %}
+        here is what you have earned:
+      {% elif num_courses == 1 %}
         your current mark is:
       {% else %}
         your current marks are:
       {% endif %}
       </p>
       <table class="table">
-        {% for course in courses %}
+        {% for pane in course_panes %}
           <tr>
-            <td>{{ course.block }} Block</td>
-            <td>{{ course.course }}</td>
-            <td><strong>{{ course.user.profile.mark|floatformat }}%</strong></td>
+            <td>{{ pane.registration.block }} Block</td>
+            <td>{{ pane.course }}</td>
+            {# each registration's own mark: with XP attributed per course they differ (#2440) #}
+            {# a course run on XP alone has no mark at all, rather than a mark of zero (#403) #}
+            {% if pane.uses_marks %}
+              <td><strong>{{ pane.mark|floatformat }}%</strong></td>
+            {% else %}
+              <td><strong>{{ pane.xp|floatformat }} XP</strong>, no percentage</td>
+            {% endif %}
           </tr>
         {% endfor %}
       </table>
-      <h3>Explanation</h3>
-      <p>
-        Here is an explanation of how I calculated your mark. If you have any questions about this please ask!
-      </p>
-      <div>
-        <ul>
-          <li>
-            {% if num_courses > 1 %}
-              You are a multicourse student currently registered in {{ num_courses }} courses.
-              Your <strong>{{user.profile.xp_cached}}</strong> total XP must be divided among each of your courses.  This gives you
-              <a tabindex="0" data-toggle="popover" data-trigger="hover"
-                 data-placement="top" data-html="true" href="#"
-                 data-content="You have a total of {{ user.profile.xp_cached }} XP
-            to be divided among {{ num_courses }} courses: <br/><br/>
-              <pre>{{ user.profile.xp_cached }}/{{ num_courses }} = {{ xp_per_course|floatformat }} XP</pre>
-            ">
-                <strong>{{ xp_per_course|floatformat }}</strong> XP</a> per course.
-            {% else %}
-              So far, you have earned <strong>{{ user.profile.xp_cached }}</strong> XP in your course.
-            {% endif %}
-          </li>
-          <li>We are currently
-            <a tabindex="0" data-toggle="popover" data-trigger="hover"
-               data-placement="top" data-html="true"
-               data-content="There are {{ obj.semester.num_days }} days of class in the semester.
-              So far, we've had {{ obj.semester.days_so_far }} days:<br/><br/>
-              <pre>{{ obj.semester.days_so_far }}/{{ obj.semester.num_days }} = {{ obj.semester.fraction_complete|floatformat:3 }} &times; 100 = {{ obj.semester.percent_complete|floatformat }}%</pre>
-            ">
-              {{ obj.semester.fraction_complete|floatformat:3 }} or {{ obj.semester.percent_complete|floatformat }}%</a>
-            of the way through the semester.
-          </li>
-          <li>At this pace you will have
-            <a tabindex="0" data-toggle="popover" data-trigger="hover"
-               data-placement="top" data-html="true"
-               data-content="You currently have {{ xp_per_course|floatformat }} XP, and the semester is
-              {{ obj.semester.fraction_complete|floatformat:3 }} complete:<br/><br/>
-              <pre>{{ xp_per_course|floatformat }}/{{ obj.semester.fraction_complete|floatformat:3 }} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
-            ">
-              {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
-            by the end of the semester.
-          </li>
-          <li>
-            Your course is out of {{courses.first.course.xp_for_100_percent}} XP, which means that if you get {{courses.first.course.xp_for_100_percent}} XP, you'll have 100% in the course.
-          </li>
-          <li>
-            This means that your mark is currently <a tabindex="0" data-toggle="popover" data-trigger="hover"
-               data-placement="top" data-html="true"
-               data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester,
-               and your course is out of {{courses.first.course.xp_for_100_percent}} XP:<br/><br/>
-              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.user.profile.mark|floatformat }} % </pre>
-            ">{{ obj.user.profile.mark|floatformat }}%</a>
-          </li>
-        </ul>
-      </div>
-      <p>Another way to look at it:</p>
-      <ul>
-        <li>
-          On average you have earned
-          <a tabindex="0" data-toggle="popover" data-trigger="hover"
-             data-placement="top" data-html="true"
-             data-content="You currently have {{ xp_per_course|floatformat }} XP, and we've had {{ obj.semester.days_so_far }}
-            days of class so far:<br/><br/>
-            <pre>{{ xp_per_course|floatformat }}/{{ obj.semester.days_so_far }} = {{ obj.xp_per_day_ave|floatformat }} XP per day</pre>
-          ">
-            {{ obj.xp_per_day_ave|floatformat }} XP per day</a> so far.
-        </li>
-        <li>
-          If you continue at this pace, you will have
-          <a tabindex="0" data-toggle="popover" data-trigger="hover"
-             data-placement="top" data-html="true"
-             data-content="You are averaging {{ obj.xp_per_day_ave|floatformat }}
-            XP per day, and there are a total of {{ obj.semester.num_days }}
-            days of class in the semester:<br/><br/>
-            <pre>{{ obj.xp_per_day_ave|floatformat }} x {{ obj.semester.num_days }} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
-          ">
-            {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
-          by the end of the semester.
-        </li>
-      </ul>
 
-      <h3>Charts</h3>
-
-      <p>Here are some pretty charts I made just for you, to help you visualize your progress so far:</p>
-      <div>
-
-        <ul class="nav nav-pills" role="tablist">
-          <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>
-          <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
-          <li role="presentation"><a href="#tag-distribution" role="tab" data-toggle="tab">Tags Distribution</a></li>
-        </ul>
-
-        <!-- Tab panes -->
-        <div class="tab-content">
-
-          {# == XP Progress == #}
-          <div role="tabpanel" class="tab-pane active" id="progress">
-            <div class="well chart-container">
-              <div class="loading">
-                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-                &nbsp;Calculating data for chart...
-              </div>
-              <canvas id="myChart" class="xp-chart" style="display: none; ">
-                <!-- content will be set by js in xp_chart.html -->
-              </canvas>
-            </div>
-          </div>
-
-          {# == Mark Distribution == #}
-          <div role="tabpanel" class="tab-pane" id="distribution">
-            <div class="well chart-container">
-
-              <div class="loading">
-                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-                &nbsp;Calculating data for chart...
-              </div>
-
-              <canvas id="chart-mark-distribution" class="mark-chart">
-                <!-- content will be set by js in chart_mark_distribution.html -->
-              </canvas>
-
-            </div>
-          </div>
-
-          {# == Tags Distribution == #}
-          <div role="tabpanel" class="tab-pane" id="tag-distribution">
-            <div class="well chart-container">
-              <div class="loading">
-                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-                &nbsp;Calculating data for chart...
-              </div>
-
-              <canvas id="TagChart" class="xp-chart">
-                <!-- content will be set by js in chart_tags_progress.html -->
-              </canvas>
-            </div>
-          </div>
-
-
-        </div> <!-- tab-content -->
-      </div>  <!-- tab container -->
-
-      <h3>Current Mark Ranges by XP</h3>
-      <ul>
-          {% for markrange in markranges %}
-          <li>
-              {{ markrange.name }} ({{ markrange.minimum_mark }}%): {{ markrange.xp_needed }} XP
-          </li>
+      {% comment %} Everything below the table is about one course: the XP counting toward it,
+         the mark that comes to, its charts and the ranges it is heading for are all different
+         numbers in each of a student's courses (#2440), so each course gets its own tab rather
+         than the page being about whichever one came first (#2743). A student in one course
+         has nothing to choose between, so they get the content without a tab strip over it.
+      {% endcomment %}
+      {% if num_courses > 1 %}
+        <ul class="nav nav-tabs course-tabs" role="tablist">
+          {% for pane in course_panes %}
+            <li role="presentation" {% if forloop.first %}class="active"{% endif %}>
+              <a href="#course-pane-{{ pane.registration.id }}" role="tab" data-toggle="tab">{{ pane.course }}</a>
+            </li>
           {% endfor %}
-      </ul>
+        </ul>
+      {% endif %}
+
+      <div class="tab-content course-tab-content">
+        {% for pane in course_panes %}
+          {% comment %} data-course is what the charts in this pane are drawn for; it is on the
+             pane rather than the tab above it because a student in one course has a pane but no
+             tabs {% endcomment %}
+          <div role="tabpanel" class="tab-pane {% if forloop.first %}active{% endif %}"
+               id="course-pane-{{ pane.registration.id }}" data-course="{{ pane.course.id }}"
+               data-uses-marks="{{ pane.uses_marks|yesno:'1,0' }}">
+
+            {% if not pane.uses_marks %}
+              <p>
+                <strong>{{ pane.course }}</strong> runs on XP alone, so there is no percentage to
+                work out. Keep earning XP.
+              </p>
+            {% else %}
+              <h3>Explanation</h3>
+              <p>Here is an explanation of how I calculated your mark in
+                <strong>{{ pane.course }}</strong>. If you have any questions about this please ask!</p>
+              <div>
+                <ul>
+                  <li>
+                    {% if num_courses > 1 %}
+                      You are a multicourse student currently registered in {{ num_courses }} courses.
+                      Of your <strong>{{ user.profile.xp_cached }}</strong> total XP,
+                      <a tabindex="0" data-toggle="popover" data-trigger="hover"
+                         data-placement="top" data-html="true" href="#"
+                         data-content="Quests you said should count toward {{ pane.course }} count toward it in full,
+                    and so do badges given to you for that course. Everything else is shared evenly between your
+                    {{ num_courses }} courses.
+                    ">
+                        <strong>{{ pane.xp|floatformat }}</strong> XP</a> counts toward this course.
+                    {% else %}
+                      So far, you have earned <strong>{{ user.profile.xp_cached }}</strong> XP in your course.
+                    {% endif %}
+                  </li>
+                  <li>We are currently
+                    <a tabindex="0" data-toggle="popover" data-trigger="hover"
+                       data-placement="top" data-html="true"
+                       data-content="There are {{ semester.num_days }} days of class in the semester.
+                      So far, we've had {{ semester.days_so_far }} days:<br/><br/>
+                      <pre>{{ semester.days_so_far }}/{{ semester.num_days }} = {{ semester.fraction_complete|floatformat:3 }} &times; 100 = {{ semester.percent_complete|floatformat }}%</pre>
+                    ">
+                      {{ semester.fraction_complete|floatformat:3 }} or {{ semester.percent_complete|floatformat }}%</a>
+                    of the way through the semester.
+                  </li>
+                  <li>At this pace you will have
+                    <a tabindex="0" data-toggle="popover" data-trigger="hover"
+                       data-placement="top" data-html="true"
+                       data-content="You currently have {{ pane.xp|floatformat }} XP, and the semester is
+                      {{ semester.fraction_complete|floatformat:3 }} complete:<br/><br/>
+                      <pre>{{ pane.xp|floatformat }}/{{ semester.fraction_complete|floatformat:3 }} = {% widthratio pane.xp semester.fraction_complete 1 %} XP</pre>
+                    ">
+                      {% widthratio pane.xp semester.fraction_complete 1 %} XP</a>
+                    by the end of the semester.
+                  </li>
+                  <li>
+                    This course is out of {{ pane.course.xp_for_100_percent }} XP, which means that if you get {{ pane.course.xp_for_100_percent }} XP, you'll have 100% in it.
+                  </li>
+                  <li>
+                    This means that your mark is currently <a tabindex="0" data-toggle="popover" data-trigger="hover"
+                       data-placement="top" data-html="true"
+                       data-content="If you get {% widthratio pane.xp semester.fraction_complete 1 %} XP by the end of semester,
+                       and this course is out of {{ pane.course.xp_for_100_percent }} XP:<br/><br/>
+                      <pre>{% widthratio pane.xp semester.fraction_complete 1 %}/{{ pane.course.xp_for_100_percent }} = {{ pane.mark|floatformat }} % </pre>
+                    ">{{ pane.mark|floatformat }}%</a>
+                  </li>
+                </ul>
+              </div>
+              <p>Another way to look at it:</p>
+              <ul>
+                <li>
+                  On average you have earned
+                  <a tabindex="0" data-toggle="popover" data-trigger="hover"
+                     data-placement="top" data-html="true"
+                     data-content="You currently have {{ pane.xp|floatformat }} XP in this course, and we've had {{ semester.days_so_far }}
+                    days of class so far:<br/><br/>
+                    <pre>{{ pane.xp|floatformat }}/{{ semester.days_so_far }} = {{ pane.xp_per_day_ave|floatformat }} XP per day</pre>
+                  ">
+                    {{ pane.xp_per_day_ave|floatformat }} XP per day</a> so far.
+                </li>
+                <li>
+                  If you continue at this pace, you will have
+                  <a tabindex="0" data-toggle="popover" data-trigger="hover"
+                     data-placement="top" data-html="true"
+                     data-content="You are averaging {{ pane.xp_per_day_ave|floatformat }}
+                    XP per day, and there are a total of {{ semester.num_days }}
+                    days of class in the semester:<br/><br/>
+                    <pre>{{ pane.xp_per_day_ave|floatformat }} x {{ semester.num_days }} = {% widthratio pane.xp semester.fraction_complete 1 %} XP</pre>
+                  ">
+                    {% widthratio pane.xp semester.fraction_complete 1 %} XP</a>
+                  by the end of the semester.
+                </li>
+              </ul>
+            {% endif %}
+
+            {% comment %} Where the charts go for whichever course is being read. They are one
+               set of canvases moved into the open tab rather than a set per course, so there is
+               one chart object per chart to keep pointed at the right course. {% endcomment %}
+            <div class="course-charts-slot"></div>
+
+            {% if pane.uses_marks %}
+              <h3>Current Mark Ranges by XP</h3>
+              <ul>
+                {% for markrange in pane.markranges %}
+                  <li>
+                    {{ markrange.name }} ({{ markrange.minimum_mark }}%): {{ markrange.xp_needed }} XP
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+
+          </div>
+        {% endfor %}
+      </div>
+
+      <div id="course-charts">
+        <h3>Charts</h3>
+
+        <p>Here are some pretty charts I made just for you, to help you visualize your progress so far:</p>
+        <div>
+
+          <ul class="nav nav-pills" role="tablist">
+            <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>
+            {# nothing to distribute when none of their courses has a mark (#403) #}
+            {% if not no_course_uses_marks %}
+              <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+            {% endif %}
+            <li role="presentation"><a href="#tag-distribution" role="tab" data-toggle="tab">Tags Distribution</a></li>
+          </ul>
+
+          <!-- Tab panes -->
+          <div class="tab-content">
+
+            {# == XP Progress == #}
+            <div role="tabpanel" class="tab-pane active" id="progress">
+              <div class="well chart-container">
+                <div class="loading">
+                  <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                  &nbsp;Calculating data for chart...
+                </div>
+                <canvas id="myChart" class="xp-chart" style="display: none; ">
+                  <!-- content will be set by js in xp_chart.html -->
+                </canvas>
+              </div>
+            </div>
+
+            {# == Mark Distribution == #}
+            <div role="tabpanel" class="tab-pane" id="distribution">
+              <div class="well chart-container">
+
+                <div class="loading">
+                  <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                  &nbsp;Calculating data for chart...
+                </div>
+
+                <canvas id="chart-mark-distribution" class="mark-chart">
+                  <!-- content will be set by js in chart_mark_distribution.html -->
+                </canvas>
+
+              </div>
+            </div>
+
+            {# == Tags Distribution == #}
+            <div role="tabpanel" class="tab-pane" id="tag-distribution">
+              <div class="well chart-container">
+                <div class="loading">
+                  <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                  &nbsp;Calculating data for chart...
+                </div>
+
+                <canvas id="TagChart" class="xp-chart">
+                  <!-- content will be set by js in chart_tags_progress.html -->
+                </canvas>
+              </div>
+            </div>
+
+
+          </div> <!-- tab-content -->
+        </div>  <!-- tab container -->
+      </div>  <!-- course-charts -->
 
     {% endif %}
 
 {% endblock %}
 
 {% block js %}
-  <script>
-      $(document).ready(function () {
-          $('[data-toggle="popover"]').popover(
-          )
-      });
-  </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js" integrity="sha384-86mmuxXJYGTFcyG3Tr7nKO2BYpngqxq/EYijDDr0VCbSXm5HK6tfJbGl4HSwEoUk" crossorigin="anonymous"></script>
+  <script src="{% static 'js/Chart-2.9.4.min.js' %}"></script>
   {% include 'courses/chart_xp_progress.html' %}
   {% include 'courses/chart_mark_distribution.html' %}
   {% include 'courses/chart_tags_progress.html' %}
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      var $charts = $('#course-charts');
+
+      /* Show one course: move the charts into its tab and draw them for it.
+
+         There is one set of canvases rather than a set per course, so they are moved into
+         whichever tab is open: one canvas means one chart object to keep pointed at the right
+         course, and the charts are only fetched for the course being read (#2743). */
+      function showCourse($pane) {
+        $pane.find('.course-charts-slot').append($charts);
+        var course_id = $pane.data('course');
+        ajax_update_plot(course_id);
+
+        /* A course run on XP alone has no mark, so there is no distribution for the reader to
+           stand in and its tab comes off while that course is open (#403). */
+        var $distributionTab = $charts.find('.nav-pills a[href="#distribution"]').parent();
+        if ($pane.data('uses-marks')) {
+          $distributionTab.show();
+          update_mark_distribution(course_id);
+        } else {
+          if ($distributionTab.hasClass('active')) {
+            $charts.find('.nav-pills a[href="#progress"]').tab('show');
+          }
+          $distributionTab.hide();
+        }
+      }
+
+      showCourse($('.course-tab-content .tab-pane.active'));
+
+      $('.course-tabs a[data-toggle="tab"]').on('shown.bs.tab', function() {
+        showCourse($($(this).attr('href')));
+      });
+    });
+  </script>
 
 {% endblock %}

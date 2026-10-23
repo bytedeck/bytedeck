@@ -1,0 +1,14 @@
+{% comment %}
+  bootstrap-table's stylesheet and script, for a page that turns a list into a sortable,
+  searchable table.
+
+  Include once, in {% block head %}. base.html loads jQuery above that block, which is what
+  bootstrap-table needs, and the script is small enough that loading it there rather than at
+  the foot avoids a flash of unstyled table. It is per page rather than site-wide because
+  most pages have no table on them at all.
+
+      {% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
+{% endcomment %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
+<script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>

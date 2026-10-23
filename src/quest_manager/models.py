@@ -2,12 +2,14 @@ import uuid
 import json
 import datetime
 
-from django.db import transaction
+from collections import namedtuple
+
+from django.db import IntegrityError, transaction
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
+from django.db.models import BooleanField, Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
 from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone
@@ -16,8 +18,62 @@ from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
+from library.models import IsLibraryContentMixin
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
 from tags.models import TagsModelMixin
+
+
+#: What a set of submissions is worth: `total`, the XP altogether, and `by_registration`, a
+#: course registration id to XP map with None collecting everything left unassigned (issue #2440).
+CappedXP = namedtuple('CappedXP', ['total', 'by_registration'])
+
+
+def split_capped_xp_by_registration(rows):
+    """Divide per-(quest, registration) XP sums into a per-registration total, capping each quest first.
+
+    A quest's `max_xp` caps what it can ever be worth, however many times it was repeated, so
+    the cap applies to the quest as a whole before the total is split up: a student who spread
+    one repeatable quest's submissions across two courses must not earn more from it than a
+    student who put them all in one. Each registration therefore receives the capped total in
+    proportion to what it was assigned uncapped.
+
+    The rule lives here rather than inside the query that usually feeds it, because it is
+    also applied a date at a time when charting a course's progress (issue #2459), and one
+    implementation of it is easier to keep honest than two.
+
+    Args:
+        rows: an iterable of (quest_id, max_xp, registration_id, xp_sum) tuples, one per
+            pairing of a quest with a course registration the student put it against. max_xp of
+            -1 means uncapped, and None means the quest has since been deleted, which is worth
+            nothing.
+
+    Returns:
+        CappedXP: the capped XP by registration, and what it comes to altogether. The total is
+        added up a whole quest at a time rather than from the per-registration shares, so it stays the
+        exact number calculate_xp_to_date() reports instead of a sum of fractions.
+    """
+    rows = list(rows)
+
+    # what each quest earned in total, to apply its cap before dividing it up
+    quest_totals = {}
+    for quest_id, _max_xp, _registration_id, xp_sum in rows:
+        quest_totals[quest_id] = quest_totals.get(quest_id, 0) + xp_sum
+
+    capped_totals = {}
+    for quest_id, max_xp, _registration_id, _xp_sum in rows:
+        if max_xp == -1:  # no limit
+            capped_totals[quest_id] = quest_totals[quest_id]
+        else:
+            # max_xp is None when the quest was deleted
+            capped_totals[quest_id] = min(quest_totals[quest_id], max_xp or 0)
+
+    xp_by_registration = {}
+    for quest_id, _max_xp, registration_id, xp_sum in rows:
+        total = quest_totals[quest_id]
+        share = capped_totals[quest_id] * xp_sum / total if total else 0
+        xp_by_registration[registration_id] = xp_by_registration.get(registration_id, 0) + share
+
+    return CappedXP(total=sum(capped_totals.values()), by_registration=xp_by_registration)
 
 
 class CategoryManager(models.Manager):
@@ -25,7 +81,7 @@ class CategoryManager(models.Manager):
     def all_published_with_importable_quests(self):
         """
         Returns a queryset of published campaigns (categories) in the library schema
-        that have at least one importable quest — meaning a quest that is published and not archived.
+        that have at least one importable quest: one that is published and not archived.
 
         Each returned campaign is annotated with:
         - quest_count: the number of importable quests in the campaign
@@ -57,10 +113,13 @@ class CategoryManager(models.Manager):
         # Exclude campaigns without any qualifying quests
         qs = qs.filter(quest_count__gt=0)
 
-        return qs
+        # The aggregate annotation above groups the query, and Django emits no ORDER BY at all
+        # for a grouped query, so Category.Meta.ordering is lost and the Library's campaigns
+        # tab comes up in whatever order Postgres finds them. Ask for the title back (#2624).
+        return qs.order_by('title')
 
 
-class Category(IsAPrereqMixin, models.Model):
+class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
     """ Used to group quests into 'Campaigns'
     """
     title = models.CharField(max_length=50, unique=True)
@@ -76,6 +135,16 @@ class Category(IsAPrereqMixin, models.Model):
         unique=True,
         help_text="This value links your campaign to the corresponding campaign within the Library."
         " Only change this value if you want to disconnect your campaign from the Library."
+    )
+
+    # Nothing reads this. Quest maps are laid out entirely by dagre, which places campaigns
+    # where its own crossing-minimization puts them, and the campaign forms no longer offer
+    # the field (#2675). It is kept rather than dropped because removing a column takes two
+    # releases (CONTRIBUTING.md, "Migrations and the deploy window") and because it still
+    # holds whatever ordering decks set, should map ordering be attempted again.
+    map_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Not currently used. Quest map layout is decided by the map's layout engine."
     )
 
     objects = CategoryManager()
@@ -278,9 +347,21 @@ class XPItem(models.Model):
         # If survived all the conditions, then it's active
         return True
 
-    def is_available(self, user):
+    def is_available(self, user, blocking=True):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
-        Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
+        Should probably put criteria in one spot and share.  See QuestManager.get_available()
+
+        Args:
+            user (User): the student to answer for.
+            blocking (bool): whether a blocking quest holding this student's quests back counts
+                against this one, matching the parameter of the same name on
+                ``QuestManager.get_available``. False answers as if nothing were blocking, which
+                is what tells a quest held back by another one apart from a quest whose own
+                prerequisites are not met.
+
+        Returns:
+            bool: whether the student can start this quest now.
+        """
 
         available = (
             self.active
@@ -291,7 +372,32 @@ class XPItem(models.Model):
         if available and not user.profile.has_current_course:
             return self.available_outside_course
 
+        if available and blocking:
+            return not self.blocked_by(user).exists()
+
         return available
+
+    def blocked_by(self, user):
+        """The blocking quests holding this quest back for this student, if any.
+
+        A quest marked ``blocking`` holds every other quest back while it is available to the
+        student or while they have it in progress, which ``QuestQuerySet.block_if_needed`` applies
+        by reducing the Available tab to blocking quests. Starting a quest is a different code
+        path, and this is what makes it answer the same way, so that a quest kept out of the tab
+        is not still handed out by the quest map or its own url (#2729).
+
+        Blocking quests do not hold each other back, and staff see every published quest in their
+        tab whatever is blocking, so neither is held back here.
+
+        Args:
+            user (User): the student to answer for.
+
+        Returns:
+            QuestQuerySet: the blocking quests responsible, empty when nothing holds this back.
+        """
+        if self.blocking or user.is_staff:
+            return Quest.objects.none()
+        return Quest.objects.get_blocking_quests(user)
 
     def is_repeatable(self):
         return self.max_repeats != 0
@@ -347,6 +453,23 @@ class QuestQuerySet(models.QuerySet):
         # Remove quests with no expiry date AND past expiry time (i.e. daily expiration at set time)
         return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=now_local.time()))
 
+    def with_is_expired(self):
+        """Annotate each quest with ``is_expired``, so a page can read it without a query each.
+
+        ``Quest.expired()`` reads this annotation when it is present, and falls back to a query
+        per quest when it is not, which a list of thirty pays thirty times over. The value comes
+        from ``not_expired()`` rather than from a second copy of the date and time rules, so the
+        two can never disagree about what expired means.
+
+        Returns:
+            QuerySet[Quest]: the same quests, each carrying a boolean ``is_expired``.
+        """
+        not_expired = self.model.objects.filter(id=OuterRef("id")).not_expired().values("id")
+
+        return self.annotate(
+            is_expired=ExpressionWrapper(~Exists(not_expired), output_field=BooleanField()),
+        )
+
     def published(self):
         """
         Returns a queryset containing only quests that are published.
@@ -387,6 +510,18 @@ class QuestQuerySet(models.QuerySet):
 
           These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
           and don't have to worry about them when considering repeats, which are more complicated.
+
+        Condition 4 is a per-semester cap, so it counts only what the student completed in the
+        semester they are in now (``semester_for(user)``); condition 5 is an all-time cap and
+        counts every submission. Quest.is_repeat_available() answers the same question one quest
+        at a time, for the quest page, so the two have to agree.
+
+        Args:
+            user: the student whose submissions decide what is left, and whose semester the
+                per-semester cap is measured in.
+
+        Returns:
+            QuestQuerySet: the quests still open to them, with the five cases above removed.
         """
 
         # Condition 1: remove inprogress submissions
@@ -432,11 +567,21 @@ class QuestQuerySet(models.QuerySet):
         qs = qs.exclude(pk__in=cooldown_quests)
 
         # CONDITION 4: remove completed and repeatable and max repeats reached this semester
+        #
+        # Counting only what the student completed in the semester they are in now, which is what
+        # makes this a per-semester cap. A repeat_per_semester quest gives them max_repeats goes
+        # every semester, so the goes they used in an earlier one must not come off this
+        # semester's allowance: counting all of them hides the quest from a student who has
+        # barely started it this term (#2714).
+        from courses.models import semester_for
+
+        completed_this_semester = Q(
+            questsubmission__user_id=user.id,
+            questsubmission__is_completed=True,
+            questsubmission__semester=semester_for(user),
+        )
         max_repeats_this_sem = completed_quests_current.annotate(
-            submission_count=Count(
-                'questsubmission',
-                filter=Q(questsubmission__user_id=user.id)
-            )
+            submission_count=Count('questsubmission', filter=completed_this_semester)
         )
         # need to account for max_repeats=-1 (unlimited repeats), don't remove those
         max_repeats_this_sem = max_repeats_this_sem.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
@@ -529,19 +674,84 @@ class QuestManager(models.Manager):
         6. Quests whose maximum repeats have been completed (including repeat_per_semester)
         7. Quests whose repeat time has not passed since last completion
         8. Check for blocking quests (available and in-progress), if present, remove all others
+
+        Args:
+            user (User): the student to answer for.
+            remove_hidden (bool): whether to drop the quests the student has hidden.
+            blocking (bool): whether to apply 8. False keeps the quests a blocking quest would
+                otherwise crowd out, which is how ``get_blocking_quests`` reads the quests that
+                are doing the blocking without the rule hiding its own inputs.
+
+        Returns:
+            QuestQuerySet: the quests for the student's Available tab.
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1, 2 & 3
         qs = qs.get_conditions_met(user)  # 4
         available_quests = qs.not_in_progress_completed_or_cooldown(user)  # 5, 6 & 7
 
-        available_quests = available_quests.block_if_needed(user=user)  # 8
+        if blocking:
+            available_quests = available_quests.block_if_needed(user=user)  # 8
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
         return available_quests
 
+    def get_blocking_quests(self, user):
+        """The blocking quests holding this student's other quests back, if there are any.
+
+        A quest marked ``blocking`` stops every other quest while it is available to the student
+        or while they have it in progress. Both places that decide what a student can do read it
+        from here, so that they agree: ``QuestQuerySet.block_if_needed`` reduces the Available tab
+        to blocking quests, and ``XPItem.is_available`` refuses to start the rest (#2729). Having
+        the quests themselves, rather than a yes or no, is what lets both say which quest is
+        responsible.
+
+        Quests the student has hidden count. Hiding a quest takes it out of the tab but not out of
+        the way, so a student who hides a blocking quest still has to finish it, and still needs
+        to be told which quest that is.
+
+        An archived or unpublished quest is out of the way even to a student still holding it in
+        progress, because ``all_not_completed`` drops its submission. ``block_if_needed`` reads
+        that same call for the tab, so counting one here would put a quest back in the tab that
+        its own page then refused.
+
+        Args:
+            user (User): the student to answer for.
+
+        Returns:
+            QuestQuerySet: the blocking quests in play, empty when nothing is being held back.
+        """
+        available = self.get_available(user, remove_hidden=False, blocking=False).filter(blocking=True)
+        in_progress = QuestSubmission.objects.all_not_completed(user).filter(quest__blocking=True)
+        return self.get_queryset().filter(
+            Q(pk__in=available.values_list('pk', flat=True))
+            | Q(pk__in=in_progress.values_list('quest_id', flat=True))
+        )
+
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
         return qs.not_in_progress_completed_or_cooldown(user)
+
+    def get_in_cooldown(self, user):
+        """Repeatable quests the user completed this semester that are still within cooldown (issue #57).
+
+        These would be available to repeat except that their per-quest cooldown
+        (``hours_between_repeats``) hasn't elapsed since the last completion, so the Available tab
+        shows them as "available again soon" (with a countdown) instead of letting them be started.
+        Quests already at their repeat cap are excluded — they won't come back. Uses the same active /
+        prerequisite / not-in-progress / not-hidden filters as ``get_available`` so the two lists are
+        consistent and disjoint (``get_available`` excludes exactly these via its cooldown condition).
+        """
+        now = timezone.now()
+        qs = self.get_active().select_related('campaign').get_conditions_met(user).not_in_progress(user)
+        completed_quest_ids = QuestSubmission.objects.all_completed(user=user).values_list('quest_id', flat=True)
+        qs = qs.filter(pk__in=completed_quest_ids).exclude_hidden(user)
+
+        cooldown_ids = []
+        for quest in qs:
+            next_available = quest.next_repeat_available(user)
+            if next_available is not None and next_available > now:
+                cooldown_ids.append(quest.pk)
+        return qs.filter(pk__in=cooldown_ids)
 
     def all_drafts(self, user):
         """
@@ -554,7 +764,12 @@ class QuestManager(models.Manager):
             Returns:
                 QuerySet of draft quests if the user is staff or a TA with editable draft quests, empty otherwise.
         """
-        qs = self.get_queryset().filter(published=False)
+        # These quests render the same template rows as the staff "available"
+        # tab, which reads each quest's campaign, editor profile and tags, so
+        # prefetch them here too (the available queryset already does).
+        qs = self.get_queryset().filter(published=False).select_related(
+            "campaign", "editor__profile"
+        ).prefetch_related("tags")
 
         if user.is_staff:
             return qs
@@ -572,12 +787,16 @@ class QuestManager(models.Manager):
             QuerySet of archived quests if user is staff, empty list otherwise
         """
         if user.is_staff:
-            qs = self.get_queryset(include_archived=True).filter(archived=True)
+            # Same template as the "available" tab (see all_drafts), so
+            # prefetch campaign, editor profile and tags to avoid per-row queries.
+            qs = self.get_queryset(include_archived=True).filter(archived=True).select_related(
+                "campaign", "editor__profile"
+            ).prefetch_related("tags")
             return qs
         return self.get_queryset().none()
 
 
-class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
+class Quest(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     """
     A model representing a Quest.
 
@@ -614,6 +833,13 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     instructor_notes = models.TextField(blank=True, null=True,
                                         help_text="This field is only visible to Staff. \
                                         Use it to place answer keys or other notes.")
+
+    quick_reply = models.CharField(
+        blank=True, max_length=255, default="",
+        verbose_name="Quick Reply Text",
+        help_text="Quest-specific text (e.g. a reminder for a common mistake) that you can insert "
+                  "into a reply with one button when approving or returning submissions of this quest."
+    )
 
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
                                help_text='Provides a student TA access to work on the draft of this quest.',
@@ -692,6 +918,36 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         else:
             return False
 
+    def next_repeat_available(self, user):
+        """When this repeatable quest will next be available to `user` to repeat, or None (issue #57).
+
+        Returns a datetime — the last completion time plus ``hours_between_repeats`` — when the user
+        has completed this repeatable quest but has not yet reached its repeat cap. Returns None when
+        the quest is not repeatable, has never been completed by the user, or has already reached its
+        repeat cap (so it will not become available again). The datetime may be in the past if the
+        cooldown has already elapsed (i.e. the quest is available to repeat right now). Mirrors the
+        cap/timing logic of ``is_repeat_available``.
+        """
+        if self.max_repeats == 0 and not self.repeat_per_semester:
+            return None  # not repeatable
+
+        submissions = QuestSubmission.objects.all_for_user_quest(user, self, False)
+        if not submissions.exists():
+            return None
+
+        latest_sub = submissions.latest('first_time_completed')
+        if not latest_sub.first_time_completed:
+            return None  # the latest attempt is still in progress, not completed
+
+        # already at the repeat cap → it won't come back
+        if self.repeat_per_semester:
+            if QuestSubmission.objects.all_completed(user=user).filter(quest=self).count() > self.max_repeats:
+                return None
+        elif self.max_repeats != -1 and latest_sub.ordinal > self.max_repeats:
+            return None
+
+        return latest_sub.first_time_completed + timezone.timedelta(hours=self.hours_between_repeats)
+
     def condition_met_as_prerequisite(self, user, num_required=1):
         """
         Defines how this model's requirements are met as a prerequisite to other models
@@ -713,6 +969,11 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         """Returns True if the quest has expired, False otherwise.
         See QuestQueryset.expired() for details.
         """
+        # If the queryset annotated ``is_expired`` (as the quest list and campaign
+        # detail views do), reuse it instead of issuing a query. Templates call
+        # this for every quest in a list, so per-row queries add up quickly.
+        if hasattr(self, "is_expired"):
+            return self.is_expired
         # utilize existing code in QuestQuerySet method not_expired()
         return not Quest.objects.filter(id=self.id).not_expired().exists()
 
@@ -757,31 +1018,92 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(do_not_grant_xp=False)
 
     def get_semester(self, semester):
+        """Submissions made in `semester`.
+
+        None is a semester's worth of work in its own right rather than a missing filter
+        (issue #2413): a student between terms, and staff who never register, are in no
+        semester, so what they hand in is stamped with none. Reading those rows back is the
+        only way the student who made them can see them.
+
+        Args:
+            semester: a Semester or its id, or None for the work that belongs to no semester.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions in that semester, or the unstamped ones
+            when there is no semester.
+        """
         return self.filter(semester=semester)
 
+    def in_open_or_no_semester(self):
+        """Submissions no finished term owns: what a deck-wide staff view of current work holds.
+
+        Every open semester's work, since a deck can run several at once (issue #2157 Phase
+        3, #1781) and scoping to the deck's default would hide everything the other cohort
+        hands in. Plus the work stamped with no semester at all (issue #2413), which is what
+        someone registered in none hands in: a student between terms doing a quest marked
+        available outside a course, or staff trying one out. That work reaches no teacher's
+        own queue, since the queue is built from a registration and they hold none, so the
+        deck-wide view is the only place it can be approved from.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions in an open semester or in none.
+        """
+        from courses.models import Semester  # locally, since courses imports this module
+
+        return self.filter(Q(semester__status=Semester.Status.OPEN) | Q(semester__isnull=True))
+
     def get_not_semester(self, semester):
+        """Submissions made outside `semester`.
+
+        Args:
+            semester: a Semester or its id, or None for the work that belongs to no semester.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions from any other semester. For None that
+            is every stamped submission: someone in no semester has all their past terms
+            behind them, and the unstamped work is what they are doing now.
+        """
         return self.exclude(semester=semester)
 
     def get_completed_before(self, date):
         return self.filter(time_approved__lte=date)
 
     def for_teacher_only(self, teacher):
+        """The submissions one teacher is responsible for, as their approval queues show them.
+
+        A submission is theirs on either of two counts: the student who made it is in a group
+        this teacher currently teaches, or the quest itself names this teacher to notify
+        whoever hands it in.
+
+        "Currently teaches" is read from the student's own registration rather than from the
+        deck's default semester, since a deck can run several semesters at once (issue #2157
+        Phase 3): scoping it to the default would empty the queue of a teacher whose group
+        runs in the other one. The registration has to be the one that produced the submission
+        (its semester matches the submission's), so a teacher only ever sees the work of the
+        term they teach that student in. With no semester open nobody has a current teacher,
+        leaving only the quests this teacher asked to be notified about.
+
+        Args:
+            teacher (User): the teacher whose queue this is. None means a deck-wide view of
+                every teacher's submissions, so the queryset comes back unfiltered.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions belonging to this teacher, without
+            duplicates when a student holds several registrations that match.
         """
-        :param teacher: a User model
-        :return: qs filtered for submissions of students in the current teacher's blocks
-        """
+        from courses.models import Semester  # locally, since courses imports this module
+
         if teacher is None:
             return self
         else:
-            # The student's "current teachers" are the teachers of the blocks of their
-            # course registrations in the active semester (Profile.teachers()), so the
-            # block filter must be scoped to the active semester to match.
-            active_semester = SiteConfig.get().active_semester
-            return self.filter(
-                Q(user__coursestudent__semester=active_semester,
-                  user__coursestudent__block__current_teacher=teacher) |
-                Q(quest__specific_teacher_to_notify=teacher)
-            ).distinct()
+            # all three conditions sit in one Q so they match a single registration, rather
+            # than pairing any open-semester registration with any block this teacher teaches
+            teacher_filter = Q(quest__specific_teacher_to_notify=teacher) | Q(
+                user__coursestudent__semester__status=Semester.Status.OPEN,
+                user__coursestudent__semester=F('semester'),
+                user__coursestudent__block__current_teacher=teacher,
+            )
+            return self.filter(teacher_filter).distinct()
 
     def exclude_archived_quests(self):
         return self.exclude(quest__archived=True)
@@ -795,11 +1117,30 @@ class QuestSubmissionManager(models.Manager):
                      active_semester_only=False,
                      exclude_archived_quests=True,
                      exclude_quests_not_published=True,
-                     include_related=True):
+                     include_related=True,
+                     user=None):
+        """Submissions, optionally limited to the semester being earned in right now.
+
+        Args:
+            active_semester_only (bool): limit to the current semester's submissions.
+            exclude_archived_quests (bool): drop submissions of archived quests.
+            exclude_quests_not_published (bool): drop submissions of draft quests.
+            include_related (bool): join the related objects the templates almost always need.
+            user (User): whose semester to limit to. Their registration names it (issue #2157
+                Phase 3), and someone holding none is in no semester, so their work is the
+                work stamped with none. Without a user this is a deck-wide staff view, which
+                covers every open semester and the unstamped work besides: a deck can run two
+                cohorts on different calendars, and a teacher's queues have to hold both
+                cohorts' work rather than one semester's.
+
+        Returns:
+            QuestSubmissionQuerySet: the matching submissions.
+        """
+        from courses.models import semester_for  # locally, since courses imports this module
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(SiteConfig.get().active_semester.pk)
+            qs = qs.get_semester(semester_for(user)) if user is not None else qs.in_open_or_no_semester()
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:
@@ -815,15 +1156,31 @@ class QuestSubmissionManager(models.Manager):
     def flagged(self, user):
         return self.get_queryset().filter(flagged_by=user)
 
-    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True, teacher=None):
         """
         Return a queryset of all approved submissions within the provided parameters.
 
         If user is None, then this is a staff member's view of all approved submissions.
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
+        If teacher is provided, only the submissions that teacher is responsible for (see
+        for_teacher_only), as the Approved tab lists them for a teacher's own groups (#2672).
+
+        Args:
+            user (User): whose approved submissions to return, or None for every student's.
+            quest (Quest): the quest to narrow to, or None for every quest.
+            up_to_date (datetime): the latest approval time to include (inclusive), or None for no cutoff.
+            active_semester_only (bool): whether to keep only the active semester's submissions.
+            teacher (User): the teacher whose submissions to narrow to, or None for every
+                teacher's. As for_teacher_only draws it, that is the work of the students in
+                their groups plus any submission of a quest that names them to be notified,
+                whoever made it. It narrows whether or not a user is given.
+
+        Returns:
+            QuestSubmissionQuerySet: the approved submissions.
         """
         qs = self.get_queryset(active_semester_only,
-                               exclude_quests_not_published=False
+                               exclude_quests_not_published=False,
+                               user=user,
                                ).approved()
 
         if user:
@@ -835,7 +1192,7 @@ class QuestSubmissionManager(models.Manager):
         if up_to_date is not None:
             qs = qs.get_completed_before(up_to_date)
 
-        return qs
+        return qs.for_teacher_only(teacher)
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
@@ -851,19 +1208,33 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(active_semester_only).not_completed()
 
         # only returned quests will have a time completed, placing them on top
-        qs = self.get_queryset(active_semester_only).get_user(user).not_completed()
+        qs = self.get_queryset(active_semester_only, user=user).get_user(user).not_completed()
         if blocking:
             return qs.block_if_needed()
         else:
             return qs
 
     def all_completed_past(self, user):
+        """This user's completed submissions from before the semester they are in now.
+
+        Args:
+            user: the student whose past submissions are wanted.
+
+        Returns:
+            QuestSubmissionQuerySet: their completed submissions outside their current
+            semester, awaiting-approval ones first. For someone registered in no semester
+            that is every submission naming one, since the terms they were in are all behind
+            them and the unstamped work is what they are doing now.
+        """
+        from courses.models import semester_for  # locally, since courses imports this module
+
         qs = self.get_queryset(exclude_quests_not_published=False).get_user(user).completed()
-        return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
+        return qs.get_not_semester(semester_for(user)).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
-                               exclude_quests_not_published=False
+                               exclude_quests_not_published=False,
+                               user=user,
                                )
         if user is None:
             qs = qs.completed()
@@ -872,12 +1243,26 @@ class QuestSubmissionManager(models.Manager):
 
         return qs
 
-    def all_awaiting_approval(self, user=None, teacher=None):
-        if user is None:
-            qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first)\
-                .for_teacher_only(teacher)
-            return qs
-        return self.get_queryset(True).get_user(user).not_approved().completed()
+    def all_awaiting_approval(self, user=None, teacher=None, semester=None):
+        """Submissions handed in and waiting for a teacher.
+
+        Args:
+            user: limit to this student's submissions, in their own semester.
+            teacher: limit to the students this teacher has blocks for.
+            semester: limit to one Semester's submissions, whichever semester it is.
+                Archiving passes the semester being archived so a second semester's
+                pending work doesn't block it (issue #2157 Phase 3).
+
+        Returns:
+            QuestSubmissionQuerySet: the matching submissions awaiting approval.
+        """
+        if user is not None:
+            return self.get_queryset(True, user=user).get_user(user).not_approved().completed()
+
+        qs = self.get_queryset(semester is None).not_approved().completed(SiteConfig.get().approve_oldest_first)
+        if semester is not None:
+            qs = qs.get_semester(semester)
+        return qs.for_teacher_only(teacher)
 
     def all_returned(self, user=None):
         # completion date indicates the quest was submitted, but since completed
@@ -889,10 +1274,10 @@ class QuestSubmissionManager(models.Manager):
             q = returned_qs.extra(select={'date_null': 'time_returned is null'})
             return q.extra(order_by=['date_null', '-time_returned'])
             # return returned_qs
-        return self.get_queryset(True).get_user(user).not_completed().has_completion_date().order_by('-time_returned')
+        return self.get_queryset(True, user=user).get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
     def all_for_user_quest(self, user, quest, active_semester_only):
-        return self.get_queryset(active_semester_only).get_user(user).get_quest(quest)
+        return self.get_queryset(active_semester_only, user=user).get_user(user).get_quest(quest)
 
     def num_submissions(self, user, quest):
         qs = self.all_for_user_quest(user, quest, False)
@@ -920,7 +1305,10 @@ class QuestSubmissionManager(models.Manager):
             self.all_not_completed(user=user).get(quest=quest)
             # if no exception is thrown it means that an inprogress submission was found
             return False
-        except MultipleObjectsReturned:
+        # Unreachable: all_not_completed(user=...) is scoped to the active semester, and the partial
+        # unique constraint on (user, quest, semester) for in-progress submissions (migration 0049)
+        # allows at most one match -- so .get() never returns multiple. Excluded from coverage.
+        except MultipleObjectsReturned:  # pragma: no cover
             return False  # multiple found
         except ObjectDoesNotExist:
             pass  # nothing found, continue
@@ -930,6 +1318,30 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
+        """Create and return a new in-progress QuestSubmission of ``quest`` for ``user``.
+
+        The submission is placed in the semester the student is registered in, with
+        an ordinal continuing from the user's last submission of this quest (1 for
+        a first attempt). Someone registered in none (staff trying out a quest, a
+        student between terms) is in no semester, so theirs is stamped with none
+        (issue #2441) rather than with a term they were never in.
+
+        Concurrency (issue #1345): the partial unique constraints on
+        QuestSubmission forbid a second *never-yet-completed* in-progress
+        submission of the same quest per user/semester -- exactly what a
+        concurrent "double start" (e.g. two browser tabs) would create. A separate
+        constraint covers the submissions that name no semester (issue #2413),
+        which Postgres would otherwise treat as all distinct. If this call loses
+        that race, the existing in-progress submission is returned instead of a
+        duplicate.
+
+        :param user: the student starting the quest.
+        :param quest: the Quest being started.
+        :returns: the newly created ``QuestSubmission``, or the existing
+            in-progress one if a concurrent request already created it.
+        :raises IntegrityError: if the save fails for a reason other than the
+            double-start race (no matching in-progress submission exists).
+        """
         last_submission = self.last_submission(user, quest)
 
         if last_submission:
@@ -937,13 +1349,44 @@ class QuestSubmissionManager(models.Manager):
         else:
             ordinal = 1
 
+        from courses.models import semester_for  # locally, since courses imports this module
+
+        # the student's own semester, not the deck's: with more than one semester open the
+        # deck can't say which one this student earns XP in, but their registration can, and
+        # someone holding no registration is in none
+        semester = semester_for(user)
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
             ordinal=ordinal,
-            semester_id=SiteConfig.get().active_semester.pk,
+            semester=semester,
         )
-        new_submission.save()
+        try:
+            # Wrapped in atomic() so a constraint violation doesn't break the
+            # surrounding transaction (issue #1345).
+            with transaction.atomic():
+                # Constraint validation is skipped so the DB-level unique
+                # constraint (and its race-losing IntegrityError path below)
+                # stays authoritative.
+                new_submission.full_clean(validate_constraints=False)
+                new_submission.save()
+        except IntegrityError:
+            # Lost the race: another request already created the in-progress
+            # submission. Return the existing one instead of a duplicate, so the
+            # student is simply sent to the submission that won. Use the
+            # unfiltered base manager (the default manager excludes archived and
+            # unpublished quests, which would hide the row) and re-raise if
+            # nothing matches -- then the error wasn't the double-start race.
+            existing_submission = self.model._base_manager.filter(
+                user=user,
+                quest=quest,
+                semester=semester,
+                is_completed=False,
+                first_time_completed__isnull=True,
+            ).first()
+            if existing_submission is None:
+                raise
+            return existing_submission
         return new_submission
 
     def calculate_xp(self, user):
@@ -979,11 +1422,145 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
-    def remove_in_progress(self):
-        # In Progress Quests
+    def xp_by_registration(self, user):
+        """How much of this student's quest XP they assigned to each of their course registrations.
+
+        A quest's `max_xp` caps what it can ever be worth, however many times it was repeated,
+        so the cap has to be applied to the quest as a whole before the total is split up: a
+        student who spread one repeatable quest's submissions across two courses must not earn
+        more from it than a student who put them all in one. Each registration therefore
+        receives the capped total in proportion to what it was assigned uncapped.
+
+        Args:
+            user: the student whose XP is being divided.
+
+        Returns:
+            dict: registration id to XP, with None collecting everything left unassigned. Only the
+            student's own semester counts, and only quests that grant XP.
+        """
+        submissions = self.all_approved(user).grant_xp().annotate(
+            xp_earned=Greatest('quest__xp', 'xp_requested'),
+        )
+        per_quest_registration = submissions.order_by().values(
+            'quest', 'quest__max_xp', 'registration',
+        ).annotate(xp_sum=Sum('xp_earned'))
+
+        return split_capped_xp_by_registration(
+            (row['quest'], row['quest__max_xp'], row['registration'], row['xp_sum'])
+            for row in per_quest_registration
+        ).by_registration
+
+    def xp_by_registration_series(self, user, dates):
+        """How much of this student's quest XP counted toward each registration, at each of `dates`.
+
+        What xp_by_registration() answers for one date, answered for a whole series off a single
+        query (issue #2459). Charting a course's progress asks it once per class day, and
+        asking the database that many times over is the cost this removes.
+
+        It cannot be done as a running total, because a quest's cap applies to what it had
+        earned *by that date*: a repeatable quest over its cap is worth its cap on every date
+        after it crossed, not the sum of its submissions. So the per-quest-and-registration sums are
+        accumulated in date order and the capping rule re-applied at each point.
+
+        Args:
+            user: the student whose XP is being divided.
+            dates: the dates to answer for, in ascending order.
+
+        Returns:
+            list[CappedXP]: one per date, in the order the dates were given. Each carries the
+            date's whole quest XP as well as the split, since capping makes the shares
+            fractions whose sum need not come back to the exact figure a total is quoted as.
+        """
+        submissions = self.all_approved(user, active_semester_only=True).grant_xp().filter(
+            # what get_completed_before() counts: an approved submission with no approval time
+            # belongs to no date, so it is in no date's total
+            time_approved__isnull=False,
+        ).annotate(
+            xp_earned=Greatest('quest__xp', 'xp_requested'),
+        ).order_by('time_approved').values(
+            'quest', 'quest__max_xp', 'registration', 'xp_earned', 'time_approved',
+        )
+
+        # one pass over the submissions and one over the dates, walking both forward together
+        pending = list(submissions)
+        position = 0
+        running = {}  # (quest, registration) -> the quest's max_xp and the XP so far
+        series = []
+        for date in dates:
+            while position < len(pending) and pending[position]['time_approved'] <= date:
+                row = pending[position]
+                key = (row['quest'], row['registration'])
+                max_xp, xp_sum = running.get(key, (row['quest__max_xp'], 0))
+                running[key] = (max_xp, xp_sum + row['xp_earned'])
+                position += 1
+            series.append(split_capped_xp_by_registration(
+                (quest_id, max_xp, registration_id, xp_sum)
+                for (quest_id, registration_id), (max_xp, xp_sum) in running.items()
+            ))
+
+        return series
+
+    def adopt_unstamped_in_progress(self, users, semester):
+        """Move the work `users` have on the go that belongs to no semester into `semester`.
+
+        Someone registered in no semester hands work in stamped with none (issue #2441): the
+        welcome quest a new student does before joining a course, or a quest marked available
+        outside a course, done between terms. Once that work belongs to a semester, it is in
+        neither their in-progress list (which is now their new semester's) nor their
+        available list (which drops a quest they already have a submission of), so it would
+        sit where nobody can reach it. Re-attaching it is what mark_returned() already does
+        for a submission returned in a later semester (issue #1231).
+
+        Both orders reach this. A student joining a course that is already running arrives
+        one at a time, from the receiver on CourseStudent. A semester opening around students
+        already registered in it arrives as the whole cohort at once, from the receiver on
+        Semester (issue #2476).
+
+        Only work still in progress moves. What they finished outside a semester was
+        finished there, and its XP belongs to no term rather than to the one they are
+        starting.
+
+        Args:
+            users: the students whose work should move: Users, their ids, or a queryset of
+                either.
+            semester: the Semester the work should belong to, or its id.
+
+        Returns:
+            int: how many submissions were moved.
+        """
+        # the base manager throughout: a submission of a quest since archived or unpublished
+        # is still theirs to finish, and the default manager would leave it behind
+        already_in_semester = self.model._base_manager.filter(
+            user_id=OuterRef('user_id'), quest_id=OuterRef('quest_id'),
+            semester=semester, is_completed=False, first_time_completed__isnull=True,
+        )
+        return self.model._base_manager.filter(
+            user__in=users, semester__isnull=True, is_completed=False,
+        ).exclude(
+            # a never-completed submission can't join one already in that semester: the
+            # partial unique constraint holds one per (user, quest, semester), and it is the
+            # rule this would be breaking rather than an accident to work around. Correlated
+            # on the user as well as the quest, since a whole cohort moves at once: one
+            # student's clash must not hold back another's submission of the same quest.
+            Q(first_time_completed__isnull=True) & Q(Exists(already_in_semester)),
+        ).update(semester=semester)
+
+    def remove_in_progress(self, semester=None):
+        """Delete the submissions students had on the go but never completed.
+
+        Args:
+            semester: delete only the submissions belonging to this Semester. Archiving
+                passes the semester it is archiving, so a deck running a second semester
+                alongside keeps that one's work (issue #2157 Phase 3). None deletes every
+                in-progress submission on the deck, semester or not.
+
+        Returns:
+            tuple: the (count, per-model counts) that QuerySet.delete() returns.
+        """
         qs = self.all_not_completed(active_semester_only=False)
-        num_del = qs.delete()
-        return num_del
+        if semester is not None:
+            qs = qs.get_semester(semester)
+        return qs.delete()
 
 
 class QuestSubmission(models.Model):
@@ -1001,7 +1578,19 @@ class QuestSubmission(models.Model):
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     do_not_grant_xp = models.BooleanField(default=False, help_text='The student will not earn XP for this quest.')
-    semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True)
+    # blank=True as well as null=True: a submission started while no semester is open belongs
+    # to none, and full_clean() (create_submission calls it) rejects an unset non-blank field
+    semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True, blank=True)
+    # Which of the student's course registrations this work counts toward (issue #2440). Null
+    # means it was never assigned: work handed in before this existed, or while the deck had the
+    # setting off, or by a student with only one course to count it toward. Unassigned XP is
+    # shared evenly across their courses, which is what every submission used to do. It names
+    # the registration rather than its course, so a registration whose course a teacher changes
+    # keeps the work that counted toward it (issue #2875).
+    registration = models.ForeignKey(
+        'courses.CourseStudent', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="The course registration this submission's XP counts toward.",
+    )
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",
@@ -1017,6 +1606,35 @@ class QuestSubmission(models.Model):
 
     class Meta:
         ordering = ["time_approved", "time_completed"]
+        constraints = [
+            # A user can only have one *never-yet-completed* in-progress
+            # submission of a given quest per semester. Both rows created by a
+            # concurrent "double start" (issue #1345) are in that state, so the
+            # race is blocked; but the condition deliberately excludes:
+            # - completed submissions (``is_completed=True``), so repeatable
+            #   quests still accumulate completed submissions, and
+            # - *returned* submissions -- ``mark_returned()`` flips
+            #   ``is_completed`` back to False, but ``first_time_completed``
+            #   stays set from the first completion -- so a teacher returning
+            #   an old submission of a repeatable quest while the student has a
+            #   new one in progress remains a legal state (two "in progress",
+            #   only one of them never-completed).
+            models.UniqueConstraint(
+                fields=["user", "quest", "semester"],
+                condition=Q(is_completed=False) & Q(first_time_completed__isnull=True),
+                name="unique_inprogress_submission_per_quest_semester",
+            ),
+            # The same rule for the work that belongs to no semester (issue #2413). Postgres
+            # treats NULLs as distinct, so the constraint above never sees two unstamped
+            # rows as a duplicate and the double-start race goes unguarded. Semester is left
+            # out of the fields and pinned in the condition instead, which is the same rule
+            # written so the index can compare the rows.
+            models.UniqueConstraint(
+                fields=["user", "quest"],
+                condition=Q(is_completed=False) & Q(first_time_completed__isnull=True) & Q(semester__isnull=True),
+                name="unique_inprogress_submission_per_quest_no_semester",
+            ),
+        ]
 
     objects = QuestSubmissionManager()
 
@@ -1028,7 +1646,10 @@ class QuestSubmission(models.Model):
 
         if self.quest:
             name = self.quest.name
-        else:
+        # Defensive: quest is a non-nullable CASCADE FK, so a submission always has a quest
+        # (deleting a quest deletes its submissions). This fallback is unreachable, so it's
+        # excluded from coverage rather than tested with an impossible state.
+        else:  # pragma: no cover
             name = "[DELETED QUEST]"
         name += ordinal_str
         return name
@@ -1036,7 +1657,8 @@ class QuestSubmission(models.Model):
     def quest_name(self):
         if self.quest:
             return self.quest.name
-        else:
+        # Unreachable for the same reason as __str__ above (non-nullable CASCADE quest FK).
+        else:  # pragma: no cover
             return "[DELETED QUEST]"
 
     def get_absolute_url(self):
@@ -1056,22 +1678,77 @@ class QuestSubmission(models.Model):
         self.save()
 
     def mark_approved(self, transfer=False):
-        self.is_completed = True  # might have been false if returned
-        self.is_approved = True
-        self.time_approved = timezone.now()
-        self.do_not_grant_xp = transfer
-        self.save()
-        # update badges
-        BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
-        self.user.profile.xp_invalidate_cache()  # recalculate XP
+        """Approve this submission: grant its XP, and any badges it newly qualifies for.
+
+        All of it in one transaction, because saving the submission is what tells the
+        prerequisites app to rebuild this student's cache of available quests, and that
+        rebuild reads the XP this approval grants. The task is dispatched through
+        prerequisites.tasks.TransactionAwareTask, which hands it to celery on commit, so
+        one transaction around the whole thing is what holds it back until the new XP is
+        written. Saving outside one dispatches it immediately (Django runs an on_commit
+        callback right away when nothing is open), and the worker then reads the XP from
+        before the approval: a quest waiting on the rank the student just reached is
+        computed as still locked and stays missing from their Available tab (#2722).
+
+        Args:
+            transfer (bool): True when the XP is not being granted, which is how a skipped quest
+                and a transferred one are approved: the submission is marked done without the
+                student earning anything for it.
+
+        Returns:
+            None: the submission is updated in place.
+        """
+        with transaction.atomic():
+            self.is_completed = True  # might have been false if returned
+            self.is_approved = True
+            self.time_approved = timezone.now()
+            self.do_not_grant_xp = transfer
+            self.save()
+            # update badges
+            BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
+            self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def mark_returned(self):
+        """Send this submission back to the student for another go, and take its XP back.
+
+        The submission leaves the approved state, its XP stops counting toward the student's
+        total, and it is re-attached to the semester the student is in now.
+
+        Returns:
+            None: the submission is updated in place.
+        """
+        # Whether this return takes any XP back: only an approved submission was worth any, and
+        # that is what decides whether the available-quest cache needs rebuilding below.
+        was_approved = self.is_approved
         self.is_completed = False
         self.is_approved = False
         self.do_not_grant_xp = False
         self.time_returned = timezone.now()
-        self.save()
-        self.user.profile.xp_invalidate_cache()  # recalculate XP
+        # Re-attach the submission to the semester the student is in now (issue #1231). A quest
+        # completed in a past (now archived) semester and returned for a redo would otherwise stay
+        # linked to the old semester, so it never appeared in the student's current in-progress
+        # list and, once re-approved, granted its XP in the archived semester. Returning always
+        # happens "now", so the redo belongs to whatever semester the student is in at this point.
+        from courses.models import semester_for  # locally, since courses imports this module
+
+        # The rebuild is queued here rather than left to the post_save signal, which skips a
+        # submission that is not both completed and approved: a returned one is neither, so nothing
+        # else asks for it. Without it the XP comes off while the cache keeps saying the student
+        # qualifies, so a quest behind a rank they no longer hold stays in their Available tab.
+        # Only for a return that takes XP back: closing a suspended deck returns every submission
+        # still awaiting approval (tenant.notices), none of which was ever worth any XP, and a full
+        # recalculation each would be hundreds of them for nothing. One transaction for the same
+        # reason mark_approved() uses one, so the rebuild is handed over only once the XP this
+        # return takes back has been written (#2722).
+        from prerequisites.tasks import update_quest_conditions_for_user  # locally: it imports this module
+
+        with transaction.atomic():
+            self.semester = semester_for(self.user)
+            self.full_clean()
+            self.save()
+            self.user.profile.xp_invalidate_cache()  # recalculate XP
+            if was_approved:
+                update_quest_conditions_for_user.apply_async(args=[self.user_id], queue='default')
 
     def is_awaiting_approval(self):
         return self.is_completed and not self.is_approved
@@ -1080,6 +1757,15 @@ class QuestSubmission(models.Model):
         return self.time_completed is not None and not self.is_completed
 
     def get_comments(self):
+        """Return this submission's comments, ready to render.
+
+        The manager prefetches what the comments template reads off each comment (its attached
+        documents and its published question answers), so a submission with a long comment
+        thread does not cost a query per comment.
+
+        Returns:
+            QuerySet[Comment]: the comments targeting this submission.
+        """
         return Comment.objects.all_with_target_object(self)
 
     def _fix_ordinal(self):

@@ -1,86 +1,469 @@
-# Production Server Notes
+# Production & Staging Server Notes
 
-## SSL Certificates
+This document describes how ByteDeck is deployed and operated. It reflects the
+actual setup as of this writing; keep it updated when the infrastructure
+changes.
 
-Installed via [cerbot (snap package)](https://certbot.eff.org/instructions?ws=nginx&os=ubuntufocal&tab=wildcard) and [cerbot-dns-route5](https://certbot-dns-route53.readthedocs.io/en/stable/) and auto-renewed via systemd
+## Overview
 
-### certbot
+ByteDeck runs on **AWS**. Each environment (production and staging) is a single
+**EC2** instance running the app, Celery, and nginx as Docker containers, with
+**Postgres on RDS**, **static & media on S3 (served via CloudFront)**, and Redis
+as the Celery broker / cache.
 
-Once set up, the certbot package's systemd timer will try to auto renew the certificates.
+| Concern            | Production                          | Staging                              |
+| ------------------ | ----------------------------------- | ------------------------------------ |
+| Domain             | `bytedeck.com`, `*.bytedeck.com`    | `bytedeck-staging.com`, `*....`      |
+| Host               | dedicated EC2 instance              | separate dedicated EC2 instance      |
+| Deploy branch      | `master`                            | `staging`                            |
+| Database           | AWS RDS (Postgres)                  | AWS RDS (Postgres)                   |
+| Static & media     | S3 + CloudFront (`USE_S3=1`)        | S3 + CloudFront (`USE_S3=1`)         |
+| Redis              | see [Redis](#redis)                 | see [Redis](#redis)                  |
+| `DEBUG`            | `False`                             | `False`                              |
 
-1. `systemctl status snap.certbot.renew.timer` which runs twice a day at 0900 and 2200 UTC and triggers the renew service
-2. `systemctl status snap.certbot.renew.service` which executes `/usr/bin/snap run --timer="00:00~24:00/2" certbot.renew` which runs the renew command twice a day as a one shot
+Staging mirrors production as closely as possible (same Docker images, same
+nginx config, same `DEBUG=False` security settings) so it is a faithful
+pre-production check.
 
-Not exactly sure why both timer and renew services go twice a day.  And the renew service seems to be a random picked times (~) for some reason.  See snap renew docs.
+### Branch / release flow
 
-However, even if this succeeds, the new certificates won't automatically be available to nginx, so we need to overide the renew service to add some additional commands to reload nginx.  If the override is properly located, it should appear when you get the status of the snap.certbot.renew.service.
+`develop` (the day-to-day integration branch) → `staging` (deploys to
+`bytedeck-staging.com`) → `master` (deploys to production). Work is verified on
+staging, then `staging` is merged into `master` and production is deployed.
+Hotfixes may go straight to `staging`/`master`.
 
-3. `cat /etc/systemd/system/snap.certbot.renew.service.d/snap.certbot.renew.service.override.conf`
+## Host layout
 
+Each EC2 host runs Ubuntu with the app checked out at `/home/ubuntu/bytedeck`,
+owned by the `ubuntu` user (uid/gid `1000`, member of the `docker` group). The
+`WUID`/`WGID` environment variables (see the systemd unit) pass that uid/gid
+into the containers so files written to mounted volumes (e.g. collected static)
+are owned by `ubuntu` and not `root`.
 
-## Deployment workflow -- OLD
+## Containers (docker compose)
 
-### Stack
-- nginx
-- uwsgi
-- docker (docker-compose)
-- git
+Production and staging both run:
 
-### Files info
-- Nginx config is available on: ``/etc/nginx/sites-available/hackerspace.conf``
-- Application directory is on: ``/usr/share/nginx/hackerspace``
-- Application should be running as www-data user
-
-**Note, when media uploads and static files volumes of the application's container are mapped to host, the application container by default runs on root user, and the files created on the mounts will automatically become root ownership files, which will not be accessible from browser requests.**
-
-**To override this phenomenon user's $UID and $GID is explicitly passed on `web` service of docker compose so that the files created under the process are owned by that $UID and $GID. This are set by**
-```shell script
-    $ export WUID=<user_id>
-    $ export WGID=<group_id>
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d
 ```
-_`<user_id>` & `<group_id>` are the `uid` and `gid` of the user preferred to run container with_
 
-_run these commands before running any `docker-compose` commands_
+`docker-compose.override.yml` is **development only** (it defines the local
+`db`, `redis`, and `pgadmin` containers and runs `runserver`). It is *not* used
+in production, which is why prod points at RDS/managed services instead.
 
-_To check which user is running which container_
-```shell script
-docker inspect $(docker ps -aq) --format '{{.Config.User}} {{.Name}}'
+Services started in production:
+
+| Service       | What it does                                                                 |
+| ------------- | --------------------------------------------------------------------------- |
+| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared` and `migrate_schemas --executor=multiprocessing`, so a cold start reaches a migrated database on its own; `collectstatic` is a deploy step (`server-update.sh`), not a startup one. The port is **not** published to the host: nginx reaches it over the internal `frontend-network`, so TLS and the host check can't be bypassed. |
+| `celery`      | Celery worker (`-c 3 -Q default`) for background tasks.                      |
+| `celery-beat` | Celery beat scheduler (`DatabaseScheduler`) for periodic tasks.             |
+| `nginx`       | Reverse proxy / TLS terminator, built from `./nginx`. Mounts `/etc/letsencrypt`. Publishes host `443 -> 8088` and `80 -> 8080` (the container listens on high ports because it runs as a non-root user). |
+| `redis`       | Celery broker + Django cache. Internal-only (no published port); see [Redis](#redis). |
+
+Postgres runs on **AWS RDS** (not a compose service), reached via the
+`POSTGRES_*` settings in `.env`. Redis runs as the `redis` compose service
+above, reached via `REDIS_HOST` / `REDIS_PORT`.
+
+Two networks separate the tiers: `frontend-network` carries traffic between
+nginx and `web`, and `backend-network` carries everything internal (the app
+services and redis). Only `web` sits on both, so nginx has no route to redis.
+
+**Production runs the code baked into the image.** `server-update.sh` rebuilds
+the image from the deployed commit on every deploy, and the app services mount
+no source volume, so what runs is what was built and tested rather than
+whatever happens to be in the host checkout. Editing files under
+`/home/ubuntu/bytedeck` therefore changes nothing until the next deploy. The
+app services also run as the image's unprivileged `app` user; only nginx sets
+an explicit `user:`, because it reads the host's Let's Encrypt certificates.
+
+The shared service config lives in `docker-compose.yml`; the AWS file layers
+production concerns on top. In production every service additionally has
+**`restart: unless-stopped`** (a crashed container comes back automatically,
+including after a host reboot). Restart policies are deliberately
+production-only — in development a crashed process should stay down and
+visible, not quietly loop-restart. **Healthchecks** are shared (defined in
+`docker-compose.yml`, so development gets them too):
+
+- `web`: TCP connect to the uwsgi socket (`:8000`), with a long `start_period`
+  to cover the `migrate_schemas` startup run, which on a cold start with
+  migrations to apply walks every tenant schema.
+- `celery`: `celery inspect ping` against the worker over the broker — catches
+  hung/disconnected workers, not just dead processes.
+- `celery-beat`: process check (`pgrep`) — beat has no ping command, and a dead
+  beat silently stops all periodic tasks.
+- `redis`: `redis-cli ping`.
+
+### Checking this configuration
+
+The normal test suite runs the development overlay, so it never sees any of the
+above. Two checks under `production/tests/` cover it instead, wired up in
+`.github/workflows/production_config.yml` alongside a third job that builds the
+application image and asserts it runs as the unprivileged `app` user with no
+compiler left in it. Both scripts are runnable by hand from the repo root:
+
+```bash
+python production/tests/check_prod_compose.py        # renders the prod config, asserts its invariants
+bash production/tests/check_prod_topology.sh         # boots the stack, asserts who can reach whom
+bash production/tests/check_deploy_health_gate.sh    # asserts the deploy goes red when the app stays down
 ```
 
+The first and the third need no Docker daemon and take seconds (the third
+replaces `docker` on PATH with a stub, so it can drive container states a real
+deploy only reaches by accident). The second boots the real
+production overlay against throwaway certificates, substituting a trivial server
+for the application image, so it tests the topology rather than the app. Between
+them they assert that nothing but nginx is published to the host, that the app
+services mount no source volume, that nginx can reach `web` but not `redis`, and
+that a foreign `Host` header is still dropped.
 
-### Production deployment steps
-- Step 1: Go to application directory: ``/usr/share/nginx/hackerspace``
-- Step 2: Set WUID and WGID variables:
-```shell script
-    $ export WUID=<user_id>
-    $ export WGID=<group_id>
+Check health at a glance with `docker compose ps` (the STATUS column shows
+`(healthy)` / `(unhealthy)`). Note compose does **not** auto-restart a running
+container that turns *unhealthy* — the healthcheck is a monitoring signal, while
+`restart:` handles crashes/exits.
+
+## Deployment runbook
+
+Deploys are **automated**: merging to `staging` (staging host) or `master`
+(production host) runs CI and then, on success, a self-hosted GitHub Actions
+runner on that host runs `production/server-update.sh` — see
+[Automated deploys](#automated-deploys). You can still deploy **manually** (for a
+hotfix, or if a runner is down) by SSHing to the host:
+
+```bash
+# On the EC2 host, as the ubuntu user:
+cd /home/ubuntu/bytedeck
+git pull                      # master (prod) or staging (staging host)
+./production/server-update.sh
 ```
-_`<user_id>` & `<group_id>` are the `uid` and `gid` of the user preferred to run container with_
 
-- Step 3: Check the status of containers by ``docker compose ps``
-- Step 4: To deploy changes, use ``docker compose down`` then ``git pull``
-- Step 5: Run the application using ``docker compose build && docker compose up -d``
+`production/server-update.sh` does the following:
 
+1. `docker compose ... build --pull` the images. `--pull` re-fetches each base
+   image (`python:3.12-slim`, `nginx:stable`) so a deploy builds on the current
+   base and picks up its OS-level security updates, rather than on an older copy
+   of the tag left on the host. The pull is best effort: if it fails (say the
+   registry is unreachable) the build is retried without `--pull`, using the base
+   images already on the host, so an outage can still not block a deploy or a
+   rollback. A build that fails for any other reason fails the retry too and
+   stops the deploy.
+2. Copy `production/systemd/bytedeck.com.service` into `/etc/systemd/system/`.
+3. Install the certbot-renew override (see [TLS](#tls--certificates)) and the
+   `redis-host-setup.service` host tuning (disables THP, sets
+   `vm.overcommit_memory=1` — the settings the dockerized Redis warns about).
+4. `systemctl daemon-reload`, then enable + run `redis-host-setup` and enable
+   `bytedeck.com.service`.
+5. Run `migrate_schemas` (shared, then every tenant schema) and `collectstatic`
+   from the **newly built image**, in one-off `docker compose run --rm
+   --no-deps web` containers, while the **previous** containers are still
+   serving. This is the slow part of a deploy, and doing it here is what keeps
+   it out of the window when nginx has no backend. A migration that fails stops
+   the deploy here, with the previous version still up.
+6. `docker compose ... up -d --remove-orphans` to swap the containers. Compose
+   recreates only the services whose image or configuration changed, which on
+   a typical deploy is the three app services; `redis` is untouched, so queued
+   Celery tasks survive. What a visitor sees is the few seconds between the
+   old `web` stopping and the new one binding `:8000`.
 
-### Workflow
-- ``uwsgi`` is used to run the django application inside docker container
-- ``nginx`` reverse proxy is configured to point the docker django application mapped port
-- static and media files are served by ``nginx`` itself by pointing the url to the static and media directory of the application ie. ``/var/www/bytedeck/static`` and ``/var/www/bytedeck/media``
-- For static web hosting, check docker compose location of volume map for setting `STATIC_ROOT`. Current configuration suits for `STATIC_ROOT='/var/static'`.
+   `nginx` usually keeps running too, but not always: step 1 builds it with
+   `--pull`, so when the upstream `nginx:stable` tag has moved its image
+   changes and Compose recreates it as well, unbinding 443 for about a
+   second. That is a connection error rather than the maintenance page, so a
+   deploy is not strictly seamless. It is bounded and rare (only when the
+   base image moved), against the `down` always doing it on every deploy.
+7. `./production/wait-for-healthy.sh web` to confirm the app actually came
+   back, failing the deploy if it did not. Step 6 returns once the containers
+   are *created*, which is a much weaker claim than "the deploy worked": a bad
+   setting, a missing env var, or an import error in the deployed commit leaves
+   uwsgi refusing to bind (`need-app = true`) and nginx serving the maintenance
+   page. Without this the script would print its logs and exit 0, so the
+   **Deploy** job would go green over a site that is down.
+8. Tail the compose logs when run interactively; print a recent snapshot and
+   exit when run non-interactively (e.g. from the deploy runner).
 
+> **Why not `systemctl restart bytedeck.com`?** The unit's `ExecStop` is
+> `docker compose ... down`, which removes *every* container. That takes nginx
+> with it, so for part of the window nothing is listening on 443 and a visitor
+> gets a connection error rather than the maintenance page, and it takes redis
+> with it, which runs with persistence disabled, so any queued Celery task is
+> lost. `up -d` reaches the same end state without either. The script still
+> calls `systemctl start` (a no-op while the unit is active) so systemd keeps
+> owning the stack and still brings it back after a reboot.
 
-### Production setup
-- settings can be found inside ``src/hackerspace_online/settings``
-- for production settings create a file named ``production_hackerspace.py`` inside settings directory which should include ``src/hackerspace_online/settings/base.py`` on top and extend those configuration
+**Migrations are applied before the new code runs**, so each one has to be
+readable by the code it replaces for the seconds between step 5 and step 6. A
+migration that renames or drops a column in a single step breaks the outgoing
+version during that window: Django selects every concrete field of a model, so
+a column it still declares and no longer finds raises `ProgrammingError` on
+ordinary reads.
 
+Dropping a column safely takes two releases, the first removing it from
+Django's state while leaving the column alone (`SeparateDatabaseAndState`) and
+the second dropping it once nothing deployed knows about it. The full recipe,
+and what is safe to do in one release, is in CONTRIBUTING.md under "Migrations
+and the deploy window"; `src/hackerspace_online/tests/test_conventions.py`
+fails the build on a new migration that skips it.
 
-### SSL setup using let's encrypt
-- https://certbot.eff.org/
-- https://ssl-config.mozilla.org/#server=nginx&version=1.17.7&config=modern&openssl=1.1.1d&guideline=5.4
-- Get an A+ here: https://www.ssllabs.com/ssltest/
+The app is managed by the **`bytedeck.com.service`** systemd unit
+(`Type=oneshot`, `RemainAfterExit=yes`) so it comes back up automatically on
+host reboot. It sets `WUID=1000`/`WGID=1000` and runs the compose `up -d`.
 
-### Redis stuff
+> Note: the unit file is named `bytedeck.com.service` on both hosts. On the
+> staging host it deploys the `staging` branch with a staging `.env`.
 
-- Resolve several warnings wth this this systemd unit: https://gist.github.com/tylerecouture/cf6a88c4dae6dd19872964e3c5509db7
+## TLS / certificates
 
+Certificates are **Let's Encrypt wildcard certs** (`bytedeck.com` +
+`*.bytedeck.com`, needed because every tenant deck is a subdomain), obtained via
+the **certbot snap** using the **dns-route53** plugin (DNS-01 challenge, since
+wildcards require it).
 
+- Auto-renewal is handled by the certbot snap's systemd timer
+  (`snap.certbot.renew.timer`, runs ~twice daily).
+- Renewal alone doesn't make new certs available to the containerized nginx, so
+  `production/systemd/snap.certbot.renew.service.override.conf` adds two
+  `ExecStartPost` hooks: `chown -R ubuntu:ubuntu /etc/letsencrypt/` and an
+  `nginx -s reload` inside the nginx container.
+- nginx mounts `/etc/letsencrypt` from the host read-only via
+  `docker-compose.prod.aws.yml`.
+
+Verify the timer/override with:
+
+```bash
+systemctl status snap.certbot.renew.timer
+systemctl status snap.certbot.renew.service
+cat /etc/systemd/system/snap.certbot.renew.service.d/snap.certbot.renew.service.override.conf
+```
+
+nginx TLS config (`nginx/bytedeck.conf.template`): TLS 1.2/1.3,
+Mozilla-intermediate ciphers, OCSP stapling, HSTS, gzip. It denies illegal
+`Host` headers (returns `444`) and drops connections to unknown server names.
+
+The config is a **single template** shared by production and staging. The domain
+(`server_name`, the `Host`-check regex, and the Let's Encrypt cert paths) is the
+only thing that differs between environments, so it is a `${DOMAIN}` placeholder
+rendered at image build time by `envsubst` (see `nginx/Dockerfile`). `DOMAIN` is
+a build arg wired to `ROOT_DOMAIN` in `docker-compose.prod.aws.yml`, so staging
+needs no modified nginx file — it just sets `ROOT_DOMAIN=bytedeck-staging.com` in
+its `.env` (and has its wildcard cert at `/etc/letsencrypt/live/bytedeck-staging.com/`).
+`envsubst` is restricted to `${DOMAIN}`, so nginx's own `$host`/`$scheme`/`$1`
+variables are left untouched.
+
+## Static & media
+
+`USE_S3=1` in production, so django-storages writes **static** and **media** to
+**S3** and they are served through **CloudFront**. nginx does not serve app
+media in normal operation.
+
+> Legacy detail: `nginx/bytedeck.conf.template` still contains a
+> `location ~ /media/(.*)$` that 301-redirects to the S3/CloudFront
+> distribution. The CDN host is injected from the `CDN_static` `.env` value at
+> image-build time (`envsubst` in `nginx/Dockerfile`) rather than hardcoded. It's
+> a workaround for old hardcoded `/media/...` URLs and causes a redundant
+> redirect hop. Prefer generating correct absolute S3/CloudFront URLs in the app
+> and removing this block when practical.
+
+## Database
+
+Postgres runs on **AWS RDS**. `POSTGRES_HOST` in the production `.env` points at
+the RDS endpoint; `POSTGRES_PASSWORD` must be set (unlike development, which uses
+`POSTGRES_HOST_AUTH_METHOD=trust`).
+
+**Backups:** automated **RDS snapshots**. Because media lives on S3 (versionable)
+and the DB is on RDS, the EC2 host itself is largely disposable — it can be
+rebuilt from the repo + `.env`.
+
+Multi-tenant migration reminder: never run plain `migrate`. The `web` container
+runs `migrate_schemas` on startup; to run migrations manually use
+`migrate_schemas` (and `tenant_command` for management commands).
+
+## Redis
+
+Redis is the Celery **broker** (db `0`) and the Django **cache** (dbs `1`/`2`),
+addressed via `REDIS_HOST` / `REDIS_PORT` in `.env`.
+
+Redis runs as the **`redis` compose service** on the EC2 host (see
+`docker-compose.prod.aws.yml`), replacing the previous **AWS ElastiCache**
+instance (much cheaper for this workload). It is locked down as follows:
+
+- **Not publicly reachable.** It has no published port and lives only on the
+  internal `backend-network`, so only the app/celery containers can reach it.
+  That is why it runs without a password in this single-host setup; if you ever
+  expose it, add a `requirepass` and put the password in the broker/cache URLs.
+- **Memory is capped** (`--maxmemory`, default `256mb`, override via
+  `REDIS_MAXMEMORY` in `.env`) so Redis can't OOM the shared app host.
+- **`--maxmemory-policy noeviction`** so queued Celery/beat tasks are never
+  silently dropped under memory pressure. If cache churn makes the cap tight,
+  raise `REDIS_MAXMEMORY`, or switch to `volatile-lru` (cache entries carry a
+  TTL and broker keys don't, so only cache keys would be evicted).
+- **Persistence is disabled** (`--save "" --appendonly no`) — the broker queue
+  and cache are both disposable, so a restart just starts empty.
+- **`restart: unless-stopped`** so it recovers on crash.
+
+Apply the host tuning once per host (see [Host tuning](#host-tuning)):
+`production/systemd/redis-host-setup.service` disables Transparent Huge Pages and
+sets `vm.overcommit_memory=1` (both recommended by Redis). Enable it with
+`systemctl enable --now redis-host-setup`.
+
+**Migrating an existing host off ElastiCache:** set `REDIS_HOST=redis` in the
+server's `.env`, then redeploy (`./production/server-update.sh`). No data
+migration is needed since the broker/cache are disposable; the ElastiCache
+instance can then be decommissioned.
+
+## Host tuning
+
+`production/systemd/redis-host-setup.service` (oneshot) disables THP and sets
+`vm.overcommit_memory=1`. It is only relevant when Redis runs as a container on
+the host (see above); it is a no-op benefit for ElastiCache.
+
+## Environment variables
+
+Configuration is entirely env-driven through `.env` on each host (read by
+django-environ). `.env.example.aws` is the production/staging template — copy it
+and fill in real values. Key production settings:
+
+| Variable                         | Notes                                                            |
+| -------------------------------- | --------------------------------------------------------------- |
+| `DEBUG`                          | **Must be `False`** in prod/staging.                            |
+| `SECRET_KEY`                     | Unique, 50+ random chars. Never the `Change.Me!` default.       |
+| `ROOT_DOMAIN`                    | `bytedeck.com` (prod) / `bytedeck-staging.com` (staging). Drives `ALLOWED_HOSTS` (`.` + `ROOT_DOMAIN`) and the public-tenant Site. |
+| `CSRF_TRUSTED_ORIGINS`           | Required in prod, e.g. `https://*.bytedeck.com`.                |
+| `POSTGRES_HOST` / `_PORT` / `_DB_NAME` / `_USER` / `_PASSWORD` | RDS endpoint + credentials.       |
+| `REDIS_HOST` / `REDIS_PORT`      | ElastiCache endpoint, or the Redis container/host if self-hosted.|
+| `USE_S3`                         | `1` in prod/staging.                                            |
+| `AWS_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | Leave blank to use the EC2 instance's IAM role (preferred); or set for a specific IAM user. |
+| `AWS_STORAGE_BUCKET_NAME`, `CDN_static` | S3 bucket + CloudFront domain.                          |
+| `WUID` / `WGID`                  | Host user's uid/gid (`1000`) so container-written files aren't root-owned. |
+| Email (`EMAIL_HOST*`, `DEFAULT_FROM_EMAIL`, `ADMINS`, `SERVER_EMAIL`) | SMTP + error-report recipients. |
+
+The `.env` files hold real secrets and are **not** in git (`.gitignore` excludes
+`.env`). Keep a secure copy (e.g. a password manager / secrets store) so a host
+can be rebuilt.
+
+## Security settings
+
+`settings.py` applies a production/staging hardening block whenever
+`DEBUG=False` (secure cookies, HSTS with `includeSubDomains`, nosniff, referrer
+policy, `SECURE_PROXY_SSL_HEADER`). `manage.py check --deploy` is run in CI
+against the `DEBUG=False` path to prevent regressions.
+
+nginx **must** forward the request scheme to uwsgi — `nginx/uwsgi_params`
+sets `uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;`, which pairs with
+`SECURE_PROXY_SSL_HEADER` in settings. This is required for
+correct behaviour, not just for redirects: without it `request.is_secure()` is
+always `False` behind the proxy, so `build_absolute_uri()` emits `http://` links
+(password-reset emails, OAuth callbacks, pagination) even though the site is
+HTTPS-only.
+
+`SECURE_SSL_REDIRECT` is a separate, optional layer, left **off** by default
+because nginx already redirects HTTP→HTTPS at the edge. To also enforce it inside
+Django, set `SECURE_SSL_REDIRECT=True` in the env — but only with the
+`HTTP_X_FORWARDED_PROTO` param above in place. Enabling it *without* the
+forwarded scheme causes an infinite redirect loop (Django never sees a secure
+request, so it redirects every request forever).
+
+## Troubleshooting
+
+- **Maintenance page right after a restart:** expected while `web` is still
+  starting, and it lasts as long as startup does rather than any fixed time:
+  the `web` container runs `migrate_schemas` over every tenant schema before
+  uwsgi binds :8000, and nginx has nothing to talk to until it does. After a
+  deploy that is a check that finds nothing to do (`server-update.sh` migrated
+  before it swapped the containers) and clears in seconds; after a **cold
+  start** with migrations still to apply it is as long as those take, and the
+  more tenants the longer (the container healthcheck allows up to 10 minutes).
+  It clears once `spawned uWSGI master process` appears in the web logs:
+  ```bash
+  cd ~/bytedeck
+  C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
+  $C logs -f web
+  ```
+- **502 that does not clear:** check that nginx is dialling the address `web`
+  actually has:
+  ```bash
+  cd ~/bytedeck
+  C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
+  $C logs nginx | grep -o 'upstream: "uwsgi://[^"]*"' | tail -1   # who nginx calls
+  $C ps -q web | xargs docker inspect \
+      -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}={{$net.IPAddress}} {{end}}'  # web's IP per network
+  ```
+  The upstream address must match web's IP on the network it shares with nginx
+  (`frontend-network`; web also sits on `backend-network`, and that IP is not
+  the one nginx dials). If they do not match, nginx is holding a stale address: confirm
+  the site config still carries the `resolver` line and the `$web_upstream`
+  variable in `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping
+  either one restores the old resolve-once-at-startup behaviour.
+  `$C exec nginx nginx -s reload` clears it until the next recreation.
+- **Check nginx and web share a network:** `$C exec nginx getent hosts web`
+  should print the current web IP.
+- **Which user is each container running as:**
+  `docker inspect $(docker ps -aq) --format '{{.Config.User}} {{.Name}}'`
+- **Logs:** `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs -f`
+- **Redis warnings about THP / overcommit:** enable `redis-host-setup.service`.
+
+## Automated deploys
+
+Deploys run automatically via a **self-hosted GitHub Actions runner on each
+host**, gated on green CI. The flow follows the branch model
+(`develop → staging → master`): merging to `staging` deploys the staging host,
+merging to `master` deploys production. No inbound SSH is exposed — the runner
+pulls jobs from GitHub.
+
+**How it works** (`.github/workflows/deploy.yml`):
+
+- It triggers via `workflow_run` **after** the *Build and Tests* workflow
+  finishes, and only runs when that run **succeeded**, was a **push** (not a PR),
+  and was on `master` or `staging`. So nothing deploys unless CI is green.
+- `master` runs the `deploy-production` job on the runner labelled
+  `[self-hosted, production]`; `staging` runs `deploy-staging` on
+  `[self-hosted, staging]`.
+- On the host, the job checks the app dir out to the exact tested commit and runs
+  the deploy script:
+  ```bash
+  cd "$APP_DIR"                        # default /home/ubuntu/bytedeck; override with
+                                       # the BYTEDECK_APP_DIR repo variable
+  git fetch --prune origin "$BRANCH"
+  git checkout -B "$BRANCH" "$SHA"     # $SHA = the commit that passed CI
+  ./production/server-update.sh
+  ```
+- A `concurrency` group serializes deploys per environment; each job has a
+  30-minute timeout.
+
+**One-time host setup** (per host):
+
+1. **Register the runner — automated.** Run `./production/server-update.sh`
+   interactively (or `./production/setup-runner.sh` directly) as the `ubuntu`
+   user. If no runner is set up, it offers to install one: it derives the label
+   from `ROOT_DOMAIN` in `.env` (`bytedeck.com` → `production`, otherwise
+   `staging`), prompts for a short-lived registration token (repo *Settings →
+   Actions → Runners → New self-hosted runner* — copy the `--token` value),
+   installs the latest runner into `~/actions-runner`, and registers it as a
+   systemd service so it survives reboots. On every later run it detects the
+   existing install (a `SETUP_VERSION` marker file plus a service-status check)
+   and skips in one line; a manually-configured runner is adopted as-is. The
+   runner binary itself self-updates after installation. When run
+   non-interactively (e.g. by the deploy runner) it never prompts and never
+   fails the deploy — it just reports if setup is missing.
+2. **Passwordless sudo.** `server-update.sh` uses `sudo` for the systemd steps,
+   so the runner user needs passwordless sudo for them (stock EC2 Ubuntu already
+   grants the `ubuntu` user this via cloud-init — verify with `sudo -n true`).
+   Without it the deploy fails.
+3. **`.env` + Docker** are already set up on the host from the manual-deploy
+   days; nothing extra is needed.
+
+**Production deploys require manual approval.** The jobs use GitHub
+*Environments* (`production` / `staging`), and the `production` environment has
+a *required reviewers* rule — so a `master` push still runs CI automatically,
+but the deploy job then pauses with "Waiting for review" until a reviewer
+approves it in the Actions UI (*Review deployments → production → Approve and
+deploy*). Staging has no such rule and deploys fully automatically.
+
+One-time settings for this rule (repo *Settings → Environments → production*):
+enable **Required reviewers** (add the maintainer), and restrict **Deployment
+branches** to `master` so no other branch can use the production environment.
+
+**Safety notes:** `git checkout -B` resets tracked files to the tested commit —
+untracked files like `.env` and media are preserved, but don't keep local edits
+to tracked files on a host. Until the runners are registered the workflow is
+inert (the deploy jobs simply have nowhere to run).

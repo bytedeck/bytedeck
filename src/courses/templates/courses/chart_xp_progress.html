@@ -2,7 +2,7 @@
 
   /*jshint esversion: 6 */
 
-  var max_xp = {{courses.first.course.xp_for_100_percent}}
+  var max_xp = {{ course_panes.0.course.xp_for_100_percent }};
 
   var ctx = document.getElementById("myChart");
 
@@ -12,7 +12,6 @@
   }
 
   var days = 85;
-  var chillax = 72.5;
 
   // XP DATA SET
   var XPData = {
@@ -84,36 +83,37 @@
   // };
 
 
-  var markranges = []
-  {% for mr in markranges %}
-  var border;
-  {% if request.user.profile.dark_theme %}
-  border = "{{ mr.color_dark }}";
-  {% else %}
-  border = "{{ mr.color_light }}";
-  {% endif %}
-
-  markranges.push({
-    type: 'line',
-    label: '{{ mr.name }} ({{ mr.minimum_mark|floatformat:"0" }}%)',
-    mark: {{ mr.minimum_mark }},
-    pointRadius: 0,
-    backgroundColor: "rgb(0,0,0,0)",
-    borderColor: border,
-    data: [{x: 0, y: 0}],
-  });
+  // A mark range can be assigned to particular courses, so which grade boundaries to draw is a
+  // question about the course being charted, not about the student (#2743). Each course's own
+  // lines are held here and swapped in when the course tab changes.
+  var markranges_by_course = {};
+  {% for pane in course_panes %}
+  markranges_by_course["{{ pane.course.id }}"] = [
+    {% for mr in pane.markranges %}
+    {
+      type: 'line',
+      label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat }}%)',
+      mark: {{ mr.minimum_mark }},
+      pointRadius: 0,
+      backgroundColor: "rgb(0,0,0,0)",
+      borderColor: "{% if request.user.profile.dark_theme %}{{ mr.color_dark }}{% else %}{{ mr.color_light }}{% endif %}",
+      data: [{x: 0, y: 0}],
+    },
+    {% endfor %}
+  ];
   {% endfor %}
 
-  var data = {
-      datasets: [
-          XPData,
-{#          XPDataBar,#}
-          XPTrendData,
-      ].concat(markranges)
-  };
+  var markranges = markranges_by_course["{{ course_panes.0.course.id }}"] || [];
 
-  // need some starting data for the animation to work it seems..
-  generate_mark_lines(100)
+  var xp_datasets = [
+      XPData,
+{#          XPDataBar,#}
+      XPTrendData,
+  ];
+
+  var data = {
+      datasets: xp_datasets.concat(markranges)
+  };
 
   var options = {
 
@@ -248,18 +248,16 @@
     }
   }
 
-  function generate_mark_lines(days) {
-    // Mark Line Generation
-    for(let range of markranges) {
-      range.data = [];
-    }
-
-    for (var i = 1; i <= days; i++) {
-        for (let range of markranges) {
-          var point = new DataPoint(i, Math.floor(i * max_xp*range.mark/100 / days))
-          range.data.push(point);
-        }
-
+  // each range's line, as the chart's data gives it: the XP that reaches the range on each class
+  // day, worked out on the server like the XP listed for it below the chart (#2826)
+  function set_mark_lines(mark_lines) {
+    for (let range of markranges) {
+      var line = mark_lines.find(function(candidate) {
+        return candidate.mark === range.mark;
+      });
+      range.data = line ? line.xp.map(function(xp, day) {
+        return new DataPoint(day + 1, xp);
+      }) : [];
     }
   }
 
@@ -269,26 +267,56 @@
       options: options,
   });
 
-  function ajax_update_plot() {
+  // the course the chart is currently being asked about. A reader switching tabs quickly
+  // has more than one request in the air, and they can come back in any order, so each
+  // answer is checked against this before it is drawn.
+  var plotting_course;
+
+  function ajax_update_plot(course_id) {
 
     // user in this view is the request.user, if a student,
     // or the user matching the id in the url
+
+    plotting_course = course_id;
 
     $.ajax({
       type: "POST",
       url: "{% url 'courses:ajax_progress_chart' user.id %}",
       data: {
         csrfmiddlewaretoken: "{{ csrf_token }}",
+        // which course to plot: a student in several has a different amount of XP in each,
+        // so each course is its own line out of its own total (#2453)
+        course: course_id,
       },
       success: function(data){
-        // console.log(data.xp_data);
-        XPData.data = data.xp_data;
-        console.log(data.xp_data);
-        generate_trend(data.days_in_semester);
-        generate_mark_lines(data.days_in_semester);
-        myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
+        if (course_id !== plotting_course) {
+          return;  // a later course was asked for while this one was on its way back
+        }
 
-        //console.log(myChart);
+        XPData.data = data.xp_data;
+
+        // the lines this course is heading for, since a mark range can belong to one course
+        markranges = markranges_by_course[course_id] || markranges;
+
+        // courses can be out of different amounts, so the axis and the mark lines are
+        // rescaled to whichever course is being shown
+        if (data.xp_for_100_percent) {
+          max_xp = data.xp_for_100_percent;
+          myChart.options.scales.yAxes[0].ticks.max = max_xp;
+          myChart.options.scales.yAxes[0].ticks.stepSize = max_xp / 20;
+        }
+
+        // a course run on XP alone has no percentage, so its mark lines and the percent axis
+        // they are read against come off the chart entirely, legend included (#403)
+        myChart.data.datasets = data.uses_marks ? xp_datasets.concat(markranges) : xp_datasets;
+        var percentAxis = myChart.options.scales.yAxes.find(function(axis) {
+          return axis.id === "y-axis-percent";
+        });
+        percentAxis.display = data.uses_marks;
+
+        generate_trend(data.days_in_semester);
+        set_mark_lines(data.mark_lines);
+        myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
 
         $('div.loading').remove();
         $('#myChart').show("slow");
@@ -316,10 +344,5 @@
   }, function() {
     forceWindowScrollY = -1;
   });
-
-  $(document).ready(function() {
-    ajax_update_plot();
-  });
-
 
 </script>

@@ -1,6 +1,7 @@
 from django import forms
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
+from comments.sanitize import sanitize_comment_html
 
 
 # class CommentForm(forms.ModelForm):
@@ -24,3 +25,16 @@ class CommentForm(forms.Form):
         self.fields['comment_text'].label = self.label
 
     comment_text = forms.CharField()
+
+    def clean_comment_text(self):
+        """Return the submitted comment text, sanitized to safe HTML for the plain-text
+        (non-wysiwyg) variant; the wysiwyg variant is left for the summernote widget."""
+        text = self.cleaned_data.get('comment_text', '')
+        if not self.wysiwyg:
+            # The plain-text (non-wysiwyg) comment field is accessible to all users
+            # and rendered with |safe, so it must be sanitized to prevent scripts from
+            # executing (issue #1343). We sanitize with an allow-list rather than escape
+            # everything, so legitimate formatting still renders (issue #2113).
+            # The wysiwyg variant is sanitized by the safe summernote widget instead.
+            text = sanitize_comment_html(text)
+        return text

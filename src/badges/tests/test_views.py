@@ -1,14 +1,17 @@
 import uuid
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion, BadgeType
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from prerequisites.models import Prereq
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 from notifications.models import Notification
@@ -19,28 +22,25 @@ import json
 User = get_user_model()
 
 
-class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeViewTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
+    @classmethod
+    def setUpTestData(cls):
+        """Create teacher, students, a badge, badge type and assertion for the badge view tests."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
 
         # needed because BadgeAssertions use a default that might not exist yet
-        self.sem = SiteConfig.get().active_semester
+        cls.sem = SiteConfig.get().active_semester
 
-        self.test_badge = baker.make(Badge, name="badge", xp=5)
-        self.test_badge.tags.add('tag')
-        self.test_badge_type = baker.make(BadgeType)
-        self.test_assertion = baker.make(BadgeAssertion)
+        cls.test_badge = baker.make(Badge, name="badge", xp=5)
+        cls.test_badge.tags.add('tag')
+        cls.test_badge_type = baker.make(BadgeType)
+        cls.test_assertion = baker.make(BadgeAssertion)
 
-    def test_all_badge_page_status_codes_for_anonymous(self):
+    def test_all_badge_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home  '''
         b_pk = self.test_badge.pk
         a_pk = self.test_assertion.pk
@@ -57,12 +57,12 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('badges:bulk_grant_badge', args=[b_pk])
         self.assertRedirectsLogin('badges:bulk_grant')
         self.assertRedirectsLogin('badges:revoke', args=[a_pk])
+        self.assertRedirectsLogin('badges:grant_qualifying', args=[b_pk])
 
-    def test_all_badge_page_status_codes_for_students(self):
-
+    def test_all_badge_page_status_codes__students(self):
+        """Students may view the list/detail pages but get 403 on all staff-only badge views."""
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         b_pk = self.test_badge.pk
         # a_pk = self.test_assertion.pk
@@ -81,13 +81,14 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('badges:bulk_grant_badge', args=[b_pk])
         self.assert403('badges:bulk_grant')
         self.assert403('badges:revoke', args=[s_pk])
+        self.assert403('badges:grant_qualifying', args=[b_pk])
 
-        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
+        self.assert403('badges:badge_prereqs_update', args=[b_pk])
 
-    def test_all_badge_page_status_codes_for_teachers(self):
+    def test_all_badge_page_status_codes__teachers(self):
+        """Teachers get 200 on every badge view, including create/update/grant/revoke."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         b_pk = self.test_badge.pk
         a_pk = self.test_assertion.pk
@@ -103,12 +104,47 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:bulk_grant_badge', args=[b_pk])
         self.assert200('badges:bulk_grant')
         self.assert200('badges:revoke', args=[a_pk])
-        self.assert200('badges:badge_prereqs_update', args=[a_pk])
+        # badge_prereqs_update takes a *badge* pk, not an assertion pk; using a_pk
+        # only worked when both sequences happened to start at 1 on a fresh schema.
+        self.assert200('badges:badge_prereqs_update', args=[b_pk])
+        self.assert200('badges:grant_qualifying', args=[b_pk])
 
-    def test_badge_create(self):
+    def test_badge_detail__action_button_comment_not_rendered(self):
+        """The explanatory comment above the action buttons must not render as visible text (#2116)."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
+        self.assertNotContains(response, 'One btn-group keeps every action button')
+
+    def test_badge_detail__lists_named_as_on_the_students_page(self):
+        """The toggle between the badge's current and all holders carries the Students page's
+        names, Current and All, with the same descriptions as their hover text (#2136)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
+
+        self.assertContains(response, 'title="All students registered in a course in an open semester (includes all of yours)"')
+        self.assertContains(response, 'title="All non-archived students (includes all current students)"')
+        self.assertNotContains(response, 'All Active')
+        self.assertNotContains(response, 'Current Semester')
+
+    def test_badge_detail_all__login_required_and_renders_for_authenticated_users(self):
+        """badge_detail_all (assertions of all students) redirects anonymous users to login and renders for any logged-in user."""
+        b_pk = self.test_badge.pk
+
+        # anonymous -> redirected to login
+        self.assertRedirectsLogin('badges:badge_detail_all', args=[b_pk])
+
+        # students and teachers can both view it (login_required, no staff gate)
+        self.client.force_login(self.test_student1)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
+        self.client.force_login(self.test_teacher)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
+    def test_badge_create__creates_badge(self):
+        """Posting valid data to the create view creates a new badge and redirects to the list."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         form_data = {
             'name': "badge test",
@@ -137,14 +173,14 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         form_data = response.context['form'].initial
 
         # Badge name should have changed
-        self.assertEqual(form_data['name'], "Copy of " + self.test_badge.name)
+        self.assertEqual(form_data['name'], f"Copy of {self.test_badge.name}")
         # Tags should be the same as original
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
 
     def test_badge_copy__POST(self):
+        """Posting to the copy view creates a new badge from the submitted data."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         form_data = {
             'name': "badge copy test",
@@ -165,12 +201,11 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         new_badge = Badge.objects.latest('datetime_created')
         self.assertEqual(new_badge.name, "badge copy test")
 
-    def test_assertion_create_and_delete(self):
+    def test_assertion__create_and_delete(self):
         """ Ensure that the create and delete views properly add and remove the badges from the users profile
         and adds/subtracts XP."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # should be zero, but this avoids problems with any future changes to setUp etc.
         xp_initial = self.test_student1.profile.xp_cached
@@ -208,10 +243,114 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
-    def test_assertion_create_no_xp(self):
+    def _messages(self, response):
+        """The messages a request queued, as they render.
+
+        Args:
+            response (HttpResponse): the response whose request queued them.
+
+        Returns:
+            list[str]: the message bodies.
+        """
+        return [str(message) for message in response.wsgi_request._messages]
+
+    def _link(self, obj, text):
+        """The link a message makes to an object's page.
+
+        Args:
+            obj: what is linked: a badge, or a student's profile.
+            text (str): what the link reads.
+
+        Returns:
+            str: the <a> element.
+        """
+        return f'<a href="{obj.get_absolute_url()}">{text}</a>'
+
+    def test_assertion_create__message_links_the_badge_and_the_student(self):
+        """Granting a badge says which badge to whom, each linked to its page (#2808)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student1.id},
+        )
+
+        self.assertEqual(self._messages(response), [
+            f"{SiteConfig.get().custom_name_for_badge} {self._link(self.test_badge, self.test_badge.name)} "
+            f"granted to {self._link(self.test_student1.profile, self.test_student1.username)}"
+        ])
+
+    def test_assertion_create__message_escapes_the_badge_name(self):
+        """A badge name holding markup reaches the message as text inside its link."""
+        self.test_badge.name = "<b>Bold</b> Badge"
+        self.test_badge.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student1.id},
+        )
+
+        self.assertIn(self._link(self.test_badge, "&lt;b&gt;Bold&lt;/b&gt; Badge"), self._messages(response)[0])
+
+    def test_assertion_delete__message_links_the_badge_and_the_student(self):
+        """Revoking a badge says which badge from whom, each linked to its page, under the deck's
+        own name for badges (#2808)."""
+        assertion = BadgeAssertion.objects.create_assertion(self.test_student1, self.test_badge)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('badges:revoke', args=[assertion.id]))
+
+        self.assertEqual(self._messages(response), [
+            f"{SiteConfig.get().custom_name_for_badge} {self._link(self.test_badge, self.test_badge.name)} "
+            f"revoked from {self._link(self.test_student1.profile, self.test_student1.username)}"
+        ])
+
+    def test_assertion_delete__the_revoke_and_the_xp_it_takes_back_are_one_transaction(self):
+        """Revoking is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Deleting the assertion is what asks the prerequisites app to rebuild the student's
+        cache of available quests, and TransactionAwareTask hands that job to celery on commit.
+        One transaction around the revoke is therefore what holds the job back until the XP the
+        badge was worth has been taken off, so the worker does not leave a quest waiting on a
+        rank the student no longer holds sitting in their Available tab.
+        """
+        self.client.force_login(self.test_teacher)
+        assertion = BadgeAssertion.objects.create_assertion(self.test_student1, self.test_badge, self.test_teacher)
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse('badges:revoke', args=[assertion.id]))
+
+        self.assertTrue(
+            BadgeAssertion.objects.filter(id=assertion.id).exists(),
+            "the badge was left revoked without its XP being taken back",
+        )
+
+    def test_assertion_create__zero_ids_render_empty_initial_form(self):
+        """Calling assertion_create with user_id=0 and badge_id=0 (no pre-selected user/badge)
+        renders the grant form without pre-filling either, then a valid POST still grants."""
+        self.client.force_login(self.test_teacher)
+
+        # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
+        response = self.assert200('badges:grant', kwargs={'user_id': 0, 'badge_id': 0})
+        # neither field is pre-filled because both id lookups were skipped
+        self.assertNotIn('user', response.context['form'].initial)
+        self.assertNotIn('badge', response.context['form'].initial)
+
+        form_data = {'badge': self.test_badge.id, 'user': self.test_student1.id}
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}),
+            data=form_data,
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+        self.assertTrue(
+            BadgeAssertion.objects.filter(user=self.test_student1, badge=self.test_badge).exists()
+        )
+
+    def test_assertion_create__no_xp(self):
         """Don't grant XP for this badge assertion"""
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # No XP granted for this badge
         form_data = {
@@ -227,12 +366,105 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse("badges:list"))
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
-        self.assertEqual(new_assertion.do_not_grant_xp, True)
+        self.assertTrue(new_assertion.do_not_grant_xp)
 
-    def test_bulk_assertion_create(self):
+    def test_assertion_create__offers_the_students_courses_when_they_have_several(self):
+        """Granting from a student's profile asks which of their courses the badge counts toward,
+        the same question they answer on their own submissions (issue #2440)."""
+        self.client.force_login(self.test_teacher)
+        maths, art = (
+            baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course', title=title),
+                       block=baker.make('courses.Block'), semester=self.sem)
+            for title in ('Maths', 'Art')
+        )
+
+        response = self.client.get(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}))
+
+        form = response.context['form']
+        self.assertCountEqual(form.fields['registration'].queryset, [maths, art])
+        self.assertEqual(form.fields['registration'].empty_label, "Split evenly between the student's courses")
+
+    def test_assertion_create__grants_toward_the_chosen_course(self):
+        """The teacher's choice is recorded on the assertion, so the badge's XP counts toward
+        that course instead of being shared."""
+        self.client.force_login(self.test_teacher)
+        maths, _art = (
+            baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course', title=title),
+                       block=baker.make('courses.Block'), semester=self.sem)
+            for title in ('Maths', 'Art')
+        )
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student1.id, 'registration': maths.id},
+        )
+
+        self.assertRedirects(response, reverse('badges:list'))
+        self.assertEqual(BadgeAssertion.objects.latest('timestamp').registration, maths)
+
+    def test_assertion_create__refuses_a_registration_that_is_not_the_recipients(self):
+        """The registrations offered belong to the student named in the URL, but the badge goes to
+        the student picked on the form, so a posted pair that does not match is rejected. Attaching
+        someone else's registration would count that XP toward a course this student cannot see."""
+        self.client.force_login(self.test_teacher)
+        # the URL student holds two courses, so the form does offer the question
+        offered, _other = (
+            baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                       block=baker.make('courses.Block'), semester=self.sem)
+            for _ in range(2)
+        )
+        baker.make('courses.CourseStudent', user=self.test_student2, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student2.id, 'registration': offered.id},
+        )
+
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error, not saved
+        self.assertIn('registration', response.context['form'].errors)
+        self.assertFalse(BadgeAssertion.objects.filter(user=self.test_student2, badge=self.test_badge).exists())
+
+    def test_assertion_create__does_not_ask_for_a_student_with_one_course(self):
+        """One course means no question to ask, so the field is not there at all."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}))
+
+        self.assertNotIn('registration', response.context['form'].fields)
+
+    def test_bulk_assertion_create__warns_that_the_xp_will_be_split(self):
+        """Bulk granting cannot ask about courses, because every student picked has their own.
+        Say so on the page rather than leaving a teacher to assume it landed somewhere."""
+        self.client.force_login(self.test_teacher)
+        for course in (baker.make('courses.Course'), baker.make('courses.Course')):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(reverse('badges:bulk_grant'))
+
+        self.assertContains(response, 'split evenly between their courses')
+        self.assertNotIn('registration', response.context['form'].fields)
+
+    def test_bulk_assertion_create__stays_quiet_on_a_deck_of_single_course_students(self):
+        """Nothing is split on a deck where every student takes one course, so the notice would
+        only puzzle the teacher reading it."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(reverse('badges:bulk_grant'))
+
+        self.assertNotContains(response, 'split evenly between their courses')
+
+    def test_bulk_assertion_create__grants_to_all_selected(self):
+        """Bulk granting a badge to multiple students creates one assertion per student."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # compare total granted before to after:
         badge_assertions_before = BadgeAssertion.objects.all().count()
@@ -253,7 +485,215 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         badge_assertions_after = BadgeAssertion.objects.all().count()
         self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
 
-    def test_scape_update_message_on_update_delete(self):
+    def test_bulk_assertion_create__message_links_the_badge_and_each_student(self):
+        """Granting a badge in bulk links the badge and every student it went to (#2808)."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
+        baker.make('courses.CourseStudent', user=self.test_student2, semester=self.sem)
+
+        response = self.client.post(reverse('badges:bulk_grant'), data={
+            'badge': self.test_badge.id,
+            'students': [self.test_student1.profile.id, self.test_student2.profile.id],
+        })
+
+        message = self._messages(response)[0]
+        self.assertTrue(message.startswith(
+            f"{SiteConfig.get().custom_name_for_badge} {self._link(self.test_badge, self.test_badge.name)} granted to "))
+        for student in (self.test_student1, self.test_student2):
+            self.assertIn(self._link(student.profile, student.profile.preferred_full_name()), message)
+        self.assertEqual(message.count("; "), 1)
+
+    def test_badge_grant_qualifying__GET_lists_qualifying_students(self):
+        """The grant-qualifying page lists current students who meet the badge's prereqs
+        but haven't been granted it yet, and offers a confirm button (issue #1157).
+        """
+        self.client.force_login(self.test_teacher)
+
+        # a published badge with a single prereq, and a current student who has met it
+        quest = baker.make(Quest)
+        Prereq.add_simple_prereq(self.test_badge, quest)
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
+        baker.make(QuestSubmission, user=self.test_student1, quest=quest,
+                   is_completed=True, is_approved=True, semester=self.sem)
+
+        response = self.client.get(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.test_student1, response.context['qualifying_students'])
+        self.assertContains(response, 'Grant to qualifying students')
+        # heading and the XP that granting will award are both shown (issue #2061)
+        self.assertContains(response, 'Students who qualify for this')
+        self.assertContains(response, f'{self.test_badge.xp} XP')
+        # the qualifying students render as a bulleted list, not the previous unstyled list (#2117)
+        self.assertNotContains(response, 'list-unstyled')
+        # a note explains that badges are granted automatically on quest approval / profile view (#2117)
+        self.assertContains(response, 'granted automatically')
+        self.assertContains(response, 'the next time one of their quest submissions is approved')
+
+    def test_badge_grant_qualifying__auto_grant_note_shown_when_no_qualifiers(self):
+        """The auto-grant explanation note is shown even when no current student qualifies, so a
+        teacher always sees when the badge grants on its own (#2117)."""
+        self.client.force_login(self.test_teacher)
+        # test_badge has no prereqs / no qualifying students in this fresh state
+        response = self.client.get(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['qualifying_students']), [])
+        self.assertContains(response, 'granted automatically')
+
+    @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_grant_qualifying__POST_queues_task_and_redirects(self, task):
+        """Confirming the grant queues the grant task for the badge and redirects to its
+        detail page.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        task.assert_called_once_with(
+            kwargs={'badge_id': self.test_badge.id, 'start_from_user_id': 1}, queue='default'
+        )
+
+    @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_grant_qualifying__message_links_the_badge(self, task):
+        """Granting a badge to everyone who qualifies links the badge in the message saying so (#2808)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertIn(f'"{self._link(self.test_badge, self.test_badge.name)}" to all qualifying students',
+                      self._messages(response)[0])
+
+    @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_grant_qualifying__unpublished_badge_does_not_grant(self, task):
+        """An unpublished badge can't be granted: both GET and POST redirect with a warning
+        and never queue the grant task.
+        """
+        self.client.force_login(self.test_teacher)
+        self.test_badge.published = False
+        self.test_badge.full_clean()
+        self.test_badge.save()
+
+        url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        self.assertRedirects(self.client.get(url), self.test_badge.get_absolute_url())
+        self.assertRedirects(self.client.post(url), self.test_badge.get_absolute_url())
+        task.assert_not_called()
+
+    def test_badge_prereqs_update__prompts_to_grant_qualifying(self):
+        """After a teacher saves a badge's prerequisites they are prompted (via a message
+        linking to the grant-qualifying page) to run a grant-check, rather than the badge
+        being auto-granted on prereq changes (issue #1157).
+        """
+        self.client.force_login(self.test_teacher)
+
+        prereq_quest = baker.make(Quest)
+        ct = ContentType.objects.get_for_model(prereq_quest)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_object": f"{ct.id}-{prereq_quest.id}",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any(grant_url in m for m in messages))
+
+    def test_badge_prereqs_update__one_message_says_so_and_links_the_grant_check(self):
+        """Saving a published badge's prerequisites shows one message: that they were updated,
+        with the link to check for and grant the badge to students who now qualify (#2061)."""
+        self.client.force_login(self.test_teacher)
+
+        prereq_quest = baker.make(Quest)
+        ct = ContentType.objects.get_for_model(prereq_quest)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_object": f"{ct.id}-{prereq_quest.id}",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        messages = [str(m) for m in response.wsgi_request._messages]
+        about_the_save = [m for m in messages if "Prerequisites have been updated" in m or grant_url in m]
+        self.assertEqual(len(about_the_save), 1)
+        self.assertIn(
+            f'Prerequisites have been updated for <a href="{self.test_badge.get_absolute_url()}">{self.test_badge}</a>.',
+            about_the_save[0],
+        )
+        self.assertIn(grant_url, about_the_save[0])
+
+    def test_badge_prereqs_update__unpublished_badge_not_prompted_to_grant(self):
+        """Saving prerequisites on an unpublished badge does NOT show the grant-check
+        prompt, since an unpublished badge can't be granted (issue #1157).
+        """
+        self.client.force_login(self.test_teacher)
+        self.test_badge.published = False
+        self.test_badge.full_clean()
+        self.test_badge.save()
+
+        prereq_quest = baker.make(Quest)
+        ct = ContentType.objects.get_for_model(prereq_quest)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_object": f"{ct.id}-{prereq_quest.id}",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any(grant_url in m for m in messages))
+
+    def test_badge_prereqs_update__no_change_is_noop(self):
+        """Saving a badge's prereqs form without adding or changing anything (only the
+        empty extra form, untouched) must not report an update or show the grant-check
+        prompt (issue #1980). test_badge is published, so a broken guard would show both.
+        """
+        self.client.force_login(self.test_teacher)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        # the single extra form as the browser renders it untouched: no prereq_object, and
+        # the count fields at their rendered defaults -> the form is unchanged/empty
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MIN_NUM_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        messages = [str(m) for m in response.wsgi_request._messages]
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        self.assertFalse(any("Prerequisites have been updated" in m for m in messages))
+        self.assertFalse(any(grant_url in m for m in messages))
+
+    def test_scape_update_message__on_update_and_delete(self):
         """ Checks if delete and update function gives a success message when a badge is related to map """
         # setup
         badge = baker.make(Badge)
@@ -275,7 +715,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('badges:badge_list')
@@ -285,7 +725,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
     # Custom label tests
     def test_badge_views__header_custom_label_displayed(self):
@@ -296,8 +736,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         Badge list view should have two buttons in header for badge creation and badge type creation, both should use custom label
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
@@ -331,8 +770,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         field in Siteconfig
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
@@ -347,49 +785,71 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, "CustomBadge Type")
 
 
-class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeListRarityTests(ByteDeckTenantTestCase):
+    """The badge list's popovers give each badge's share of the deck's active students (issue #2760)."""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, and two students who both hold one badge."""
+        cls.teacher = baker.make(User, is_staff=True)
+        cls.students = baker.make(User, _quantity=2)
+        cls.badge = baker.make(Badge)
+        for student in cls.students:
+            baker.make(BadgeAssertion, user=student, badge=cls.badge)
 
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+    def test_badge_list__a_badge_every_student_holds_reads_100_percent(self):
+        """The teachers on the deck don't pull a badge every student holds below 100%, and the
+        count comes from the list's annotation rather than a query per badge."""
+        from django.core.cache import cache
+        cache.clear()  # the counts are cached for 60s, so start from nothing
+        self.client.force_login(self.students[0])
 
+        response = self.client.get(reverse('badges:list'))
+
+        self.assertContains(response, '100.0% have earned this')
+        listed = [badge for badge_type in response.context['badge_types'] for badge in badge_type.badge_set.all()]
+        self.assertEqual(next(b for b in listed if b.pk == self.badge.pk).num_students_granted_annotated, 2)
+
+
+class BadgeTypeViewTests(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, a student and a badge type for the badge type view tests."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
 
-        self.badge_type = baker.make(BadgeType)
+        cls.badge_type = baker.make(BadgeType)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
         self.assertRedirectsLogin('badges:badge_types')
         self.assertRedirectsLogin('badges:badge_type_create')
-        self.assertRedirectsLogin('badges:badge_type_update', args=[1])
-        self.assertRedirectsLogin('badges:badge_type_delete', args=[1])
+        self.assertRedirectsLogin('badges:badge_type_update', args=[self.badge_type.pk])
+        self.assertRedirectsLogin('badges:badge_type_delete', args=[self.badge_type.pk])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students_forbidden(self):
         ''' If not logged in then all views should redirect to 403 '''
         self.client.force_login(self.test_student1)
 
         # Staff access only
         self.assert403('badges:badge_types')
         self.assert403('badges:badge_type_create')
-        self.assert403('badges:badge_type_update', args=[1])
-        self.assert403('badges:badge_type_delete', args=[1])
+        self.assert403('badges:badge_type_update', args=[self.badge_type.pk])
+        self.assert403('badges:badge_type_delete', args=[self.badge_type.pk])
 
-    def test_BadgeTypeList_view(self):
+    def test_BadgeTypeList_view__staff_can_view(self):
         """ Admin should be able to view badge type list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('badges:badge_types'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('badges:badge_types')
 
-    def test_BadgeTypeCreate_view(self):
+    def test_BadgeTypeCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'New badge type',
-            'fa_icon': 'fa-gift',
+            'fa_icon': 'gift',
         }
         response = self.client.post(reverse('badges:badge_type_create'), data=data)
         self.assertRedirects(response, reverse('badges:badge_types'))
@@ -397,17 +857,17 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         test_badgetype = BadgeType.objects.get(name=data['name'])
         self.assertEqual(test_badgetype.name, data['name'])
 
-    def test_BadgeTypeUpdate_view(self):
+    def test_BadgeTypeUpdate_view__staff_can_update(self):
         """ Admin should be able to update a badge type """
         self.client.force_login(self.test_teacher)
         # set name and icon to something they wouldn't normally be
         data = {
             'name': 'My Updated Name',
-            'fa_icon': 'fa-bath',
+            'fa_icon': 'bath',
         }
-        response = self.client.post(reverse('badges:badge_type_update', args=[1]), data=data)
+        response = self.client.post(reverse('badges:badge_type_update', args=[self.badge_type.pk]), data=data)
         self.assertRedirects(response, reverse('badges:badge_types'))
-        test_badgetype = BadgeType.objects.get(id=1)
+        test_badgetype = BadgeType.objects.get(id=self.badge_type.pk)
         self.assertEqual(test_badgetype.name, data['name'])
         self.assertEqual(test_badgetype.fa_icon, data['fa_icon'])
 
@@ -450,8 +910,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         field in Siteconfig
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
@@ -470,41 +929,43 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'Delete CustomBadge Type')
 
 
-class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeAjaxTests(ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_badge_popup/
     + ajax/on_close_badge_popup/
     """
 
-    def create_assertion_notification(self, badge):
+    @classmethod
+    def create_assertion_notification(cls, badge):
         """ Creates a notification by triggering the post_save signal
         for BadgeAssertion
         """
         prepped = baker.prepare(
             BadgeAssertion,
             badge=badge,
-            user=self.student,
+            user=cls.student,
         )
         prepped.full_clean()
         prepped.save()
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.student = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student with several badge assertions (and their notifications) for the popup tests."""
+        cls.student = baker.make(User)
 
         # create multiple assertions of the same badge
-        self.badge_type1 = baker.make(BadgeType)
-        self.badge_multiple = baker.make(Badge, badge_type=self.badge_type1)
-        self.create_assertion_notification(self.badge_multiple)
-        self.create_assertion_notification(self.badge_multiple)
-        self.create_assertion_notification(self.badge_multiple)
+        cls.badge_type1 = baker.make(BadgeType)
+        cls.badge_multiple = baker.make(Badge, badge_type=cls.badge_type1)
+        cls.create_assertion_notification(cls.badge_multiple)
+        cls.create_assertion_notification(cls.badge_multiple)
+        cls.create_assertion_notification(cls.badge_multiple)
 
         # create single assertion
-        self.badge_type2 = baker.make(BadgeType)
-        self.badge_single = baker.make(Badge, badge_type=self.badge_type2)
-        self.create_assertion_notification(self.badge_single)
+        cls.badge_type2 = baker.make(BadgeType)
+        cls.badge_single = baker.make(Badge, badge_type=cls.badge_type2)
+        cls.create_assertion_notification(cls.badge_single)
 
-    def test_status_codes(self):
+    def test_status_codes__badge_popup_endpoints(self):
         ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`
         403 - because not ajax
         302 - because of not logged in (LoginRequiredMixin)
@@ -514,13 +975,13 @@ class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
         # test anon
         # ajax_on_show_badge_popup
         self.assert403('badges:ajax_on_show_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_show_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # ajax_on_close_badge_popup
         self.assert403('badges:ajax_on_close_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_close_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # test student
         self.client.force_login(self.student)
@@ -535,7 +996,7 @@ class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_on_show_badge_popup(self):
+    def test_on_show_badge_popup__context_values(self):
         """ Checks if badge popup shows correct the correct context values and if
         the badges in "new_badges" have the correct "duplicates" variable
         """
@@ -576,7 +1037,7 @@ class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(json_data['show'])
         self.assertFalse(json_data['html'])
 
-    def test_on_close_badge_popup(self):
+    def test_on_close_badge_popup__marks_notifications_read(self):
         """ Check if 'badges:ajax_on_close_badge_popup' closes all unread badge notifications
         """
         # check for initial notifications

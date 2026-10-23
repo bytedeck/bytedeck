@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
-from django.db import connection, models
+from django.db import connection, models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
@@ -55,12 +55,14 @@ def get_superadmin():
     return superadmin.id
 
 
-def get_active_semester():
-    """ Need to initialize a semester if none exists yet. """
+def get_active_semester():  # pragma: no cover
+    """Historical default for SiteConfig.active_semester, kept only so the migrations that
+    reference it stay importable (0005 and 0012). Nothing calls it: the field has no default
+    now, and a deck's first semester is created explicitly by tenant initialization.
+    """
     from courses.models import Semester  # import here to prevent ciruclar imports
     try:
-        # is this only needed for tests? If not then need a unique username probably, not this!
-        semester, created = Semester.objects.get_or_create()
+        semester, created = Semester.objects.get_or_create(defaults={'status': Semester.Status.OPEN})
     except MultipleObjectsReturned:
         semester = Semester.objects.order_by('-first_day')[0]
     return semester.id
@@ -154,12 +156,12 @@ class SiteConfig(models.Model):
     )
 
     active_semester = models.ForeignKey(
-        'courses.Semester',
-        verbose_name="Active Semester", default=get_active_semester, on_delete=models.PROTECT,
-        help_text="Your currently active semester.  New semesters can be created from the admin menu."
+        'courses.Semester', null=True, blank=True,
+        verbose_name="Active Semester", on_delete=models.PROTECT,
+        help_text="The semester students join and earn XP in. It is empty between semesters, "
+                  "when no semester is open."
     )
 
-    # hs_chillax_line_active
     color_headers_by_mark = models.BooleanField(
         verbose_name="Activate Header Colors by Mark", default=False,
         help_text="Set up at least one Mark Range in admin for this to do anything."
@@ -200,6 +202,23 @@ class SiteConfig(models.Model):
             having to submit a form."
     )
 
+    students_choose_xp_course = models.BooleanField(
+        verbose_name="Students choose which course their XP counts toward",
+        default=True,
+        help_text="When a student in more than one course hands in a quest, they say which course it counts toward. "
+                  "Turn this off to share every student's XP evenly between their courses instead. Students in a "
+                  "single course are never asked either way, and work handed in before this was turned on stays "
+                  "evenly shared."
+    )
+
+    default_quest_prerequisite = models.ForeignKey(
+        'badges.Badge', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+        verbose_name="Default quest prerequisite",
+        help_text="A badge to fill in as the prerequisite of each quest you create, under its Basic Prerequisites, where you "
+                  "can change or remove it. Without one, a new quest you forget to give a prerequisite is available to every "
+                  "student as soon as it's published."
+    )
+
     enable_shared_library = models.BooleanField(
         verbose_name="Enable Shared Library", default=False,
         help_text="If enabled, you can import quests and campaigns from the Shared Library."
@@ -211,6 +230,7 @@ class SiteConfig(models.Model):
             otherwise only the owner can export quests. \
             See the <a href=\"https://github.com/bytedeck/bytedeck/wiki/Library#sharing-to-the-library\" target=\"blank\">help page</a> for details."
     )
+
 
     # Field to select custom name to change all instances of "announcement" to site-wide
     # Currently used in: announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
@@ -374,15 +394,51 @@ class SiteConfig(models.Model):
             4: self.competency_label_level_4,
         }
 
+    def get_default_quest_prerequisite(self):
+        """The badge a quest created on this deck starts with as its prerequisite (#276).
+
+        Looked up by id rather than through the relation: the instance `SiteConfig.get()` returns
+        comes from the cache, and deleting the badge sets this column to NULL without saving the
+        SiteConfig, so the cached copy can still hold the id of a badge that no longer exists.
+
+        Returns:
+            Badge or None: the default prerequisite, or None when none is set or it was deleted.
+        """
+        if not self.default_quest_prerequisite_id:
+            return None
+        Badge = self._meta.get_field('default_quest_prerequisite').related_model
+        return Badge.objects.filter(pk=self.default_quest_prerequisite_id).first()
+
     def set_active_semester(self, semester):
+        """Start `semester`: open it, so students can join a course in it and earn XP.
+
+        Any other open semester stays open (issue #2157 Phase 3, closing #1781): a deck can
+        run two cohorts on different calendars, and starting the second one must not stop
+        the first. Each student's own semester comes from their registration, so the deck no
+        longer needs the semesters to be mutually exclusive.
+
+        active_semester is pointed at the semester just started. With several open it is only
+        the default offered first when a student joins a course, not the one everybody is in.
+        Callers are responsible for not passing an archived semester (archiving is one-way).
+
+        Args:
+            semester: a Semester, or the id of one (404 when no semester has that id).
+        """
         from courses.models import Semester  # import here to prevent ciruclar imports
 
         # check if id or model object was given
-        if isinstance(semester, Semester):
+        if not isinstance(semester, Semester):  # assume it's an id
+            semester = get_object_or_404(Semester, id=semester)
+
+        with transaction.atomic():
+            # Lock the singleton config row for the duration, the same lock archiving takes,
+            # so an activation and an archive can't interleave over the pointer.
+            SiteConfig.objects.select_for_update().get(pk=self.pk)
+            if not semester.is_open:
+                semester.status = Semester.Status.OPEN
+                semester.save()
             self.active_semester = semester
-        else:  # assume it's an id
-            self.active_semester = get_object_or_404(Semester, id=semester)
-        self.save()
+            self.save()
 
     def _propagate_google_provider(self):
         """
@@ -390,7 +446,12 @@ class SiteConfig(models.Model):
         the tenant's schema SocialApp
         """
         with schema_context(get_public_schema_name()):
-            social_app = SocialApp.objects.get_current(provider=GoogleProvider.id)
+            # SocialAppManager.get_current() was removed in django-allauth 65;
+            # this is the equivalent lookup: the provider's app linked to the current Site.
+            social_app = SocialApp.objects.get(
+                sites__id=Site.objects.get_current().id,
+                provider=GoogleProvider.id,
+            )
             social_app_clone = copy(social_app)
             social_app_clone.pk = None
 
@@ -405,6 +466,7 @@ class SiteConfig(models.Model):
 
         Rules:
             - Unauthenticated users cannot export.
+            - Nobody can export from a deck that has the Shared Library turned off.
             - Exports are blocked when on the Library schema.
             - The deck owner can export when not on the Library schema.
             - Staff members can export only if `allow_staff_export` is True.
@@ -421,13 +483,78 @@ class SiteConfig(models.Model):
         if not user.is_authenticated:
             return False
 
+        # This decides whether the export buttons render; the views enforce the same
+        # feature flag, so without this a deck with the Shared Library off would show
+        # export buttons that lead straight to a 404.
+        if not self.enable_shared_library:
+            return False
+
         if current_schema == get_library_schema_name():
             return False
 
-        if user == self.deck_owner:
+        # Compared by id (a local column) rather than fetching the owner: the export
+        # buttons ask this per rendered page, and a cached SiteConfig instance would
+        # otherwise run a query for the owner on every call.
+        if user.pk == self.deck_owner_id:
             return True
 
         return self.allow_staff_export and user.is_staff
+
+    @property
+    def open_semesters(self):
+        """Every semester open right now, newest term first.
+
+        A deck can run more than one at a time, for course groups on different calendars
+        (issue #2157 Phase 3, #1781), so this and not the single pointer is what answers
+        "is this deck running?".
+
+        Returns:
+            SemesterQuerySet: the open semesters, empty between semesters.
+        """
+        from courses.models import Semester  # imported here to prevent circular imports
+
+        return Semester.objects.open()
+
+    def has_no_open_semester(self):
+        """Whether there is no semester open for students to join a course into (issue #2060).
+
+        This is a first-class state, not an error: archiving the last open semester leaves a
+        deck sitting here until staff open the next one (issue #1177). Used to block student
+        registration and to warn staff.
+
+        Returns:
+            bool: True when the deck has no open semester at all, whichever one its pointer
+            happens to name.
+        """
+        return not self.open_semesters.exists()
+
+    @property
+    def open_semester(self):
+        """The semester a student joins by default, as the rest of the deck should see it.
+
+        active_semester is the raw pointer, set to whichever semester was started most
+        recently; this is that pointer filtered through the semester's own status, so one
+        that is set but not open never reads as current. With several semesters open this is
+        merely the default offered first: a particular student's semester comes from their
+        registration (courses.models.semester_for).
+
+        Returns:
+            Semester or None: the default open semester, or None when the pointer names none.
+        """
+        if self.active_semester is None or not self.active_semester.is_open:
+            return None
+        return self.active_semester
+
+    @property
+    def open_semester_id(self):
+        """The id of the semester students are currently in, for queries that only need the id.
+
+        Returns:
+            int or None: open_semester's primary key, or None when the deck is between
+            semesters.
+        """
+        semester = self.open_semester
+        return semester.pk if semester else None
 
     @classmethod
     def cache_key(cls):

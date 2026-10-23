@@ -4,3 +4,10 @@ coverage:
       default:
         target: 80%
         threshold: 0%
+    # Patch coverage is reported but never fails the check: config-only and
+    # DEBUG-gated diffs (e.g. the production security block in settings.py,
+    # which the test suite never executes) would otherwise show 0% patch
+    # coverage. The merge gate is the project status above.
+    patch:
+      default:
+        informational: true

@@ -1,15 +1,17 @@
 from datetime import datetime, timedelta, timezone
 
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils.timezone import localtime
 # from django.test import tag
 from freezegun import freeze_time
 from model_bakery import baker
 
-from courses.models import Semester
+from courses.models import Course, CourseStudent, Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission, Category
 from siteconfig.models import SiteConfig
-from django_tenants.test.cases import TenantTestCase
 from unittest.mock import patch
 from library.utils import library_schema_context
 from library.tests.test_views import LibraryTenantTestCaseMixin
@@ -20,30 +22,31 @@ User = get_user_model()
 
 class CategoryManagerTests(LibraryTenantTestCaseMixin):
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpTestData(cls):
+        """Create a published campaign with published, invisible, and archived quests in the library schema."""
         # Create campaign (category) and quests in library schema
         with library_schema_context():
-            self.category = baker.make(Category, title="Test Campaign", published=True)
-            self.quest1 = baker.make(
+            cls.category = baker.make(Category, title="Test Campaign", published=True)
+            cls.quest1 = baker.make(
                 Quest,
-                campaign=self.category,
+                campaign=cls.category,
                 published=True,
                 archived=False,
                 xp=100,
                 name="Published Quest 1"
             )
-            self.quest2 = baker.make(
+            cls.quest2 = baker.make(
                 Quest,
-                campaign=self.category,
+                campaign=cls.category,
                 published=False,
                 archived=False,
                 xp=200,
                 name="Invisible Quest"
             )
-            self.quest3 = baker.make(
+            cls.quest3 = baker.make(
                 Quest,
-                campaign=self.category,
+                campaign=cls.category,
                 published=True,
                 archived=True,
                 xp=300,
@@ -65,7 +68,27 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.assertEqual(category.quest_count, 1)
             self.assertEqual(category.xp_sum, 100)
 
-    def test_excludes_categories_without_importable_quests(self):
+    def test_all_published_with_importable_quests__ordered_by_title(self):
+        """The Library's campaigns arrive in alphabetical order (#2624).
+
+        The aggregate annotations group the query, and Django emits no ORDER BY at all for a
+        grouped query, so `Category.Meta.ordering` is dropped and the database is free to
+        return the rows however it finds them. The campaigns are created here in an order
+        that is not alphabetical, so a queryset that lost its ordering fails this.
+        """
+        with library_schema_context():
+            Quest.objects.all().delete()
+            Category.objects.all().delete()
+
+            for title in ("Zebra Robotics", "Intro to Python", "Animation", "Music Production"):
+                campaign = baker.make(Category, title=title, published=True)
+                baker.make(Quest, campaign=campaign, published=True, archived=False, xp=10)
+
+            titles = list(Category.objects.all_published_with_importable_quests().values_list('title', flat=True))
+
+        self.assertEqual(titles, sorted(titles))
+
+    def test_all_published_with_importable_quests__excludes_categories_without_importable_quests(self):
         """
         Ensures that published campaigns with no importable quests are excluded
         from the queryset.
@@ -117,12 +140,100 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.assertEqual(qs.first().xp_sum, 80)
 
 
-class QuestQuerysetTest(TenantTestCase):
+class QuestQuerysetTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User, username='student', is_staff=False)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a student user shared across the queryset tests, registered in the deck's
+        semester: their registration is what names the semester their work counts in."""
+        cls.student = baker.make(User, username='student', is_staff=False)
+        baker.make(
+            CourseStudent, user=cls.student, course=baker.make(Course),
+            semester=SiteConfig.get().active_semester,
+        )
 
-    def test_not_in_progress_completed_or_cooldown(self):
+    def start_new_semester(self):
+        """Start a fresh semester and move the student into it, the way a term rolls over.
+
+        Pointing the deck at a new semester is only half of it: a student's semester comes
+        from their own registration, so per-semester repeat limits only reset for them once
+        they are registered in the new one.
+        """
+        new_semester = baker.make(Semester)
+        SiteConfig.get().set_active_semester(new_semester.id)
+        CourseStudent.objects.filter(user=self.student).update(semester=new_semester)
+        return new_semester
+
+    def complete_repeat(self, quest, semester):
+        """Complete one submission of a quest in a given semester, as a student working through it.
+
+        Args:
+            quest: the quest being handed in.
+            semester: the Semester the submission belongs to.
+
+        Returns:
+            QuestSubmission: the completed submission.
+        """
+        submission = baker.make(QuestSubmission, quest=quest, user=self.student, semester=semester)
+        submission.mark_completed()
+        return submission
+
+    def test_not_in_progress_completed_or_cooldown__per_semester_cap_ignores_earlier_semesters(self):
+        """A repeat-per-semester quest gives the student its full allowance again every semester,
+        so goes they used in an earlier one must not come off this semester's (#2714).
+
+        The count behind the cap was taken over the student's whole history while being compared
+        against a per-semester limit, so the more they had used the quest in past semesters the
+        sooner it vanished from Available in this one. Here two goes last semester plus one this
+        semester left a cap of three looking spent after a single go.
+        """
+        last_semester = SiteConfig.get().active_semester
+        quest = baker.make(Quest, name='Twice a semester', max_repeats=2,
+                           repeat_per_semester=True, hours_between_repeats=0)
+
+        for _ in range(2):
+            self.complete_repeat(quest, last_semester)
+        this_semester = self.start_new_semester()
+        self.complete_repeat(quest, this_semester)
+
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertIn(quest, qs, "last semester's goes were charged against this semester's cap")
+
+    def test_not_in_progress_completed_or_cooldown__per_semester_cap_still_applies_within_a_semester(self):
+        """The cap is still a cap. Once this semester's goes are used the quest goes away, which is
+        what keeps the fix above from simply disabling the limit."""
+        quest = baker.make(Quest, name='Twice a semester', max_repeats=2,
+                           repeat_per_semester=True, hours_between_repeats=0)
+        this_semester = SiteConfig.get().active_semester
+
+        for _ in range(3):
+            self.complete_repeat(quest, this_semester)
+
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertNotIn(quest, qs)
+
+    def test_get_available__agrees_with_is_repeat_available_after_a_rollover(self):
+        """The Available tab and the quest page have to answer this the same way.
+
+        They are separate implementations: the tab filters in SQL, while starting a quest from its
+        own URL goes through Quest.is_repeat_available(). When they disagree a student sees a quest
+        missing from their list that they can still start by typing the address, which is the shape
+        this bug took (#2714).
+        """
+        quest = baker.make(Quest, name='Twice a semester', max_repeats=2, blocking=False,
+                           repeat_per_semester=True, hours_between_repeats=0)
+        last_semester = SiteConfig.get().active_semester
+
+        for _ in range(3):
+            self.complete_repeat(quest, last_semester)
+        this_semester = self.start_new_semester()
+        self.complete_repeat(quest, this_semester)
+
+        listed = Quest.objects.get_available(self.student).filter(pk=quest.pk).exists()
+        self.assertTrue(quest.is_repeat_available(self.student))
+        self.assertTrue(listed, "the quest page would let them start it, but the list hides it")
+
+    def test_not_in_progress_completed_or_cooldown__all_five_conditions(self):
         """ Test that all 5 conditions are met for this queryset method:
         it should remove quests that are:
           1. already inprogress for the user (is_completed=False)
@@ -233,18 +344,22 @@ class QuestQuerysetTest(TenantTestCase):
                 self.assertIn(quest_repeatable_twice_all_time, qs)
                 self.assertIn(quest_infinite_repeatables, qs)  # only the infinite repeats should be avail.
 
-                # Create a new semester and set it to the current one, which should make the per semester quest available again
-                new_semester = baker.make(Semester)
-                SiteConfig.get().set_active_semester(new_semester.id)
+                # Start a new semester and register the student in it, which should make the per semester quest available again
+                new_semester = self.start_new_semester()
                 qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
                 self.assertNotIn(quest_not_repeatable, qs)
                 self.assertIn(quest_repeatable_once_per_sem, qs)
                 self.assertIn(quest_repeatable_twice_all_time, qs)
                 self.assertIn(quest_infinite_repeatables, qs)
 
-                # Complete the per semester quest again, should not be available again
-                sub2_3 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem, user=self.student, semester=new_semester)
-                sub2_3.mark_completed()
+                # Use up this semester's goes at the per-semester quest, so it is done for this
+                # semester too. max_repeats=1 is one repeat, so that takes two completions, the
+                # same as it took in the previous semester: goes used then do not come off this
+                # semester's allowance (#2714).
+                for _ in range(2):
+                    sub2_3 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem,
+                                        user=self.student, semester=new_semester)
+                    sub2_3.mark_completed()
                 # Complete the max_repeats=2 quest, so all time repeats are complete and should not be available
                 sub3_3 = baker.make(QuestSubmission, quest=quest_repeatable_twice_all_time, user=self.student, semester=new_semester)
                 sub3_3.mark_completed()
@@ -262,8 +377,7 @@ class QuestQuerysetTest(TenantTestCase):
 
                     # Finally, make sure quest_repeatable_twice_all_time doesn't refresh in a new semester
                     # Condition 5
-                    new_semester = baker.make(Semester)
-                    SiteConfig.get().set_active_semester(new_semester.id)
+                    self.start_new_semester()
                     qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
 
                     self.assertNotIn(quest_not_repeatable, qs)
@@ -273,23 +387,32 @@ class QuestQuerysetTest(TenantTestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestManagerTest(TenantTestCase):
+class QuestManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    # These tests assert the availability of the *seed* quests (e.g. "Welcome to
+    # ByteDeck!") under a frozen 2018 clock, which only holds if the tenant seed
+    # was created at that frozen time. A reused schema is seeded once at whatever
+    # the first class's real clock was, so this class needs its own fresh schema.
+    reuse_schema = False
+
+    maxDiff = None
+
+    @classmethod
+    def setUpTestData(cls):
+        """Capture the seed quests and create a teacher and student before tests add more quests."""
         # get a list all quests created in data migrations
         # convert to list for ease of comparison, and also to force
         #  evaluation before additional quests are created within tests
-        self.initial_quest_list = list(Quest.objects.all())
-        # print(self.initial_quest_list)
-        self.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
+        cls.initial_quest_list = list(Quest.objects.all())
+        # print(cls.initial_quest_list)
+        cls.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
         # this includes 6 quests, all published, but only one
         # available at the start as the rest have prerequisites.
 
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
-        self.maxDiff = None
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
 
-    def test_quest_qs_exclude_hidden(self):
+    def test_exclude_hidden__omits_users_hidden_quests(self):
         """QuestQuerySet.datetime_available should return all quests that are not
         on a user profile's hidden quest list."""
 
@@ -311,7 +434,7 @@ class QuestManagerTest(TenantTestCase):
         # a couple hidden
         self.assertSetEqual(set(qs), set(expected_result))
 
-    def test_quest_qs_block_if_needed(self):
+    def test_block_if_needed__returns_only_blocking_quests_when_present(self):
         """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
         otherwise, return full qs """
         baker.make(Quest, name='Quest-blocking', blocking=True)
@@ -324,7 +447,7 @@ class QuestManagerTest(TenantTestCase):
 
         # Test the user specific part via QuestManager.get_available test"
 
-    def test_quest_qs_datetime_available(self):
+    def test_datetime_available__returns_currently_available_quests(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
         cur_datetime = localtime()
         cur_date = cur_datetime.date()
@@ -349,7 +472,7 @@ class QuestManagerTest(TenantTestCase):
             set(['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'] + self.initial_quest_name_list)
         )
 
-    def test_quest_qs_not_expired(self):
+    def test_not_expired__returns_unexpired_quests(self):
         """
         QuestQuerySet.not_expired should return not expired quests including:
             If date_expired and time_expired are null: quest never expires
@@ -382,28 +505,26 @@ class QuestManagerTest(TenantTestCase):
         result = ['Quest-never-expired', 'Quest-expired-now', 'Quest-expired-today-midnight', 'Quest-expired-tomorrow']
         self.assertSetEqual(set(qs), set(result + self.initial_quest_name_list))
 
-    def test_quest_qs_visible(self):
+    def test_published__returns_only_published_quests(self):
         """QuestQuerySet.published should return published for students quests"""
-        # baker.make(Quest, name='Quest-visible', published=True)
         baker.make(Quest, name='Quest-invisible', published=False)
-        # self.assertListEqual(list(Quest.objects.all().published().values_list('name', flat=True)), ['Quest-visible'])
         self.assertListEqual(list(Quest.objects.all().published()), self.initial_quest_list)
 
-    def test_quest_qs_not_archived(self):
+    def test_not_archived__returns_unarchived_quests(self):
         """QuestQuerySet.not_archived should return not_archived quests"""
         baker.make(Quest, name='Quest-not-archived', archived=False)
         baker.make(Quest, name='Quest-archived', archived=True)
         qs = Quest.objects.all().not_archived().values_list('name', flat=True)
         self.assertSetEqual(set(qs), set(['Quest-not-archived'] + self.initial_quest_name_list))
 
-    def test_quest_qs_available_without_course(self):
+    def test_available_without_course__returns_quests_available_outside_course(self):
         """QuestQuerySet.available_without_course should return quests available_outside_course"""
         baker.make(Quest, name='Quest-available-without-course', available_outside_course=True)
         baker.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
         qs = Quest.objects.all().available_without_course().values_list('name', flat=True)
         self.assertQuerySetEqual(qs, ['Quest-available-without-course', 'Send your teacher a Message'], ordered=False)
 
-    def test_quest_qs_editable(self):
+    def test_editable__returns_quests_user_may_edit(self):
         """
         QuestQuerySet.editable should return quests allowed to edit for given user,
         when user is_staff or editor for the quest
@@ -417,49 +538,7 @@ class QuestManagerTest(TenantTestCase):
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
 
-    # def test_quest_qs_get_list_not_submitted_or_inprogress(self):
-    #     """
-    #     QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that
-    #     have not been started (in progress or submitted for approval),
-    #     or if it has been completed already, that it is a repeatable quest past the repeat time
-    #     """
-    #     self.make_test_quests_and_submissions_stack()
-
-    #     # jump ahead an hour so repeat cooldown is over
-    #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-    #         qs = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
-    #     self.assertListEqual(
-    #         list(qs.values_list('name', flat=True)),
-    #         ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
-    #     )
-
-    # def test_quest_qs_not_submitted_or_inprogress(self):
-    #     self.make_test_quests_and_submissions_stack()
-
-    #     # jump ahead an hour so repeat cooldown is over
-    #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-    #         qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
-    #     # compare sets so order doesn't matter
-    #     self.assertSetEqual(
-    #         set(qs.values_list('name', flat=True)),
-    #         set(['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started'] + self.initial_quest_name_list)
-    #     )
-
-    # def test_quest_qs_not_completed(self):
-    #     """Should return all the quests that do NOT have a completed submission (during active semester)"""
-    #     active_semester = self.make_test_quests_and_submissions_stack()
-    #     SiteConfig.get().set_active_semester(active_semester.id)
-    #     qs = Quest.objects.order_by('id').not_completed(self.student)
-    #     # compare sets so order doesn't matter
-    #     self.assertSetEqual(
-    #         set(qs.values_list('name', flat=True)),
-    #         set(
-    #             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
-    #             + self.initial_quest_name_list
-    #         )
-    #     )
-
-    def test_quest_qs_not_in_progress(self):
+    def test_not_in_progress__excludes_inprogress_submissions(self):
         """Should return all the quests that do NOT have an inprogress submission"""
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
@@ -471,7 +550,7 @@ class QuestManagerTest(TenantTestCase):
                  'Quest-1hr-cooldown'] + self.initial_quest_name_list)
         )
 
-    def test_get_available(self):
+    def test_get_available__excludes_unavailable_quests(self):
         """ DESCRIPTION FROM METHOD:
         Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired <<<< COVERED HERE
@@ -613,6 +692,9 @@ class QuestManagerTest(TenantTestCase):
 
         """
         active_semester = baker.make(Semester)
+        # the student's registration is what makes this their semester, so the submissions
+        # stamped with it below are the ones that read as their current work
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=active_semester)
 
         quest_inprog_sem2 = baker.make(Quest, name='Quest-inprogress-sem2')
         sub_inprog_sem2 = baker.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
@@ -639,13 +721,15 @@ class QuestManagerTest(TenantTestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionQuerysetTest(TenantTestCase):
+class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and a student shared across the submission queryset tests."""
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
 
-    def test_quest_submission_qs_get_user(self):
+    def test_get_user__returns_submissions_for_user(self):
         """QuestSubmissionQuerySet.get_user should return all quest submissions for given user"""
         first = baker.make(QuestSubmission, user=self.student)
         baker.make(QuestSubmission, user=self.teacher)
@@ -653,7 +737,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.all().get_user(self.student).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_block_if_needed(self):
+    def test_block_if_needed__returns_only_blocking_submissions_when_present(self):
         """QuestSubmissionQuerySet.block_if_needed:
         if there are blocking quests, only return them.  Otherwise, return full qs """
         first = baker.make(QuestSubmission)
@@ -668,7 +752,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
         self.assertListEqual(list(qs), [blocked_sub.id])
 
-    def test_quest_submission_qs_get_quest(self):
+    def test_get_quest__returns_submissions_for_quest(self):
         """QuestSubmissionQuerySet.get_quest should return all quest submissions for given quest"""
         quest = baker.make(Quest, name='Sub')
         first, second = baker.make(QuestSubmission, quest=quest), baker.make(QuestSubmission, quest=quest)
@@ -676,7 +760,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.order_by('id').get_quest(quest).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id, second.id])
 
-    def test_quest_submission_qs_get_semester(self):
+    def test_get_semester__returns_submissions_for_semester(self):
         """QuestSubmissionQuerySet.get_semester should return all quest submissions for given semester"""
         semester = baker.make(Semester)
         first = baker.make(QuestSubmission, semester=semester)
@@ -684,7 +768,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.order_by('id').get_semester(semester).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_exclude_archived_quests(self):
+    def test_exclude_archived_quests__omits_archived_quest_submissions(self):
         """
         QuestSubmissionQuerySet.exclude_archived_quests should return quest submissions
         without submissions for archived_quests
@@ -694,17 +778,17 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_exclude_quests_not_published(self):
+    def test_exclude_quests_not_published__omits_unpublished_quest_submissions(self):
         """
         QuestSubmissionQuerySet.exclude_quests_not_published should return quest submissions
         without submissions for invisible quests
         """
         first = baker.make(QuestSubmission, quest__published=True)
         baker.make(QuestSubmission, quest__published=False)
-        qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
+        qs = QuestSubmission.objects.order_by('id').exclude_quests_not_published().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_for_teacher_only(self):
+    def test_for_teacher_only__includes_block_students_and_notify_teacher(self):
         """Returned qs should only include sub my students in the teacher's block(s).  Also
         add a specific_teacher_to_notify and make sure that one appears too
         """
@@ -734,6 +818,67 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.all()
         self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub, sub2], ordered=False)
 
+    def test_for_teacher_only__spans_every_open_semester(self):
+        """A teacher's group in the deck's other open semester is still their group (#2157 Phase
+        3). A deck can run two cohorts on different calendars, and scoping this to the deck's
+        default semester would empty the approval queue of whichever teacher's group is not in
+        it, while their students still list them as their teacher."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=other_semester)
+        their_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=other_semester)
+
+        self.assertIn(their_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+
+    def test_for_teacher_only__matches_the_registration_the_submission_belongs_to(self):
+        """A teacher sees the work of the term they teach that student in, not every term the
+        student has open. CourseStudent.clean() refuses a second open-semester registration,
+        but one can still reach the database (a hand edit in the admin, or two registrations
+        racing, #2438), and a teacher's queue must not start showing another cohort's work
+        because of it."""
+        their_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_teacher = baker.make(User, username='other_teacher', is_staff=True)
+        baker.make(
+            'courses.CourseStudent', user=self.student, semester=their_semester,
+            block=baker.make('courses.Block', current_teacher=self.teacher),
+        )
+        baker.make(
+            'courses.CourseStudent', user=self.student, semester=other_semester,
+            block=baker.make('courses.Block', current_teacher=other_teacher),
+        )
+        submission = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=their_semester)
+
+        self.assertIn(submission, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+        self.assertNotIn(submission, QuestSubmission.objects.all().for_teacher_only(other_teacher))
+
+    def test_for_teacher_only__leaves_out_a_registration_in_a_semester_that_is_not_open(self):
+        """A registration in a semester still being set up, or already archived, does not make
+        its student one of this teacher's current students, so the block half of the filter
+        drops it."""
+        semester = baker.make(Semester, status=Semester.Status.UPCOMING)
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=semester)
+        block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
+
+        self.assertNotIn(block_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+
+    def test_for_teacher_only__a_registration_with_no_semester_keeps_only_notify_submissions(self):
+        """A registration left behind by a deleted semester belongs to no semester, so its
+        student is nobody's current student and the teacher's queue holds only the quests they
+        asked to be notified about."""
+        semester = SiteConfig.get().active_semester
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        # a registration with no semester, as deleting a semester leaves behind
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=None)
+        block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
+        notify_sub = baker.make(QuestSubmission, semester=semester, quest__specific_teacher_to_notify=self.teacher)
+
+        qs = QuestSubmission.objects.all().for_teacher_only(self.teacher)
+
+        self.assertQuerySetEqual(qs, [notify_sub])
+        self.assertNotIn(block_sub, qs)
+
     def test_for_teachers_only__with_deleted_quest(self):
         """for_teachers_only QuestSubmissions should be deleted for that quest if it is deleted"""
 
@@ -753,31 +898,213 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionManagerTest(TenantTestCase):
+class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, a student registered in the semester they earn XP in, and a
+        stack of submissions spanning two semesters."""
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
+
+        cls.sub1, cls.sub2 = cls.make_test_submissions_stack()
+        cls.active_semester = cls.sub1.semester
+        # the registration is what names the student's semester (issue #2441): without one
+        # they are in no semester, and none of their stamped submissions read as current
+        baker.make(CourseStudent, user=cls.student, course=baker.make(Course), semester=cls.active_semester)
 
     def setUp(self):
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
-
-        self.sub1, self.sub2 = self.make_test_submissions_stack()
-        self.active_semester = self.sub1.semester
+        """Set the active semester to the one holding sub1 before each test."""
         SiteConfig.get().set_active_semester(self.active_semester.id)
 
-    def test_get_queryset_default(self):
+    def close_every_semester(self):
+        """Put the deck between terms: nothing open and nothing pointed at.
+
+        Archiving the semesters is the half that matters to a student, since their semester
+        comes from a registration and an archived one is not current; clearing the pointer is
+        what leaves the deck itself with no default.
+        """
+        Semester.objects.update(status=Semester.Status.ARCHIVED)
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+    def test_get_queryset__default_returns_published_unarchived(self):
         """QuestSubmissionManager.get_queryset by default should return all published, not archived quest submissions"""
         qs = QuestSubmission.objects.get_queryset()
         self.assertQuerySetEqual(qs, [self.sub1, self.sub2], ordered=False)
 
-    def test_get_queryset_for_active_semester(self):
+    def test_get_queryset__active_semester_only(self):
+        """get_queryset with active_semester_only limits results to the active semester's submissions."""
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
         self.assertQuerySetEqual(qs, [self.sub1])
 
-    def test_get_queryset_for_all_quests(self):
+    def test_get_queryset__active_semester_only_holds_the_unstamped_work_with_no_open_semester(self):
+        """Between semesters the deck-wide staff view holds exactly what belongs to no
+        semester: what was handed in while nobody was registered anywhere. Leaving it out
+        would put it beyond every approval queue on the deck (issue #2413), since a teacher's
+        own queue is built from a registration and between terms nobody holds one. The
+        archived semesters' work is past, so it drops out."""
+        unstamped = baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=False, semester=None)
+        Semester.objects.update(status=Semester.Status.ARCHIVED)
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
+
+        self.assertQuerySetEqual(qs, [unstamped])
+
+    def test_get_queryset__active_semester_only_spans_every_open_semester(self):
+        """A deck-wide staff view covers both cohorts when a deck runs two semesters at once
+        (#2157 Phase 3). Scoping it to the deck's default would hide everything the other
+        cohort hands in, so their work would never reach a teacher's approval queue."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        their_submission = baker.make(
+            QuestSubmission, user=self.student, quest__published=True, quest__archived=False,
+            semester=other_semester,
+        )
+
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
+
+        self.assertIn(their_submission, qs)
+
+    def test_create_submission__is_not_stamped_when_no_semester_is_open(self):
+        """A quest started between semesters belongs to no semester, and the student can
+        still see it: their in-progress list is the work in the semester they are in, which
+        is none, so it holds the unstamped rows (issue #2413)."""
+        self.close_every_semester()
+
+        submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
+
+        self.assertIsNone(submission.semester_id)
+        self.assertIn(submission, QuestSubmission.objects.all_not_completed(user=self.student))
+
+    def test_create_submission__is_stamped_with_the_students_own_semester(self):
+        """A quest is stamped with the semester the student is registered in, not the one the
+        deck points at (issue #2157 Phase 3). The two are the same until several semesters can
+        be open at once, so the second one here is built directly to tell them apart."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        their_student = baker.make(User, username='other_cohort_student')
+        baker.make(CourseStudent, user=their_student, course=baker.make(Course), semester=other_semester)
+
+        submission = QuestSubmission.objects.create_submission(their_student, baker.make(Quest, published=True))
+
+        self.assertEqual(submission.semester_id, other_semester.id)
+        self.assertNotEqual(submission.semester_id, SiteConfig.get().open_semester_id)
+
+    def test_create_submission__unregistered_user_is_stamped_with_no_semester(self):
+        """A teacher trying out a quest has no registration to read a semester from, so their
+        submission belongs to no semester rather than to the deck's open one, which is a term
+        they are not in (issue #2441)."""
+        self.assertIsNotNone(SiteConfig.get().open_semester_id)
+
+        submission = QuestSubmission.objects.create_submission(self.teacher, baker.make(Quest, published=True))
+
+        self.assertIsNone(submission.semester_id)
+
+    def test_create_submission__student_between_terms_is_stamped_with_no_semester(self):
+        """The regression #2441 is about. A student whose semester was archived while a second
+        cohort keeps running holds no current registration, so their work belongs to no
+        semester: stamping it with the cohort still running would attribute it to a term they
+        are absent from, and archiving that term would then drop it, since final XP is
+        recorded from the registrations and they hold none there."""
+        alum = baker.make(User, username='archived_cohort_student')
+        baker.make(
+            CourseStudent, user=alum, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        still_running = SiteConfig.get().open_semester
+
+        submission = QuestSubmission.objects.create_submission(alum, baker.make(Quest, published=True))
+
+        self.assertIsNotNone(still_running)
+        self.assertIsNone(submission.semester_id)
+        self.assertFalse(CourseStudent.objects.filter(user=alum, semester=still_running).exists())
+
+    def test_create_submission__unstamped_double_start_returns_the_existing_submission(self):
+        """The double-start guard covers the work that belongs to no semester too (issue
+        #2413). Postgres treats NULLs as distinct, so the constraint keyed on the semester
+        never sees two unstamped rows as duplicates; the second constraint does, and the
+        request that loses the race is handed the submission that won rather than a copy."""
+        self.close_every_semester()
+        quest = baker.make(Quest, published=True)
+
+        first = QuestSubmission.objects.create_submission(self.student, quest)
+        # bypass the in-progress check start() would make, which is what a concurrent second
+        # request effectively does: it passed that check before the first request saved
+        second = QuestSubmission.objects.create_submission(self.student, quest)
+
+        self.assertEqual(first, second)
+        self.assertEqual(QuestSubmission.objects.all_not_completed(user=self.student).filter(quest=quest).count(), 1)
+
+    def test_all_completed_past__returns_every_semester_when_none_is_open(self):
+        """With no open semester every completed submission is in a past semester, so the
+        student's past-submissions page still lists them."""
+        self.sub1.mark_completed()
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        self.assertIn(self.sub1, QuestSubmission.objects.all_completed_past(self.sub1.user))
+
+    def test_get_queryset__includes_archived_and_unpublished(self):
+        """get_queryset returns every submission when archived and unpublished filters are disabled."""
         qs = QuestSubmission.objects.get_queryset(
             exclude_archived_quests=False, exclude_quests_not_published=False)
         self.assertEqual(qs.count(), 7)
 
-    def test_all_for_user_quest(self):
+    def test_get_queryset__include_related_false_skips_select_related(self):
+        """get_queryset(include_related=False) returns the same rows but skips both related-loading
+        mechanisms (select_related and prefetch_related) that the default (True) path adds."""
+        qs_with = QuestSubmission.objects.get_queryset(include_related=True)
+        qs_without = QuestSubmission.objects.get_queryset(include_related=False)
+
+        # Same rows either way.
+        self.assertQuerySetEqual(qs_without, list(qs_with), ordered=False)
+        # The default path requests select_related joins; the include_related=False path does not.
+        self.assertTrue(qs_with.query.select_related)
+        self.assertFalse(qs_without.query.select_related)
+        # ...and it requests a prefetch_related lookup (quest__tags) which the False path omits.
+        self.assertIn('quest__tags', qs_with._prefetch_related_lookups)
+        self.assertEqual(qs_without._prefetch_related_lookups, ())
+
+    def test_all_completed__no_user_returns_all_students_completed(self):
+        """all_completed() with no user returns completed submissions in the active semester and
+        excludes those still in progress."""
+        quest = baker.make(Quest, published=True, archived=False)
+        completed = baker.make(QuestSubmission, user=self.student, quest=quest, semester=self.active_semester)
+        completed.mark_completed()
+        # A different user's in-progress submission of the same quest must not appear.
+        in_progress = baker.make(QuestSubmission, user=self.teacher, quest=quest, semester=self.active_semester)
+
+        qs = QuestSubmission.objects.all_completed()
+        self.assertIn(completed, qs)
+        self.assertNotIn(in_progress, qs)
+
+    def test_all_awaiting_approval__with_user_returns_that_users_unapproved_completions(self):
+        """all_awaiting_approval(user=...) returns that user's completed-but-not-yet-approved
+        submissions, excluding already-approved ones and other users' submissions."""
+        quest = baker.make(Quest, published=True, archived=False)
+        awaiting = baker.make(QuestSubmission, user=self.student, quest=quest, semester=self.active_semester)
+        awaiting.mark_completed()  # completed, not yet approved
+
+        # Already approved -> no longer awaiting approval.
+        approved = baker.make(QuestSubmission, user=self.student,
+                              quest=baker.make(Quest, published=True, archived=False), semester=self.active_semester)
+        approved.mark_completed()
+        approved.mark_approved()
+
+        # Belongs to a different user -> filtered out by get_user.
+        other_users = baker.make(QuestSubmission, user=self.teacher, quest=quest, semester=self.active_semester)
+        other_users.mark_completed()
+
+        qs = QuestSubmission.objects.all_awaiting_approval(user=self.student)
+        self.assertIn(awaiting, qs)
+        self.assertNotIn(approved, qs)
+        self.assertNotIn(other_users, qs)
+
+    def test_all_for_user_quest__returns_active_semester_submissions(self):
         """
         QuestSubmissionManager.all_for_user_quest should return all published not archived quest submissions
         for active semester, given user and quest
@@ -787,7 +1114,8 @@ class QuestSubmissionManagerTest(TenantTestCase):
         qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True)
         self.assertQuerySetEqual(qs, [first])
 
-    def make_test_submissions_stack(self):
+    @classmethod
+    def make_test_submissions_stack(cls):
         """Generate 7 submissions, 3 from one semester and 4 from a different semester, each with different settings
 
         Returns:
@@ -797,17 +1125,17 @@ class QuestSubmissionManagerTest(TenantTestCase):
         another_semester = baker.make(Semester)
 
         sub1 = baker.make(QuestSubmission, quest__published=True, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=True, semester=semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=False, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=True, quest__archived=True, semester=semester)
 
         sub2 = baker.make(QuestSubmission, quest__published=True, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=True, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=False, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=False, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=True, quest__archived=True, semester=another_semester)
 
         return sub1, sub2
 
-    def test_calculate_xp(self):
+    def test_calculate_xp__sums_approved_submissions(self):
         """QuestSubmissionManager.calculate_xp should return the correct amount of xp for some approved submissions"""
 
         # Create some approved submissions
@@ -817,7 +1145,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         xp = QuestSubmission.objects.calculate_xp(self.student)
         self.assertEqual(xp, 13)
 
-    def test_calculate_xp_to_date(self):
+    def test_calculate_xp_to_date__excludes_xp_after_date(self):
         """QuestSubmissionManager.calculate_xp_to_date should not include xp earned up to and including the date.
         """
         # Create some approved submissions from after the `to_date``, should show up in XP
@@ -835,6 +1163,92 @@ class QuestSubmissionManagerTest(TenantTestCase):
         )
         xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
         self.assertEqual(xp, 3)
+
+    def _approved_on(self, date, xp, registration=None, quest=None, max_xp=-1):
+        """Give the student an approved, XP-granting submission approved on `date`."""
+        quest = quest if quest is not None else baker.make(Quest, xp=xp, max_xp=max_xp, max_repeats=-1)
+        return baker.make(
+            QuestSubmission, user=self.student, quest=quest, registration=registration,
+            semester=self.active_semester, is_completed=True, is_approved=True, time_approved=date,
+        )
+
+    def _registration(self):
+        """Register the student in another course this semester, and return the registration."""
+        return baker.make(CourseStudent, user=self.student, semester=self.active_semester, course=baker.make(Course))
+
+    def test_xp_by_registration_series__answers_each_date_with_what_had_been_earned_by_then(self):
+        """Each date gets the split as it stood then, which is what plots a course's line
+        through the semester (issue #2459)."""
+        maths = self._registration()
+        art = self._registration()
+        monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
+        self._approved_on(monday, xp=10, registration=maths)
+        self._approved_on(monday + timedelta(days=2), xp=25, registration=art)
+
+        series = QuestSubmission.objects.xp_by_registration_series(
+            self.student, [monday - timedelta(days=1), monday, monday + timedelta(days=2)])
+
+        self.assertEqual([entry.by_registration for entry in series], [{}, {maths.id: 10}, {maths.id: 10, art.id: 25}])
+        self.assertEqual([entry.total for entry in series], [0, 10, 35])
+
+    def test_xp_by_registration_series__caps_a_repeatable_quest_at_each_date(self):
+        """A quest's max_xp caps what it was worth *as of that date*, so a repeatable quest
+        that crosses its cap partway through is worth its cap from then on rather than the sum
+        of its submissions. That is why each date is capped afresh instead of the series being
+        a running total."""
+        monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
+        quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
+        for day in range(3):
+            self._approved_on(monday + timedelta(days=day), xp=10, quest=quest)
+
+        series = QuestSubmission.objects.xp_by_registration_series(
+            self.student, [monday + timedelta(days=day) for day in range(3)])
+
+        self.assertEqual([entry.total for entry in series], [10, 15, 15])
+        self.assertEqual([entry.by_registration for entry in series], [{None: 10}, {None: 15}, {None: 15}])
+
+    def test_xp_by_registration_series__shares_a_capped_quest_between_the_courses_it_was_put_against(self):
+        """A repeatable quest spread across two courses cannot earn more than one kept in a
+        single course, so its cap is applied to the quest as a whole and each course credited
+        in proportion to what it was assigned."""
+        maths = self._registration()
+        art = self._registration()
+        monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
+        quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
+        self._approved_on(monday, xp=10, quest=quest, registration=maths)
+        self._approved_on(monday, xp=10, quest=quest, registration=art)
+
+        [entry] = QuestSubmission.objects.xp_by_registration_series(self.student, [monday])
+
+        self.assertEqual(entry.total, 15)
+        self.assertEqual(entry.by_registration, {maths.id: 7.5, art.id: 7.5})
+
+    def test_xp_by_registration_series__leaves_out_a_submission_with_no_approval_time(self):
+        """An approved submission with no approval time belongs to no date, the same as
+        calculate_xp_to_date() leaves it out, so it counts toward no date's figure."""
+        monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
+        self._approved_on(None, xp=10)
+
+        [entry] = QuestSubmission.objects.xp_by_registration_series(self.student, [monday])
+
+        self.assertEqual(entry.total, 0)
+        self.assertEqual(entry.by_registration, {})
+
+    def test_xp_by_registration_series__costs_the_same_however_many_dates(self):
+        """Reading the submissions once is the point of the series: charting a course asks for
+        a whole semester of class days at a time, and what it costs must not grow with them
+        (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
+        survives any unrelated change to how the submissions are looked up."""
+        monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
+        self._approved_on(monday, xp=10)
+        dates = [monday + timedelta(days=day) for day in range(20)]
+
+        with CaptureQueriesContext(connection) as one_date:
+            QuestSubmission.objects.xp_by_registration_series(self.student, dates[:1])
+        with CaptureQueriesContext(connection) as every_date:
+            QuestSubmission.objects.xp_by_registration_series(self.student, dates)
+
+        self.assertEqual(len(every_date), len(one_date))
 
     def test_calculate_xp__with_xp_requested(self):
         """If student can request a custom xp value for a submission, that xp should be properly included
@@ -855,28 +1269,36 @@ class QuestSubmissionManagerTest(TenantTestCase):
         that can be gained in a repeatable quest
         """
         quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
+        # is_completed=True: approved submissions are always completed, and only
+        # one *in-progress* submission per quest/semester is allowed (issue #1345).
         baker.make(
             QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
-            semester=self.active_semester, is_approved=True, _quantity=3
+            semester=self.active_semester, is_completed=True, is_approved=True, _quantity=3
         )
 
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
         # Perform additional submission but xp remains the same
-        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=self.active_semester, is_approved=True)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
+            semester=self.active_semester, is_completed=True, is_approved=True,
+        )
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
-    def test_calculate_xp__ith_xp_requested_and_max_xp(self):
+    def test_calculate_xp__with_xp_requested_and_max_xp(self):
         """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
         """
-        # Create an approved submission
-        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
+        # Create an approved submission (approved submissions are always completed;
+        # only one in-progress submission per quest/semester is allowed -- #1345).
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, quest__xp=10)
 
         # Create a repeatable quest with custom xp.
         quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=17)
         # submission with a custom XP values
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=8)
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=10)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=8)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=10)
 
         xp = QuestSubmission.objects.calculate_xp(self.student)
         # Should be the max_xp value + 10 (17+10) = 27), since request XP 10 + 8 = 18 is greater than the max_xp of 17
@@ -885,8 +1307,10 @@ class QuestSubmissionManagerTest(TenantTestCase):
         # Create a 2nd repeatable quest with custom xp.
         quest = baker.make(Quest, xp=1, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=3)
         # submission with a custom XP values
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=1)
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=5)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=1)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=5)
 
         # despite 1 + 5, should only add 3 xp since max_xp is 3 for this repeatable quest
         xp = QuestSubmission.objects.calculate_xp(self.student)
@@ -920,3 +1344,134 @@ class QuestSubmissionManagerTest(TenantTestCase):
         # now delete the custom_xp quest (submission is still there though!) Shouldn't break!
         quest_5xp_custom.delete()
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 10)
+
+
+class BlockingQuestRuleTests(ByteDeckTenantTestCase):
+    """One rule for what a blocking quest holds back, read by the Available tab and by starting one.
+
+    A quest marked ``blocking`` takes every other quest out of a student's Available tab while it
+    is open to them, and starting a quest, which is a different code path, has to answer the same
+    way. Both read ``QuestManager.get_blocking_quests()``, so a quest missing from the tab does
+    not open from the quest map either (#2729).
+    """
+
+    def setUp(self):
+        """A student registered this semester, with one ordinary quest available to them."""
+        self.student = baker.make(User)
+        self.teacher = baker.make(User, is_staff=True)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course),
+                   semester=SiteConfig.get().active_semester)
+        self.quest = baker.make(Quest, name='Ordinary quest')
+
+    def test_get_blocking_quests__names_an_available_blocking_quest(self):
+        """A blocking quest the student qualifies for is what is holding their other quests back."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertListEqual(list(Quest.objects.get_blocking_quests(self.student)), [blocker])
+
+    def test_get_blocking_quests__names_one_the_student_has_in_progress(self):
+        """A blocking quest already started holds the others back too, and is the harsher case:
+        it is not in the tab either, so nothing else names it."""
+        blocker = baker.make(Quest, name='Finish this first', blocking=True)
+        QuestSubmission.objects.create_submission(self.student, blocker)
+
+        self.assertListEqual(list(Quest.objects.get_blocking_quests(self.student)), [blocker])
+
+    def test_get_blocking_quests__includes_a_blocking_quest_the_student_hid(self):
+        """Hiding a blocking quest takes it out of the tab but not out of the way, so it is still
+        named: otherwise the student is told nothing while every quest stays on hold."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        self.student.profile.hidden_quests = str(blocker.id)
+        self.student.profile.save()
+
+        self.assertListEqual(list(Quest.objects.get_blocking_quests(self.student)), [blocker])
+
+    def test_get_blocking_quests__empty_when_nothing_is_blocking(self):
+        """The ordinary case, where the student's quests are their own to pick from."""
+        self.assertFalse(Quest.objects.get_blocking_quests(self.student).exists())
+
+    def test_get_available__blocking_false_keeps_the_crowded_out_quests(self):
+        """The parameter answers as if nothing were blocking, which is how the blocking quests
+        themselves are found without the rule hiding its own inputs."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        unblocked = set(Quest.objects.get_available(self.student, blocking=False).values_list('name', flat=True))
+        self.assertIn('Ordinary quest', unblocked)
+        self.assertIn('Read this first', unblocked)
+
+        # the default crowds out everything the blocking quest is holding back, deck's own
+        # starter quest included
+        blocked = set(Quest.objects.get_available(self.student).values_list('name', flat=True))
+        self.assertSetEqual(blocked, {'Read this first'})
+
+    def test_is_available__false_while_a_blocking_quest_is_open_to_them(self):
+        """The quest is out of the tab, so it must be out of reach from the quest map as well."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertFalse(self.quest.is_available(self.student))
+
+    def test_is_available__false_while_a_blocking_quest_is_in_progress(self):
+        """Starting the blocking quest does not release the others: it holds them until it is done."""
+        blocker = baker.make(Quest, name='Finish this first', blocking=True)
+        QuestSubmission.objects.create_submission(self.student, blocker)
+
+        self.assertFalse(self.quest.is_available(self.student))
+
+    def test_is_available__true_for_the_blocking_quest_itself(self):
+        """Blocking quests do not hold each other back, which is what leaves the student something
+        to do: the tab shows them for the same reason."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        another = baker.make(Quest, name='Then read this', blocking=True)
+
+        self.assertTrue(blocker.is_available(self.student))
+        self.assertTrue(another.is_available(self.student))
+
+    def test_is_available__blocking_false_answers_as_if_nothing_blocked(self):
+        """What tells a quest held back by another one apart from a quest whose own prerequisites
+        are not met, which is how the quest's page knows which of the two to say."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertFalse(self.quest.is_available(self.student))
+        self.assertTrue(self.quest.is_available(self.student, blocking=False))
+
+    def test_is_available__true_again_once_the_blocking_quest_is_done(self):
+        """The hold is temporary, and lifts on its own the moment the blocking quest is finished."""
+        blocker = baker.make(Quest, name='Finish this first', blocking=True)
+        submission = QuestSubmission.objects.create_submission(self.student, blocker)
+        self.assertFalse(self.quest.is_available(self.student))
+
+        submission.mark_completed()
+        submission.mark_approved()
+
+        self.assertTrue(self.quest.is_available(self.student))
+
+    def test_is_available__a_student_with_no_current_course_is_not_blocked(self):
+        """Without a course the tab is built by get_available_without_course(), which does not
+        block, so nothing should be held back from them here either."""
+        no_course_student = baker.make(User)
+        quest = baker.make(Quest, name='Open to anyone', available_outside_course=True)
+        baker.make(Quest, name='Read this first', blocking=True, available_outside_course=True)
+
+        self.assertTrue(quest.is_available(no_course_student))
+
+    def test_blocked_by__names_the_quests_in_the_way(self):
+        """Having the quests, rather than a yes or no, is what lets the tab and the quest's own
+        page say which quest the student has to finish."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        another = baker.make(Quest, name='Then read this', blocking=True)
+
+        self.assertSetEqual(set(self.quest.blocked_by(self.student)), {blocker, another})
+
+    def test_blocked_by__empty_for_a_blocking_quest(self):
+        """A blocking quest is not held back by the rule it is the cause of."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        baker.make(Quest, name='Then read this', blocking=True)
+
+        self.assertFalse(blocker.blocked_by(self.student).exists())
+
+    def test_blocked_by__empty_for_staff(self):
+        """Staff see every published quest in their tab whatever is blocking, so holding one back
+        from them would disagree with the list they are looking at."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertFalse(self.quest.blocked_by(self.teacher).exists())

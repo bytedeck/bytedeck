@@ -2,10 +2,10 @@
 Django settings for hackerspace_online project.
 
 For more information on this file, see
-https://docs.djangoproject.com/en/1.8/topics/settings/
+https://docs.djangoproject.com/en/5.2/topics/settings/
 
 For the full list of settings and their values, see
-https://docs.djangoproject.com/en/1.8/ref/settings/
+https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -35,10 +35,55 @@ DEBUG = env('DEBUG')
 ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
-if not ALLOWED_HOSTS:
+# ALLOWED_HOSTS is unset under the test harness, so the fallback always runs; the
+# "already provided via env" arc is only taken in real deployments.
+if not ALLOWED_HOSTS:  # pragma: no branch
     ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
+
+
+def _validate_deployment_settings(root_domain, debug, secret_key):
+    """Refuse to boot a real deployment that is still using the shipped example
+    defaults, so a miscopied .env (e.g. from .env.example.aws) can't silently
+    expose the site.
+
+    A real deployment is anything whose ROOT_DOMAIN is not ``localhost``
+    (production, staging, etc.). Local development (``localhost``) is never
+    blocked, and the caller skips this entirely during tests. Raises
+    ``ImproperlyConfigured`` on an unsafe configuration.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if debug:
+        raise ImproperlyConfigured(
+            f"DEBUG must be False for a real deployment (ROOT_DOMAIN={root_domain!r}). "
+            "Set DEBUG=False in the environment."
+        )
+    if secret_key == 'Change.Me!':
+        raise ImproperlyConfigured(
+            "SECRET_KEY is still the example default ('Change.Me!'). Generate a "
+            "unique, random SECRET_KEY in the environment before deploying."
+        )
+
+
+# Fail fast on insecure example defaults in a real deployment. Skipped during
+# tests, where DEBUG/SECRET_KEY are intentionally weak. This bootstrap line is
+# excluded from coverage because it only runs outside the test harness; the
+# logic itself is covered directly by DeploymentSettingsGuardTest.
+if 'test' not in sys.argv:  # pragma: no cover
+    _validate_deployment_settings(ROOT_DOMAIN, DEBUG, SECRET_KEY)
+
+# In production TLS is terminated at nginx, which then forwards to uWSGI over
+# plain HTTP. Trust the forwarded scheme so request.is_secure() — and every
+# absolute URL built from it, e.g. the verification/welcome email links from
+# request.build_absolute_uri() — reflects the original https request instead of
+# the internal http hop. nginx sets this from its own $scheme (see
+# nginx/uwsgi_params), overwriting any client-supplied value, so it can't be
+# spoofed in the standard deployment. Harmless in dev (runserver never sends it).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
@@ -71,10 +116,11 @@ SHARED_APPS = (
 
     'django.contrib.sites',
 
-    'captcha',
+    'django_recaptcha',
 
     'grappelli',
     'crispy_forms',
+    'crispy_bootstrap3',  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
     'bootstrap_datepicker_plus',
     'embed_video',
     'django_select2',
@@ -114,6 +160,7 @@ TENANT_APPS = (
     'taggit',
 
     'quest_manager',
+    'questions',
     'profile_manager',
     'announcements',
     'comments',
@@ -127,6 +174,9 @@ TENANT_APPS = (
     'siteconfig',
     'tags',
     'competencies',
+    # The Shared Library's own models live per schema: the deck that is the Library keeps
+    # its content's origins in its schema, beside the content they describe (#2377).
+    'library',
 )
 
 
@@ -146,7 +196,7 @@ INSTALLED_APPS = (
     'django.contrib.sites',  # for allauth
     'django.contrib.staticfiles',
 
-    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/1.10/ref/contrib/flatpages/
+    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/5.2/ref/contrib/flatpages/
 
     # third party apps
 
@@ -159,13 +209,14 @@ INSTALLED_APPS = (
 
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
     'crispy_forms',
+    'crispy_bootstrap3',  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
     'bytedeck_summernote',
 
     # https://pypi.org/project/django-recaptcha/
-    'captcha',
+    'django_recaptcha',
 
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
@@ -199,6 +250,7 @@ INSTALLED_APPS = (
 
     # local apps
     'quest_manager',
+    'questions',
     'profile_manager',
     'announcements',
     'comments',
@@ -219,7 +271,7 @@ TAGGIT_CASE_INSENSITIVE = True
 
 MIDDLEWARE = [
     'django_tenants.middleware.TenantMiddleware',
-    # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
+    # caching: https://docs.djangoproject.com/en/5.2/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -227,51 +279,130 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'allauth.account.middleware.AccountMiddleware',  # required by django-allauth >= 0.56
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Suspension policy: owner-only sign-in (#1734). Needs auth + messages above, and
+    # sits BELOW the clickjacking/security layers so its short-circuit redirects still
+    # pass back through them and pick up their response headers (review find on #2210).
+    'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',
     'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
+    # Records when each signed-in person last used their deck (#2849). Needs auth and sessions
+    # above, and sits below the suspension check, so a person it turns away isn't recorded.
+    'profile_manager.middleware.LastActiveMiddleware',
 ]
 
+# Max size (bytes) of a request body Django will parse in memory, EXCLUDING
+# file uploads (multipart file parts stream to disk regardless). Was previously
+# unset, so Django's 2.5 MB default applied even though nginx allows 17 MB
+# bodies (client_max_body_size) -- large non-file form posts (e.g. Summernote
+# content with embedded images) tripped RequestDataTooBigMiddleware well below
+# the intended cap. 16 MiB leaves headroom under the nginx limit.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int('DATA_UPLOAD_MAX_MEMORY_SIZE', default=16 * 1024 * 1024)
+
+# The most the files chosen in one form may add up to, in bytes. nginx refuses a request body
+# over client_max_body_size (17M, nginx/bytedeck.conf.template) before the app sees it, with a
+# bare 413 page, so the browser holds the files a form is about to send to this and says so
+# instead (js/upload-size-check.js, #783). It sits under nginx's cap to leave room for the rest
+# of the form.
+MAX_UPLOAD_REQUEST_SIZE = env.int('MAX_UPLOAD_REQUEST_SIZE', default=16 * 1024 * 1024)
+
+# LOGGING #########################################################
+#
+# With DEBUG=False (production/staging) Django's built-in logging emits almost
+# nothing to the container: its default `console` handler is filtered to
+# DEBUG-only, so it's silenced, and app loggers (getLogger(__name__)) fall back
+# to Python's WARNING-level "last resort" stderr handler -- so INFO and most app
+# logs vanish and `docker compose logs web` shows little between startup and a
+# 5xx. This config always ships leveled, timestamped logs to stdout (captured by
+# Docker's json-file driver, which the prod compose rotates), while preserving
+# Django's default "email ADMINS on an unhandled 5xx" behaviour.
+#
+# Level is env-tunable (DJANGO_LOG_LEVEL, default INFO). Under the test runner we
+# keep it at WARNING to match the pre-existing signal-to-noise (the old last-
+# resort handler only surfaced WARNING+), so the suite output isn't flooded with
+# INFO lines; assertLogs still works regardless since it sets its own level.
+LOG_LEVEL = env('DJANGO_LOG_LEVEL', default='WARNING' if 'test' in sys.argv else 'INFO')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} | {asctime} | {process:d} | {name} | {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        # AdminEmailHandler must only fire in real deployments -- never in local
+        # DEBUG, where email is printed to the console / _sent_mail dir.
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
+            'formatter': 'verbose',
+        },
+        # Mirrors Django's default so an unhandled 5xx (django.request ERROR)
+        # still emails ADMINS. Complements the celery task_failure alerter.
+        'mail_admins': {
+            'level': 'ERROR',
+            'class': 'django.utils.log.AdminEmailHandler',
+            'filters': ['require_debug_false'],
+        },
+    },
+    # Root catches app loggers (prerequisites.tasks, hackerspace_online.*, etc.),
+    # which use getLogger(__name__) and share no common prefix, via propagation.
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'mail_admins'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        # Every SQL statement logs here at DEBUG; pin it to WARNING so
+        # DJANGO_LOG_LEVEL=DEBUG doesn't flood stdout with queries. Use the
+        # opt-in DB_LOGS_ENABLED tracer below to see queries instead.
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
+
+# Opt-in developer tool: trace every DB query to a rotating file (off by
+# default). Augments the base LOGGING above rather than replacing it.
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
 
-if DB_LOGS_ENABLED:
+if DB_LOGS_ENABLED:  # pragma: no cover -- opt-in dev query tracer, disabled (env default) under the test harness
     MIDDLEWARE.insert(0, 'hackerspace_online.middleware.ForceDebugCursorMiddleware')
-    print(MIDDLEWARE)
     LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
 
     if not os.path.exists(LOGS_PATH):
         os.mkdir(LOGS_PATH)
 
-    LOGGING = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'verbose': {
-                'format': '{levelname} | {asctime} | {process:d} {thread:d} | {message}',
-                'style': '{',
-            },
-        },
-        'handlers': {
-            'console': {
-                'level': 'DEBUG',
-                'class': 'logging.StreamHandler',
-                'formatter': 'verbose',
-            },
-            'file': {
-                'level': 'DEBUG',
-                'class': 'logging.handlers.TimedRotatingFileHandler',
-                'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
-                'filename': os.path.join(LOGS_PATH, 'queries.log'),
-                'formatter': 'verbose',
-            }
-        },
-        'loggers': {
-            'django.db.backends': {
-                'handlers': ['file'],
-                'level': 'DEBUG',
-            },
-        }
+    LOGGING['handlers']['db_queries_file'] = {
+        'level': 'DEBUG',
+        'class': 'logging.handlers.TimedRotatingFileHandler',
+        'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
+        # Bound retention: without backupCount, minute-rotation keeps a file
+        # forever, so an enabled tracer slowly fills /tmp. 60 = ~1h of history.
+        'backupCount': env.int('DB_LOGS_BACKUP_COUNT', default=60),
+        'filename': os.path.join(LOGS_PATH, 'queries.log'),
+        'formatter': 'verbose',
+    }
+    LOGGING['loggers']['django.db.backends'] = {
+        'handlers': ['db_queries_file'],
+        'level': 'DEBUG',
+        'propagate': False,
     }
 
 
@@ -291,6 +422,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
 
                 'hackerspace_online.context_processors.config',
+                'hackerspace_online.context_processors.deck_status',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },
@@ -323,7 +455,14 @@ CACHES = {
         },
         'KEY_FUNCTION': 'django_tenants.cache.make_key',
         'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key',
-        'TIMEOUT': None,
+        # Was TIMEOUT: None (never expire). django-select2 pickles a queryset
+        # per rendered widget into this cache, so with no TTL the entries
+        # accumulate forever -- and with the production Redis capped by
+        # maxmemory + noeviction, an ever-growing cache eventually makes Redis
+        # refuse ALL writes (breaking the shared Celery broker too). 24h covers
+        # any realistic open-form lifetime (an ajax lookup after expiry just
+        # means reopening the form) while keeping the cache bounded.
+        'TIMEOUT': env.int('SELECT2_CACHE_TIMEOUT', default=60 * 60 * 24),
     }
 }
 
@@ -350,6 +489,42 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_MAX_RETRIES = 10
 CELERY_TASKS_BUNCH_SIZE = 10
 
+# No result backend is configured and nothing in the codebase reads task
+# results (all tasks are fire-and-forget apply_async/delay), so don't spend
+# broker round-trips storing them.
+CELERY_TASK_IGNORE_RESULT = True
+
+# Recycle each worker process after this many tasks: the per-schema fan-out
+# tasks (condition updates, map regeneration) accumulate memory, and recycling
+# bounds any leak the same way uwsgi's max-requests does for web workers.
+CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int('CELERY_WORKER_MAX_TASKS_PER_CHILD', default=100)
+
+# Fetch one task at a time instead of the default 4-per-process: this workload
+# mixes seconds-long emails with minutes-long all-schema updates, and
+# prefetching lets quick tasks get stuck queued behind a long one in a busy
+# worker while other workers sit idle.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Safety net for hung tasks (mirrors uwsgi's harakiri for web requests): the
+# soft limit raises SoftTimeLimitExceeded inside the task; the hard limit kills
+# the worker process. Generous on purpose -- the legitimate all-schema tasks
+# (e.g. update_quest_conditions_all_users, regenerate_all_maps) can run for
+# many minutes on a large deck count.
+CELERY_TASK_SOFT_TIME_LIMIT = env.int('CELERY_TASK_SOFT_TIME_LIMIT', default=25 * 60)
+CELERY_TASK_TIME_LIMIT = env.int('CELERY_TASK_TIME_LIMIT', default=30 * 60)
+
+# Keep retrying the broker connection at startup (restores pre-Celery-6
+# behaviour and silences the deprecation warning): with docker's depends_on
+# the broker is usually up first, but a slow redis start shouldn't kill the
+# worker before it begins.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# NOTE on acks_late / task_reject_on_worker_lost: deliberately NOT enabled
+# globally. They re-deliver a task if the worker dies mid-run, which is only
+# safe for idempotent work -- several tasks here send email, and a crash-loop
+# would re-send on every retry. Enable per-task (acks_late=True) on tasks that
+# are provably idempotent instead.
+
 # allowed delay between conditions met updates for all users:
 # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
 CONDITIONS_UPDATE_COUNTDOWN = 60 * 1
@@ -363,6 +538,12 @@ POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
 POSTGRES_USER = env('POSTGRES_USER')
 POSTGRES_PASSWORD = env('POSTGRES_PASSWORD', default=None)
 
+# Persist database connections across requests instead of opening a new one each time
+# (Django's default of 0 closes the connection at the end of every request).
+# Env-configurable so it can be tuned per deployment or pinned to 0 where a connection
+# pooler (e.g. pgbouncer in transaction mode) makes persistent connections undesirable.
+CONN_MAX_AGE = env.int('CONN_MAX_AGE', default=60)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django_tenants.postgresql_backend',
@@ -370,7 +551,15 @@ DATABASES = {
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
         'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT
+        'PORT': POSTGRES_PORT,
+        'CONN_MAX_AGE': CONN_MAX_AGE,
+        # Companion to CONN_MAX_AGE: verify a persistent connection is still
+        # alive at the start of each request and transparently reconnect if it
+        # died while idle (RDS failover, network blip, server-side timeout).
+        # Without this, a dead pooled connection surfaces as an intermittent
+        # InterfaceError/OperationalError on whatever request draws it.
+        # https://docs.djangoproject.com/en/5.2/ref/settings/#conn-health-checks
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -382,7 +571,7 @@ DATABASE_ROUTERS = (
 # EMAIL ######################################
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
-EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
+EMAIL_FILE_PATH = env('EMAIL_FILE_PATH', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
 
 EMAIL_HOST = env('EMAIL_HOST', default=None)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default=None)
@@ -393,9 +582,14 @@ EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=True)
 
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
 
+# Where "Contact ByteDeck" copy points (subscription page, activation flow):
+# rendered as a mailto: link so users always have a way to actually reach us
+# (maintainer request, 2026-08-09).
+SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='contact@bytedeck.com')
+
 # SERVER ERRORS EMAIL
 admins_raw = env('ADMINS', default=[])
-if admins_raw:
+if admins_raw:  # pragma: no cover -- ADMINS env unset under the test harness
     # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
     ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')]
 SERVER_EMAIL = env('SERVER_EMAIL', default=None)
@@ -409,7 +603,7 @@ MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 
 USE_S3 = env('USE_S3', default='0') == '1'
-if USE_S3:
+if USE_S3:  # pragma: no cover -- production S3 storage config, disabled (env default) under the test harness
 
     # AWS settings
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
@@ -465,6 +659,10 @@ STATICFILES_DIRS = env(
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
+# django-crispy-forms 2.x ships no template packs of its own; bootstrap3 comes
+# from the crispy-bootstrap3 package and must be explicitly allowed.
+CRISPY_ALLOWED_TEMPLATE_PACKS = ('bootstrap3',)
+
 # https://django-crispy-forms.readthedocs.io/en/latest/crispy_tag_forms.html#make-crispy-forms-fail-loud
 CRISPY_FAIL_SILENTLY = not DEBUG  # logs crispy-forms failures as exceptions when True
 
@@ -503,8 +701,100 @@ SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
 
 # RECAPTCHA #######################################################
 
+# Deck status notices (epic #1729, #1733): when False (the default), the nightly
+# deck-status task runs the reminder engine in REPORT-ONLY mode -- it logs which
+# expiry/limit/suspension notices it *would* send, but sends nothing and records
+# nothing. Flip to True in production once a report-only cycle has been reviewed
+# (see docs/plans/PLAN-1729-automated-payments-onboarding.md §10.2).
+DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
+
+# Release announcements to deck staff: when True, the hourly
+# tenant.tasks.poll_release_announcement task notifies every deck's staff (an
+# in-app notification linking to the GitHub announcement) when a new ByteDeck
+# version's changelog reaches production. Off by default, and inert without a
+# GITHUB_API_TOKEN: the poll queries GitHub's GraphQL API for the latest
+# Announcements discussion (the one announce-changelog.yml publishes). The first
+# poll after enabling only records a baseline, so it never notifies about a
+# release that shipped before the feature was turned on.
+RELEASE_NOTIFICATIONS_ENABLED = env.bool('RELEASE_NOTIFICATIONS_ENABLED', default=False)
+# A GitHub token with read access to the repo's Discussions. The repo is public,
+# so a minimal-scope token is enough; without it the poll no-ops.
+GITHUB_API_TOKEN = env('GITHUB_API_TOKEN', default='')
+# owner/name of the repo whose Announcements discussions carry the changelog.
+RELEASE_ANNOUNCEMENT_REPO = env('RELEASE_ANNOUNCEMENT_REPO', default='bytedeck/bytedeck')
+
+# External hosts a notification click-through may redirect to. The notifications
+# read view forwards its ?next= target, which for most notices is an internal
+# relative path but for the release-announcement notice is the GitHub Discussion
+# link, so github.com is trusted here; any other absolute URL is refused and the
+# user is sent to their notifications list instead (closes an open redirect).
+NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS = env.list('NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS', default=['github.com'])
+
+# STRIPE ##########################################################
+
+# Automated deck subscriptions (epic #1729). All default to None: when the keys
+# are absent the billing UI degrades gracefully (the subscription page shows
+# "billing not configured" and falls back to the public subscribe page), so dev
+# and self-hosted environments boot clean without a Stripe account.
+STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # verifies every webhook delivery (plan §5.2)
+STRIPE_PRICE_ID = env('STRIPE_PRICE_ID', default=None)  # the recurring Price (price_...) checkout subscribes decks to
+
+# Fallback tier map (price_id -> current-student cap) for Prices whose
+# metadata.max_active_users was never set in the Stripe dashboard (plan §2).
+# JSON in the env, e.g. STRIPE_PRICE_TIER_MAP={"price_abc": 40, "price_def": 80}
+STRIPE_PRICE_TIER_MAP = env.json('STRIPE_PRICE_TIER_MAP', default={})
+
+
+def _validate_stripe_settings(root_domain, stripe_secret_key, stripe_webhook_secret):
+    """Refuse to boot a real deployment that enables Stripe checkout without the
+    webhook secret: without webhooks, renewals never sync and every Stripe-billed
+    deck drifts toward suspension at its stale ``paid_until``. Local development
+    (``localhost``) is never blocked. Raises ``ImproperlyConfigured``.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if stripe_secret_key and not stripe_webhook_secret:
+        raise ImproperlyConfigured(
+            "STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not. Register the webhook "
+            "endpoint in the Stripe dashboard and set its signing secret, or unset the Stripe "
+            "keys entirely -- checkout without webhooks leaves renewals unsynced."
+        )
+
+
+# Same bootstrap pattern as _validate_deployment_settings above: skipped during
+# tests (where settings are exercised directly by tests instead).
+if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is covered by StripeSettingsGuardTest
+    _validate_stripe_settings(ROOT_DOMAIN, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
+
+
+# DEMO DECK #######################################################
+
+# Course code for the public demo deck (learn.bytedeck.com), shown on the
+# deck-request page so visitors can preview ByteDeck as a student. Set only in
+# the deployment's .env: keeping it out of the repo means bots scraping the
+# codebase can't harvest it, and it can be rotated without a release. When
+# unset, the page links the demo deck without printing a code.
+DEMO_DECK_COURSE_CODE = env('DEMO_DECK_COURSE_CODE', default='')
+
+# Logo for the sigblock of platform emails (the public-tenant sends: deck-request
+# verification and welcome). Must be an ABSOLUTE URL: mail clients resolve the
+# email body with no origin, so a schema-relative static path renders as a broken
+# image. The default is the production static host's copy of
+# static/public/images/wordmark-v2.png (maintainer request, 2026-08-08).
+PUBLIC_EMAIL_LOGO_URL = env(
+    'PUBLIC_EMAIL_LOGO_URL',
+    default='https://d10ge8y4vx8iud.cloudfront.net/static/public/images/wordmark-v2.png',
+)
+
+
+# RECAPTCHA #######################################################
+
 recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
-if recaptcha_keys_available:
+if recaptcha_keys_available:  # pragma: no cover -- real reCAPTCHA keys env unset under the test harness (test keys used)
     RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
     RECAPTCHA_PRIVATE_KEY = env('RECAPTCHA_PRIVATE_KEY')
 else:
@@ -514,12 +804,12 @@ else:
 
 
 # Google provides default keys in development that always validate, but results in this error:
-#  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
+#  django_recaptcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
 #  use of the Google test keys and will not behave as expected in a production environment
 #
 # Silencing the error allows us to setup an environment (otherwise the error will stop the app)
 # The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
-SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
+SILENCED_SYSTEM_CHECKS += ['django_recaptcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
@@ -557,9 +847,14 @@ LOGIN_REDIRECT_URL = '/'
 LOGIN_URL = 'account_login'
 ACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomAccountAdapter"
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
-ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
-# Specifies the login method to use – whether the user logs in by entering their username,
-# e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
+ACCOUNT_LOGIN_METHODS = {"username"}  # ({"username"} | {"email"} | {"username", "email"})
+# Specifies the login method to use - whether the user logs in by entering their username,
+# e-mail address, or either one of both. Renamed from ACCOUNT_AUTHENTICATION_METHOD in django-allauth 65.0.
+ACCOUNT_SIGNUP_FIELDS = ["username*", "email", "password1*", "password2*"]
+# Which fields are presented on the signup form ("*" = required). Replaces the removed
+# ACCOUNT_EMAIL_REQUIRED / ACCOUNT_USERNAME_REQUIRED settings and preserves their old
+# defaults here: username required, email optional (providing + verifying an email
+# lets users reset their own password).
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
 # Determines whether or not an e-mail address is automatically confirmed by a mere GET request.
 # ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL #(=settings.LOGIN_URL)
@@ -656,6 +951,29 @@ SUMMERNOTE_CONFIG = {
             ['help', ['help']],
         ],
 
+        # The menus that pop up over a clicked image, link or table. They belong here with the toolbar:
+        # django-summernote hands the editor only this 'summernote' dict (#268). The image menu's size
+        # buttons carry Summernote 0.8.20's names, and "custom", "imagelink" and "imagealign" hold the
+        # buttons our plugins add.
+        'popover': {
+            'image': [
+                ['custom', ['imageShapes', 'imageSource']],
+                ['imagelink', ['imageLink', 'imageUnlink']],
+                ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
+                ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                ['imagealign', ['imageAlignLeft', 'imageAlignCenter', 'imageAlignRight']],
+                ['remove', ['removeMedia']]
+            ],
+            'link': [
+                ['link', ['linkDialogShow', 'unlink']]
+            ],
+            'table': [
+                ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
+                ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
+                ['custom', ['tableHeaders', 'tableStyles']]
+            ],
+        },
+
         # You can also add custom settings for external plugins
         # 'print': {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
@@ -700,20 +1018,25 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+        # KaTeX's stylesheet comes from templates/head_css.html on every page
     ),
     'js_for_inplace': (
+        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-source.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-link.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-align.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
+        # KaTeX itself, and js/note-math.js, come from templates/javascript.html on every page
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-classes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
 
     # Codemirror as codeview
@@ -729,40 +1052,29 @@ SUMMERNOTE_CONFIG = {
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+        os.path.join(STATIC_URL, 'katex/katex-0.18.1.min.css'),  # the KaTeX templates/head_css.html loads
     ),
 
     # To use external plugins,
     # Include them within `css` and `js`.
     'js': (
+        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-source.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-link.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-align.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        os.path.join(STATIC_URL, 'katex/katex-0.18.1.min.js'),  # the KaTeX templates/javascript.html loads
+        os.path.join(STATIC_URL, 'js/note-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
+        os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
-
-    'popover': {
-        'image': [
-            ['custom', ['imageShapes']],
-            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
-            ['float', ['floatLeft', 'floatRight', 'floatNone']],
-            ['remove', ['removeMedia']]
-        ],
-        'link': [
-            ['link', ['linkDialogShow', 'unlink']]
-        ],
-        'table': [
-            ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
-            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-            ['custom', ['tableHeaders', 'tableStyles']]
-        ],
-    },
 
     # Lazy initialize
     # If you want to initialize summernote at the bottom of page, set this as True
@@ -783,7 +1095,7 @@ TAGGIT_CASE_INSENSITIVE = True
 # TESTING ##################################################
 
 TESTING = 'test' in sys.argv
-if TESTING:
+if TESTING:  # pragma: no branch -- always true under the test runner ('test' in sys.argv)
     # Custom runner installs a model_bakery patch so baker.make(Prereq) builds
     # valid GenericForeignKey targets instead of random dangling ones (which
     # made the prerequisites signal tests intermittently crash). See
@@ -802,10 +1114,17 @@ if TESTING:
         'LOCATION': 'test-loc'
     }
 
+    # django-allauth >= 65 rate-limits auth flows via the cache: failed logins
+    # per IP/user, and verification-email resends (1 per 3 min per address,
+    # silently skipped when limited). Tests share one client IP and resend
+    # within seconds, so disable rate limits entirely. Note: False is the only
+    # way to disable — a dict (even {}) is merged over allauth's defaults.
+    ACCOUNT_RATE_LIMITS = False
+
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
-if DEBUG and not TESTING:
+if DEBUG and not TESTING:  # pragma: no cover -- dev-only debug toolbar setup, never runs under the test harness
 
     import socket
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
@@ -826,7 +1145,6 @@ if DEBUG and not TESTING:
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
     INSTALLED_APPS += (
         'debug_toolbar',
-        'template_timings_panel',
         # http://django-cachalot.readthedocs.io
         # 'cachalot',
     )
@@ -839,7 +1157,6 @@ if DEBUG and not TESTING:
         'debug_toolbar.panels.sql.SQLPanel',
         'debug_toolbar.panels.staticfiles.StaticFilesPanel',
         'debug_toolbar.panels.templates.TemplatesPanel',
-        'template_timings_panel.panels.TemplateTimings.TemplateTimings',
         # 'cachalot.panels.CachalotPanel',
         'debug_toolbar.panels.cache.CachePanel',
         'debug_toolbar.panels.signals.SignalsPanel',
@@ -852,3 +1169,83 @@ if DEBUG and not TESTING:
     # DEBUG_TOOLBAR_CONFIG = {
     #     'SHOW_TOOLBAR_CALLBACK': lambda request: not request.is_ajax()
     # }
+
+
+# Referrer-Policy value applied in production (see the security block below).
+# Named at module scope so it stays importable/testable even though the block
+# that applies it is skipped under TESTING. We deliberately deviate from
+# Django's "same-origin" default: under "same-origin" the browser sends *no*
+# Referer on cross-origin requests, which breaks third-party embeds that gate
+# on the referrer -- most visibly YouTube, whose iframe player refuses to load
+# and shows an error (issue #1896). "strict-origin-when-cross-origin" is the
+# modern browser default and web.dev's recommended value: it sends only the
+# origin (scheme + host, never the path) cross-origin, and the full URL
+# same-origin, so embeds work again while paths are still never leaked off-site.
+# Any non-None value keeps `check --deploy` (security.W022) green.
+PRODUCTION_SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# PRODUCTION / STAGING SECURITY SETTINGS ###############################
+# Hardening applied whenever DEBUG is off -- i.e. production AND staging
+# (staging mirrors prod). These are intentionally NOT applied in local
+# development, where the site is served over plain http://localhost, nor
+# during tests. Django's `manage.py check --deploy` verifies these.
+# Docs: https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# Coverage: this whole block only runs with DEBUG off (production/staging) and
+# never under the test harness, so its lines are intentionally excluded -- the
+# pragma on this `if` covers the entire block. Values that CAN be asserted
+# directly are tested separately (e.g. ReferrerPolicyTest).
+if not DEBUG and not TESTING:  # pragma: no cover
+
+    # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.
+    # Without this, request.is_secure() is always False behind the proxy,
+    # which would break https-aware redirect logic. This requires nginx to
+    # forward the original scheme to the app: for the uwsgi_pass block, add
+    #   uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;
+    # SECURITY: only safe because Django is reachable *only* via nginx (uwsgi
+    # socket on the internal network), so a client cannot spoof this header.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Only ever send the session and CSRF cookies over HTTPS. Safe to enable
+    # unconditionally here because all real traffic is HTTPS; the browser adds
+    # the Secure flag regardless of the proxy header above.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True  # Django default; set explicitly for clarity
+
+    # Redirect plain HTTP to HTTPS from within Django. nginx already does this
+    # at the edge (listen 80 -> 301), so this is defense-in-depth. Left OFF by
+    # default and env-gated: enabling it before nginx forwards the scheme (see
+    # SECURE_PROXY_SSL_HEADER above) would cause an infinite redirect loop.
+    # Flip to True (SECURE_SSL_REDIRECT=True in the env) once the uwsgi_param
+    # is in place.
+    SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT", default=False)
+
+    # Deploy-check warnings we intentionally don't satisfy, silenced so
+    # `check --deploy --fail-level WARNING` stays green:
+    #   security.W008 (SECURE_SSL_REDIRECT): nginx already redirects
+    #     HTTP->HTTPS at the edge (listen 80 -> 301). Remove if the redirect
+    #     is ever turned on at the Django layer.
+    #   security.W021 (SECURE_HSTS_PRELOAD): preload is a deliberate, hard to
+    #     reverse opt-in (every tenant subdomain must stay HTTPS-only, and
+    #     removal from the browser preload list is slow). Enable HSTS first,
+    #     then flip SECURE_HSTS_PRELOAD via env and drop this silence when
+    #     ready to submit to the preload list.
+    SILENCED_SYSTEM_CHECKS += ["security.W008", "security.W021"]
+
+    # HSTS: tell browsers to use HTTPS only, for this domain and every tenant
+    # subdomain. includeSubDomains matters here because every deck is a
+    # subdomain. Ramp SECURE_HSTS_SECONDS up gradually; only enable preload
+    # once you're certain every subdomain is HTTPS-only and intend to submit
+    # to the browser preload list.
+    SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=60 * 60 * 24 * 365)  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
+
+    # Misc hardening flagged by `check --deploy`. NOSNIFF and X_FRAME_OPTIONS
+    # "DENY" match the effective defaults (the latter via XFrameOptionsMiddleware)
+    # -- set here so the intent is explicit and the deploy check stays green.
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+    # Sends the origin (not the path) cross-origin so YouTube and other embeds
+    # load again; see PRODUCTION_SECURE_REFERRER_POLICY above and issue #1896.
+    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY

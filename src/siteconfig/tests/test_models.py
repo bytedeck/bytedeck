@@ -8,18 +8,23 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.conf import settings
 
-from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from model_bakery import baker
 
-from siteconfig.models import SiteConfig, get_default_deck_owner
+from unittest.mock import patch
+
+from redis import exceptions as redis_exceptions
+
+from courses.models import Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from siteconfig.models import SiteConfig, get_default_deck_owner, invalidate_siteconfig_cache_signal
 
 from library.utils import get_library_schema_name
 
 User = get_user_model()
 
 
-class SiteConfigModelTest(TenantTestCase):
+class SiteConfigModelTest(ByteDeckTenantTestCase):
     """ Tests for the SiteConfig model """
 
     def setUp(self):
@@ -30,40 +35,42 @@ class SiteConfigModelTest(TenantTestCase):
         self.config = SiteConfig.get()
 
     def tearDown(self):
+        """Clear the cache after each test so cached SiteConfig data does not leak."""
         cache.clear()
 
-    def test_get(self):
-        """ Each tenant should have a single SiteConfig object
-        that is created upon first access via the get() method
-        """
+    def test_get__returns_singleton(self):
+        """Each tenant should have a single SiteConfig object created on first get()."""
         self.assertIsInstance(self.config, SiteConfig)
         self.assertEqual(SiteConfig.objects.count(), 1)
 
-    def test_semester_created(self):
-        """ If one doesn't exists yet, a semester should be created
-        to act as the active semester """
+    def test_active_semester__created_by_default(self):
+        """If one doesn't exist yet, an open semester is created to act as the active semester,
+        so students can join a course in a brand new deck without staff opening one first."""
         self.assertIsNotNone(self.config.active_semester)
+        self.assertEqual(self.config.active_semester.status, Semester.Status.OPEN)
 
-    def test_get_absolute_url(self):
-        """ Provides url to the update form """
+    def test_get_absolute_url__returns_update_form_url(self):
+        """Provides url to the update form."""
         self.assertEqual(reverse('config:site_config_update_own'), self.config.get_absolute_url())
 
-    def test_get_site_logo(self):
-        """ Returns a default logo """
+    def test_get_site_logo_url__returns_default(self):
+        """Returns a default logo."""
         self.assertEqual(self.config.get_site_logo_url(), static('img/default_icon.png'))
 
-    def test_get_default_icon_url(self):
-        """ By default should return the site logo """
+    def test_get_default_icon_url__returns_site_logo(self):
+        """By default should return the site logo."""
         self.assertEqual(self.config.get_default_icon_url(), static('img/default_icon.png'))
 
-    def test_get_favicon_url(self):
-        """ Returns default if no favicon set """
+    def test_get_favicon_url__returns_default(self):
+        """Returns default if no favicon set."""
         self.assertEqual(self.config.get_favicon_url(), static('icon/favicon.ico'))
 
-    def test_get_banner_image_url(self):
+    def test_get_banner_image_url__returns_default(self):
+        """Returns the default banner image when none is set."""
         self.assertEqual(self.config.get_banner_image_url(), static('img/banner.png'))
 
-    def test_get_banner_image_dark_url(self):
+    def test_get_banner_image_dark_url__returns_default(self):
+        """Returns the default dark banner image when none is set."""
         self.assertEqual(self.config.get_banner_image_dark_url(), static('img/banner.png'))
 
     def test_enable_competencies__defaults_off(self):
@@ -89,7 +96,84 @@ class SiteConfigModelTest(TenantTestCase):
         self.config.refresh_from_db()
         self.assertEqual(self.config.get_competency_scale_labels()[4], "Exceeding")
 
-    def test_set_active_semester(self):
+    def test_str__returns_site_name(self):
+        """__str__ returns the configured site name."""
+        self.config.site_name = 'My Deck'
+        self.assertEqual(str(self.config), 'My Deck')
+
+    def test_get_site_logo_url__returns_uploaded_logo(self):
+        """When a site logo is uploaded, its url is returned instead of the default."""
+        self.config.site_logo = 'logos/mylogo.png'
+        self.assertEqual(self.config.get_site_logo_url(), self.config.site_logo.url)
+
+    def test_get_default_icon_url__returns_uploaded_icon(self):
+        """When a default icon is uploaded, its url is returned instead of the site logo."""
+        self.config.default_icon = 'icons/myicon.png'
+        self.assertEqual(self.config.get_default_icon_url(), self.config.default_icon.url)
+
+    def test_get_favicon_url__returns_uploaded_favicon(self):
+        """When a favicon is uploaded, its url is returned."""
+        self.config.favicon = 'icons/myfav.ico'
+        self.assertEqual(self.config.get_favicon_url(), self.config.favicon.url)
+
+    def test_get_favicon_url__falls_back_to_site_logo(self):
+        """With no favicon but a site logo set, the favicon url falls back to the site logo."""
+        self.config.favicon = ''
+        self.config.site_logo = 'logos/mylogo.png'
+        self.assertEqual(self.config.get_favicon_url(), self.config.site_logo.url)
+
+    def test_get_banner_image_url__returns_uploaded_banner(self):
+        """When a banner image is uploaded, its url is returned instead of the default."""
+        self.config.banner_image = 'banners/mybanner.png'
+        self.assertEqual(self.config.get_banner_image_url(), self.config.banner_image.url)
+
+    def test_get_banner_image_dark_url__returns_uploaded_dark_banner(self):
+        """When a dark banner is uploaded, its url is returned."""
+        self.config.banner_image_dark = 'banners/mydark.png'
+        self.assertEqual(self.config.get_banner_image_dark_url(), self.config.banner_image_dark.url)
+
+    def test_get_banner_image_dark_url__falls_back_to_light_banner(self):
+        """With no dark banner but a light banner set, the dark url falls back to the light banner."""
+        self.config.banner_image_dark = ''
+        self.config.banner_image = 'banners/mybanner.png'
+        self.assertEqual(self.config.get_banner_image_dark_url(), self.config.banner_image.url)
+
+    def test_get_default_quest_prerequisite__returns_the_badge_or_none(self):
+        """The deck's default quest prerequisite is the badge set for it, and None when none is set (#276)."""
+        badge = baker.make('badges.Badge')
+        self.config.default_quest_prerequisite = badge
+        self.assertEqual(self.config.get_default_quest_prerequisite(), badge)
+
+        self.config.default_quest_prerequisite = None
+        self.assertIsNone(self.config.get_default_quest_prerequisite())
+
+    def test_get_default_quest_prerequisite__badge_deleted_since_the_config_was_cached(self):
+        """Deleting the badge clears the setting in the database but not in a copy of the config read
+        before, as the cached one is: that copy gives None rather than failing to find the badge (#276)."""
+        badge = baker.make('badges.Badge')
+        badge_id = badge.id  # delete() clears the instance's id
+        self.config.default_quest_prerequisite = badge
+        self.config.save()
+        cached_config = SiteConfig.get()
+
+        badge.delete()
+
+        self.assertEqual(cached_config.default_quest_prerequisite_id, badge_id)
+        self.assertIsNone(cached_config.get_default_quest_prerequisite())
+        # while the database row lets go of the badge
+        self.config.refresh_from_db()
+        self.assertIsNone(self.config.default_quest_prerequisite)
+
+    @patch('siteconfig.models.cache.get', side_effect=redis_exceptions.ConnectionError)
+    def test_invalidate_cache_signal__swallows_redis_connection_error(self, mock_cache_get):
+        """If redis is unavailable when the cache-invalidation signal fires (e.g. redis down during
+        initdb), it treats the cache as empty and returns instead of raising."""
+        # Call the receiver directly to isolate the redis-down path from other save() side effects.
+        invalidate_siteconfig_cache_signal(sender=SiteConfig, instance=self.config)
+        mock_cache_get.assert_called_once()
+
+    def test_set_active_semester__updates_active_semester(self):
+        """set_active_semester() switches the config's active semester to the given one."""
         # make sure default active semester is created first
         default_active_sem = self.config.active_semester
         new_semester = baker.make('courses.Semester')
@@ -101,15 +185,88 @@ class SiteConfigModelTest(TenantTestCase):
         # make sure it is now the active semester
         self.assertEqual(self.config.active_semester.id, new_semester.id)
 
-    def test_SiteConfig_get_caches(self):
-        """ SiteConfig should be in cache """
+    def test_set_active_semester__opens_the_semester(self):
+        """The semester being made active is opened, so students can join a course in it."""
+        new_semester = baker.make('courses.Semester', status=Semester.Status.UPCOMING)
+
+        self.config.set_active_semester(new_semester)
+
+        new_semester.refresh_from_db()
+        self.assertTrue(new_semester.is_open)
+        self.assertFalse(self.config.has_no_open_semester())
+
+    def test_set_active_semester__leaves_the_other_open_semester_running(self):
+        """Starting a semester opens it alongside the ones already open (issue #1781): a deck
+        can run two course groups on different calendars, and starting the second cohort's
+        term must not stop the first cohort's."""
+        already_open = self.config.active_semester
+        self.assertTrue(already_open.is_open)
+
+        self.config.set_active_semester(baker.make('courses.Semester'))
+
+        already_open.refresh_from_db()
+        self.assertTrue(already_open.is_open)
+        self.assertEqual(Semester.objects.open().count(), 2)
+
+    def test_set_active_semester__points_at_the_semester_just_started(self):
+        """The pointer follows the most recently started semester, which is the default a
+        student is offered first when several are open."""
+        newly_started = baker.make('courses.Semester')
+
+        self.config.set_active_semester(newly_started)
+
+        self.assertEqual(SiteConfig.get().active_semester, newly_started)
+        self.assertEqual(SiteConfig.get().open_semester, newly_started)
+
+    def test_set_active_semester__accepts_a_semester_id(self):
+        """A semester id can be passed instead of the object (what the semester views hold)."""
+        new_semester = baker.make('courses.Semester')
+
+        self.config.set_active_semester(new_semester.id)
+
+        self.assertEqual(self.config.active_semester, new_semester)
+
+    def test_has_no_open_semester__true_when_no_semester_is_open_at_all(self):
+        """No open semester anywhere is the between-semesters state (issue #1177), not an error."""
+        Semester.objects.all().update(status=Semester.Status.ARCHIVED)
+        self.config.active_semester = None
+        self.config.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__false_while_any_semester_is_open(self):
+        """It asks about the deck, not the pointer: a semester the pointer doesn't name is
+        still one students can join, so the deck isn't between semesters (issue #2157 Phase 3)."""
+        baker.make('courses.Semester', status=Semester.Status.OPEN)
+        self.config.active_semester = None
+        self.config.save()
+
+        self.assertFalse(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__true_when_the_active_semester_is_archived(self):
+        """A config left pointing at an archived semester counts as having none open, so a deck
+        can't get stuck with students unable to join."""
+        semester = self.config.active_semester
+        semester.status = Semester.Status.ARCHIVED
+        semester.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__false_while_a_semester_is_open(self):
+        """With an open semester, students can join a course."""
+        self.assertTrue(self.config.active_semester.is_open)
+
+        self.assertFalse(self.config.has_no_open_semester())
+
+    def test_get__caches_config(self):
+        """SiteConfig should be in cache after get()."""
         cached_config = cache.get(SiteConfig.cache_key())
 
         self.assertIsNotNone(cached_config)
         self.assertEqual(self.config, cached_config)
 
-    def test_SiteConfig_save_sets_new_cache_properly(self):
-        """ SiteConfig.save should invalidate previous cache and set newer cache """
+    def test_save__resets_cache(self):
+        """SiteConfig.save should invalidate previous cache and set newer cache."""
         old_config_cache = cache.get(SiteConfig.cache_key())
 
         new_site_name = 'My New Site Name'
@@ -123,8 +280,8 @@ class SiteConfigModelTest(TenantTestCase):
         # Cache should be set after calling SiteConfig.get()
         self.assertEqual(cache.get(SiteConfig.cache_key()).site_name, new_config_cache.site_name)
 
-    def test_SiteConfig_cache_expires(self):
-        """ SiteConfig cache should expire after a certain period """
+    def test_get__cache_expires(self):
+        """SiteConfig cache should expire after a certain period."""
 
         # Cache should not be empty as of this moment
         self.assertIsNotNone(cache.get(SiteConfig.cache_key()))
@@ -163,11 +320,16 @@ class SiteConfigModelTest(TenantTestCase):
         self.assertNotEqual(get_default_deck_owner(), old_owner_pk)
         self.assertEqual(get_default_deck_owner(), User.objects.last().pk)  # since it gets created it should be at the back. Assume sorted by pk
 
-    def test_can_user_export_to_library(self):
+    def test_can_user_export_to_library__respects_permissions(self):
         """Verify can_user_export_to_library respects deck owner, staff settings, and schema."""
 
         current_schema = "test"
         library_schema = get_library_schema_name()
+
+        # Exporting is part of the Shared Library feature, so the deck has to have it on
+        self.config.enable_shared_library = True
+        self.config.full_clean()
+        self.config.save()
 
         # Owner should always be able to export
         owner = self.config.deck_owner
@@ -202,3 +364,18 @@ class SiteConfigModelTest(TenantTestCase):
         # Anonymous users cannot export
         self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), current_schema))
         self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), library_schema))
+
+    def test_can_user_export_to_library__false_when_shared_library_disabled(self):
+        """Nobody can export from a deck that has the Shared Library turned off.
+
+        The views 404 in that case, so the buttons this method controls must not render.
+        """
+        self.config.enable_shared_library = False
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        staff_user = baker.make('auth.User', is_staff=True)
+
+        self.assertFalse(self.config.can_user_export_to_library(self.config.deck_owner, "test"))
+        self.assertFalse(self.config.can_user_export_to_library(staff_user, "test"))

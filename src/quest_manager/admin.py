@@ -99,8 +99,6 @@ class QuestResource(resources.ModelResource):
     Related behavior like prerequisites and tags are handled by associated mixins
     on the Quest model, not directly by this class.
     """
-    local_visibility_map = {}
-
     prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
@@ -111,6 +109,21 @@ class QuestResource(resources.ModelResource):
         model = Quest
         import_id_fields = ('import_id',)
         exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_data')
+
+    def __init__(self, *args, **kwargs):
+        """Build the resource with its own empty visibility map.
+
+        `local_visibility_map` (a `{import_id: published}` mapping that keeps a deck's
+        own show/hide choice when re-importing a quest it already has) is filled in per
+        import by `after_import`, from `import_data(local_visibility_map=...)`. It is set
+        here, per instance, so one import can never be read as another's default.
+
+        Args:
+            *args: positional arguments passed through to `ModelResource`.
+            **kwargs: keyword arguments passed through to `ModelResource`.
+        """
+        super().__init__(*args, **kwargs)
+        self.local_visibility_map = {}
 
     def dehydrate_prereq_import_ids(self, quest):
         """
@@ -298,8 +311,10 @@ class QuestResource(resources.ModelResource):
         quest.full_clean()
         quest.save()
 
-    def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        if not dry_run:
+    def after_import(self, dataset, result, **kwargs):
+        # django-import-export 4.x passes using_transactions/dry_run via kwargs
+        # https://django-import-export.readthedocs.io/en/latest/release_notes.html#version-4-0
+        if not kwargs.get("dry_run", False):
             # Store local visibility info to preserve quest visibility during import
             local_visibility_map = kwargs.get('local_visibility_map', {})
             self.local_visibility_map = local_visibility_map
@@ -317,8 +332,43 @@ class QuestResource(resources.ModelResource):
                     self.generate_campaign(parent_quest, data_dict)
 
 
+# Fields holding large summernote/WYSIWYG HTML. Exporting them for every quest builds
+# the whole set of rendered HTML into an in-memory tablib Dataset, then a second full
+# copy as the CSV string -- a primary cause of the per-request memory blowups tracked in
+# #2081 (a single admin Export could grow a web worker to ~1.6 GiB and OOM the host).
+QUEST_EXPORT_EXCLUDED_HTML_FIELDS = ('instructions', 'submission_details', 'instructor_notes')
+
+
+class QuestAdminExportResource(QuestResource):
+    """Export-only ``QuestResource`` for the admin that drops the bulky HTML fields.
+
+    The admin "Export" button is a table dump, so the large summernote HTML columns are
+    of little use there and are the main memory cost. This slim resource is wired in via
+    ``QuestAdmin.get_export_resource_classes`` only; import and the Shared Library
+    importer/exporter keep using the full ``QuestResource``, so cross-deck sharing (which
+    needs the full quest content) is unaffected.
+
+    ``Meta.exclude`` can't drop these here -- they are already declared fields inherited
+    from ``QuestResource`` -- so the bulky columns are filtered out at export time instead.
+    """
+
+    def get_export_fields(self, selected_fields=None):
+        """Return the parent export fields minus the bulky summernote HTML columns.
+
+        Args:
+            selected_fields: Optional subset of fields to export (passed through to the
+                parent resource); ``None`` means export all of the resource's fields.
+
+        Returns:
+            list[Field]: The parent's export fields with any field whose ``column_name``
+            is in ``QUEST_EXPORT_EXCLUDED_HTML_FIELDS`` removed.
+        """
+        fields = super().get_export_fields(selected_fields)
+        return [f for f in fields if f.column_name not in QUEST_EXPORT_EXCLUDED_HTML_FIELDS]
+
+
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvancedModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
-    resource_class = QuestResource
+    resource_classes = [QuestResource]  # replaces resource_class, removed in django-import-export 4.0
     list_display = ('id', 'name', 'xp', 'archived', 'published', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
     list_filter = ['archived', 'published', 'max_repeats', 'verification_required', 'editor',
@@ -349,6 +399,20 @@ class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvanced
     def get_export_formats(self):
         """ file formats for exporting """
         return [CSV]
+
+    def get_export_resource_classes(self, request):
+        """Export uses the slim, HTML-free resource to bound per-request memory (#2081).
+
+        Import is left on the full ``QuestResource`` (via ``resource_classes``).
+
+        Args:
+            request: The current admin request (unused; part of the django-import-export
+                ``ExportMixin`` hook signature).
+
+        Returns:
+            list[type[Resource]]: ``[QuestAdminExportResource]`` -- the export-only resource.
+        """
+        return [QuestAdminExportResource]
 
 
 class CategoryAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):

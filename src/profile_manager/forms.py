@@ -1,3 +1,4 @@
+import dns.exception
 import dns.resolver
 
 from django import forms
@@ -5,8 +6,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from allauth.utils import email_address_exists
-
+from .allauth_compat import email_address_exists, send_email_confirmation
 from .models import Profile
 from siteconfig.models import SiteConfig
 
@@ -68,17 +68,31 @@ class ProfileForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data['email']
 
+        # The deck owner must always keep an email on file so ByteDeck can contact them: they may
+        # change it (once verified) but may not remove it entirely (#1502). Compare by id so this
+        # holds even when the deck owner is the one editing their own profile.
+        if not email and self.instance.user_id == SiteConfig.get().deck_owner_id:
+            raise forms.ValidationError(
+                "As the deck owner, you can't remove your email address — ByteDeck needs a way to "
+                "contact you. You can change it, but it can't be left blank."
+            )
+
         # Verify the domain is real
         if '@' in email:
             domain = email.split('@')[1]  # ["myemail", "gmail.com"]
             try:
                 dns.resolver.resolve(domain, 'MX')
                 # If it doesn't throw an exception, the domain has MX records
-            except dns.resolver.NoAnswer:
-                # Some domains don't answer, such as sd72.bc.ca!
-                pass
             except dns.resolver.NXDOMAIN:
                 raise forms.ValidationError(f"{domain} doesn't appear to exist. Enter a valid email address or leave it blank.")
+            except dns.exception.DNSException:
+                # Any other DNS failure — NoAnswer (some domains don't answer, such as sd72.bc.ca!),
+                # NoNameservers, timeouts, resolver misconfiguration, etc. — means we couldn't verify
+                # the domain, not that it's invalid. This is best-effort validation, and the real gate
+                # is the verification email sent afterward, so fail open rather than blocking (or 500ing)
+                # the email change. Previously only NoAnswer/NXDOMAIN were caught, so a resolver error on
+                # a server with restricted/slow outbound DNS crashed the profile form with a 500 (issue #1976).
+                pass
 
         if email and email_address_exists(email, exclude_user=self.instance.user):
             raise forms.ValidationError("A user is already registered with this email address.")
@@ -95,7 +109,6 @@ class ProfileForm(forms.ModelForm):
             user.email = self.cleaned_data['email']
             user.save()
 
-        from allauth.account.utils import send_email_confirmation
         if self.request and modified_email:
             send_email_confirmation(
                 request=self.request,

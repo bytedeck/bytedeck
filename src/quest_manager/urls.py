@@ -1,7 +1,7 @@
 """quest_manager URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
+    https://docs.djangoproject.com/en/5.2/topics/http/urls/
 Examples:
 Function views
     1. Add an import:  from my_app import views
@@ -33,7 +33,6 @@ urlpatterns = [
     re_path(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
     re_path(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
     re_path(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
-    re_path(r'^ajax_submission_approve/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='ajax_approve'),
     re_path(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     re_path(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
 
@@ -54,6 +53,7 @@ urlpatterns = [
     re_path(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
     re_path(r'^approvals/in-progress/$', views.approvals, name='in_progress'),
     re_path(r'^approvals/approved/$', views.approvals, name='approved'),
+    re_path(r'^approvals/approved/all/$', views.approvals, name='approved_all'),
     re_path(r'^approvals/flagged/$', views.approvals, name='flagged'),
     re_path(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
     re_path(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
@@ -84,6 +84,8 @@ urlpatterns = [
     re_path(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
     re_path(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
     re_path(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
+    re_path(r'^submission/attachment/(?P<document_id>\d+)/delete/$',
+            views.ajax_delete_draft_attachment, name='ajax_delete_draft_attachment'),
     re_path(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='approve'),
     re_path(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 

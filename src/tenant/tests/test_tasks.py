@@ -1,14 +1,14 @@
 from django.core import mail
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from tenant import tasks
 
 
-class TenantTasksTests(TenantTestCase):
+class TenantTasksTests(ByteDeckTenantTestCase):
     """ Run tasks (from tenant module) asyncronously with apply() """
 
-    def test_send_email_message(self):
+    def test_send_email_message__delivers_to_recipients(self):
         """Async. task "send_email_message" sends email messages as expected."""
         # outbox is empty before executing the task
         self.assertEqual(len(mail.outbox), 0)
@@ -29,3 +29,223 @@ class TenantTasksTests(TenantTestCase):
         self.assertEqual(mail.outbox[0].subject, "O hi, World!")
         # john doe was first in a list of recipients (BCC)
         self.assertIn("john@doe.com", mail.outbox[0].bcc)
+
+
+class ClearExpiredSessionsTaskTest(ByteDeckTenantTestCase):
+    """clear_expired_sessions_in_all_schemas purges expired django_session rows
+    in every schema. Sessions are db-backed with an 8-week cookie age and
+    nothing else runs clearsessions, so without this task the per-schema
+    session tables grow forever."""
+
+    def _make_session(self, key, expired):
+        """Create a session row in the current schema, expired or not.
+
+        Args:
+            key (str): session_key for the new row (must be unique per schema).
+            expired (bool): True dates the session one day in the past
+                (eligible for clearsessions), False one day in the future.
+
+        Returns:
+            Session: the created django.contrib.sessions row.
+        """
+        from datetime import timedelta
+
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+
+        delta = timedelta(days=-1) if expired else timedelta(days=1)
+        return Session.objects.create(
+            session_key=key, session_data="x", expire_date=timezone.now() + delta
+        )
+
+    def test_clear_expired_sessions_in_all_schemas__purges_only_expired(self):
+        """Expired sessions are deleted in both the tenant and public schemas;
+        unexpired sessions survive."""
+        from django.contrib.sessions.models import Session
+
+        from django_tenants.utils import schema_context
+
+        self._make_session("tenant-expired", expired=True)
+        self._make_session("tenant-valid", expired=False)
+        with schema_context("public"):
+            self._make_session("public-expired", expired=True)
+            self._make_session("public-valid", expired=False)
+
+        task_result = tasks.clear_expired_sessions_in_all_schemas.apply()
+        self.assertTrue(task_result.successful())
+
+        self.assertFalse(Session.objects.filter(session_key="tenant-expired").exists())
+        self.assertTrue(Session.objects.filter(session_key="tenant-valid").exists())
+        with schema_context("public"):
+            self.assertFalse(Session.objects.filter(session_key="public-expired").exists())
+            self.assertTrue(Session.objects.filter(session_key="public-valid").exists())
+
+
+class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
+    """The nightly deck-status fan-out is the canonical refresher for the Tenant
+    cached fields now that the admin changelist no longer refreshes them on page
+    load (the old N+1). Dispatcher excludes the public and shared-library schemas."""
+
+    def test_deck_status_check__refreshes_cached_fields(self):
+        """Running the per-schema task updates the deck's stale cached counts."""
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from siteconfig.models import SiteConfig
+        from tenant.models import Tenant
+
+        User = get_user_model()
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(active_user_count=0)
+
+        task_result = tasks.deck_status_check.apply()
+        self.assertTrue(task_result.successful())
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.active_user_count, self.tenant.get_active_user_count())
+        self.assertGreater(self.tenant.active_user_count, 0)
+
+    def test_deck_status_check__skips_non_deck_schemas_instead_of_crashing(self):
+        """Invoked on the public or shared-library schema -- an ad-hoc shell loop
+        over Tenant.objects.all() (which includes the public tenant), or a
+        mis-routed message -- the task reports and bails instead of crashing:
+        SiteConfig.get() returns None on the public schema, so the refresh blew
+        up with an AttributeError (staging ops find, 2026-07-25). The beat
+        dispatcher already excludes these schemas; this mirrors that rule at the
+        worker."""
+        from django_tenants.utils import get_public_schema_name, schema_context
+
+        from library.utils import get_library_schema_name
+
+        for schema_name in (get_public_schema_name(), get_library_schema_name()):
+            with schema_context(schema_name):
+                result = tasks.deck_status_check.apply()
+            self.assertTrue(result.successful())
+            self.assertIn('skipped', result.result)
+
+    def test_deck_status_check__never_touches_the_admin_cap(self):
+        """The nightly task leaves ``max_active_users`` alone even for a freshly
+        suspended deck: suspension means owner-only sign-in (the middleware), not
+        a cap change, so an admin-set cap survives every run (#1734 redesign
+        replacing the #2178 cap reset)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from tenant.models import GRACE_PERIOD_DAYS, Tenant
+
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            trial_end_date=localdate() - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None, max_active_users=80,
+        )
+
+        self.assertTrue(tasks.deck_status_check.apply().successful())
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 80)
+
+    def test_deck_status_check__closes_semester_on_fresh_suspension(self):
+        """The nightly task closes a freshly suspended deck's open semester
+        (enforcement: runs even with notices report-only) and refreshes the
+        cached counts afterwards, so the deck comes out of the run with its
+        post-suspension state: semester closed, zero current students."""
+        from datetime import timedelta
+
+        from django.contrib.auth import get_user_model
+        from django.utils.timezone import localdate
+        from model_bakery import baker
+        from siteconfig.models import SiteConfig
+        from tenant.models import GRACE_PERIOD_DAYS, Tenant
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            trial_end_date=localdate() - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None,
+        )
+
+        result = tasks.deck_status_check.apply()
+        self.assertTrue(result.successful())
+        self.assertIn('closed semester', result.result)
+
+        # the close archives the semester and leaves the deck with no open one
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.active_user_count, 0)  # refreshed AFTER the close
+
+    def test_daily_deck_status_check_for_all_tenants__dispatches_only_billable_decks(self):
+        """The dispatcher schedules one per-schema check per deck, skipping the
+        public schema and the shared-library tenant."""
+        from unittest.mock import patch
+
+        from django_tenants.utils import get_public_schema_name, schema_context
+        from library.utils import get_library_schema_name
+        from tenant.models import Tenant
+
+        billable_count = Tenant.objects.exclude(
+            schema_name__in=[get_public_schema_name(), get_library_schema_name()]
+        ).count()
+
+        # a library tenant row (schema-less: fast, and the dispatcher must skip
+        # it before ever entering its context) must not add a dispatch
+        if not Tenant.objects.filter(schema_name=get_library_schema_name()).exists():
+            with schema_context(get_public_schema_name()):
+                library_tenant = Tenant(name=get_library_schema_name(), schema_name=get_library_schema_name())
+                library_tenant.auto_create_schema = False
+                library_tenant.full_clean()
+                library_tenant.save()
+
+        with patch.object(tasks.deck_status_check, 'apply_async') as mock_apply_async:
+            task_result = tasks.daily_deck_status_check_for_all_tenants.apply()
+
+        self.assertTrue(task_result.successful())
+        self.assertEqual(mock_apply_async.call_count, billable_count)
+        self.assertIn(f"for {billable_count} deck(s)", task_result.result)
+
+
+class DeckStatusCheckStripeReconcileTests(ByteDeckTenantTestCase):
+    """Tests for the nightly Stripe reconcile inside deck_status_check
+    (epic #1729 PR 7, plan §5.3: webhooks are an optimization, not truth)."""
+
+    def test_deck_status_check__reconciles_linked_deck(self):
+        """A Stripe-linked deck re-syncs from a fresh subscription retrieval."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from unittest.mock import patch
+
+        from django.test import override_settings
+        from django.utils.timezone import localdate
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_task', paid_until=None)
+        period_end = int((datetime.now(tz=dt_timezone.utc) + timedelta(days=90)).timestamp())
+        subscription = {'id': 'sub_task', 'status': 'active',
+                        'items': {'data': [{'current_period_end': period_end, 'price': {'id': 'p', 'metadata': {}}}]}}
+
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('tenant.billing.stripe.Subscription.retrieve', return_value=subscription):
+                result = tasks.deck_status_check.apply()
+        self.assertIn('paid_until', result.result)
+        self.assertGreater(Tenant.objects.get(pk=self.tenant.pk).paid_until, localdate() + timedelta(days=60))
+
+    def test_deck_status_check__stripe_error_does_not_break_notices(self):
+        """A Stripe outage during reconcile is reported in the summary while the
+        cached-field refresh and the notices engine still run."""
+        from unittest.mock import patch
+
+        import stripe as stripe_lib
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_task')
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('down')):
+                result = tasks.deck_status_check.apply()
+        self.assertIn('stripe error', result.result)
+        self.assertIn('notices:', result.result)
+
+    def test_deck_status_check__skips_unlinked_or_unconfigured(self):
+        """Decks with no subscription id (or servers without Stripe) skip the reconcile."""
+        result = tasks.deck_status_check.apply()
+        self.assertIn('stripe: not linked', result.result)

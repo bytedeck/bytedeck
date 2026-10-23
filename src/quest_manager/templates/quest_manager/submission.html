@@ -1,9 +1,13 @@
 {% extends "quest_manager/base.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
+{% load question_tags %}
+{% load comment_tags %}
 
 {% block head %}
-    {{ submission_form.media }}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
+    {# the comment form's assets combined with the answer editors', de-duplicated in the view #}
+    {{ form_media }}
+    <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
 {% block head_css %}
@@ -41,6 +45,23 @@
   {% endwith %}
   {% endif %}
 
+  {% comment %} A quest can be unpublished (drafted) or archived after a student has already
+     submitted it. The student keeps access to review their past work, but the submission form
+     below is useless and confusing (a form with no submit button), so hide it and explain why
+     with a notice, matching the red "Quest Preview" panel shown for not-yet-available quests
+     (issue #798). Staff still see the form so they can manage the submission. {% endcomment %}
+  {% if quest_no_longer_available and not request.user.is_staff %}
+    <div id="quest-unavailable-{{ submission.quest.id }}" class="panel panel-danger panel-top">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-warning"></i> Quest No Longer Available</h3>
+      </div>
+      <div class="panel-body">
+        <p>This quest is no longer available, so it can't be submitted or commented on.
+           You can still view your past work below.</p>
+      </div>
+    </div>
+  {% endif %}
+
   {% with submission.quest as quest %}
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
@@ -66,19 +87,103 @@
     </ul>
   </div>
 
+  {% comment %} Hide the whole submission form from students when the quest is no longer available
+     (see the notice above, issue #798); staff keep it to manage the submission. {% endcomment %}
+  {% if not quest_no_longer_available or request.user.is_staff %}
   <div id='submission-form-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
       <h3 class="panel-title">Quest Submission Form</h3>
     </div>
     <div class="panel-body panel-summernote">
+      {% comment %} data-warn-unsaved opts both forms into warn-unsaved-changes.js, so leaving the
+         page with answer, comment or marking text that has not reached the server draws the
+         browser's "Leave site?" prompt (#2572). The comment box is a div, not a nested form, so
+         the attribute here covers it and every answer editor. {% endcomment %}
       {% if request.user.is_staff %}
-        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}">
+        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
+        {% if next %}
+          {% comment %}
+          Set when this page is reached by correcting a form that did not validate, so the
+          corrected submission still returns to the approvals tab the first attempt came from
+          (#2689). ApproveView has already checked it stays on this host.
+          {% endcomment %}
+          <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
       {% else %}
-        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}">
+        <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}" data-warn-unsaved>
       {% endif %}
 
         {% csrf_token %}
-        {{ submission_form | crispy }}
+        {% if question_formset %}
+          {{ question_formset.management_form }}
+          {% if question_formset.non_form_errors %}
+            <div class="alert alert-danger">{{ question_formset.non_form_errors }}</div>
+          {% endif %}
+          {% comment %} Each question is a list-group item, so the questions read as one connected
+             list (single hairline borders between them, no inter-item gaps) rather than a stack of
+             separate padded cards. {% endcomment %}
+          <div class="list-group question-submission-list">
+          {# the loop variable must be named `form`: the crispy HTML() layout objects inside #}
+          {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
+          {% for form in question_formset %}
+            <div class="list-group-item question-submission-form">
+              {# question number and the teacher's instructions on one line to save space; unwrap_p strips #}
+              {# summernote's wrapping <p> so a one-line prompt flows right after the "Question N:" label. #}
+              {# A <div> (not <p>) wraps it because multi-paragraph instructions keep their <p> tags, which #}
+              {# would be invalid nested inside a <p> (the browser auto-closes the outer <p> early). #}
+              <div>
+                <strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
+                {{ form.question.instructions|unwrap_p }}
+              </div>
+              {% crispy form %}
+              {% comment %} A file kept from an earlier submit that failed validation: the file input
+                 above always renders empty (browsers never repopulate it), so without this the
+                 student has no way to tell their upload survived, and would re-attach it (#2165). {% endcomment %}
+              {% if form.instance.response_file %}
+                <p class="help-block">
+                  <i class="fa fa-paperclip fa-fw"></i> Attached:
+                  {% if form.instance.response_file_is_script_capable %}
+                    {% comment %} An SVG or HTML file is never linked at its storage URL, here either:
+                       navigating to one runs whatever script it carries in the session of whoever
+                       follows the link, and the student following it is signed in (#2559). The
+                       download view responds with Content-Disposition: attachment instead. {% endcomment %}
+                    <a href="{% url 'questions:answer_file_download' form.instance.id %}">
+                      <i class="fa fa-fw fa-download"></i>{{ form.instance.response_file|filename }}</a>
+                  {% else %}
+                    <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
+                  {% endif %}
+                  <small>(already saved: only choose a file above if you want to replace it)</small>
+                </p>
+              {% endif %}
+            </div>
+          {% endfor %}
+          </div>
+          <hr>
+        {% endif %}
+        {% if question_formset %}
+          {# with per-question answer fields above, the general comment box needs its own heading #}
+          {# so students know it's for anything beyond their answers #}
+          <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
+        {% endif %}
+        <div id="main-comment-form">
+          {{ submission_form.non_field_errors }}
+          {% comment %} Field by field, because the attachments field is drawn as one control
+             holding both the files already saved with the draft and the button that adds more
+             (#2749). Everything else is the ordinary crispy rendering. Staff post this form to
+             the approve view and have no attachments field on it, so the branch below is the
+             student's own draft either way. {% endcomment %}
+          {% for field in submission_form %}
+            {% if field.is_hidden %}
+              {{ field }}
+            {% elif field.name == 'attachments' %}
+              {% with submission.draft_comment.document_set.all as draft_documents %}
+                {% include "quest_manager/snippets/attachments_field.html" %}
+              {% endwith %}
+            {% else %}
+              {{ field|as_crispy_field }}
+            {% endif %}
+          {% endfor %}
+        </div>
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
           {% with submission as s %}
@@ -89,29 +194,51 @@
           {% endwith %}
         {% else %}
           {% if submission.quest.published %}
-            <a id='save-draft-btn' class='btn btn-default'>
+            <a id='save-draft-btn' class='btn btn-default'
+               title="Your draft autosaves about every minute, but you can force a save now with this button. Chosen files are saved with it too.">
               <span id="draft-text">Save Draft</span>
               <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
               <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
             </a>
+            {# Shown when a draft save fails, and cleared by the next one that works. The autosave #}
+            {# keeps trying, so this says so rather than interrupting the student every minute. #}
+            <span id="draft-error" class="text-danger" style="display:none" role="status">
+              <i class="fa fa-exclamation-triangle fa-fw"></i> Draft not saved. It will try again shortly.
+            </span>
             {% if submission.is_approved %}
               <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
             {% else %}
-              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval' />
-              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
+              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval'
+                     title="The quest will move to your &quot;Completed&quot; tab and your teacher will be notified (unless the quest is automatically approved)." />
+              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button"
+                 title="Remove this quest from your &quot;In Progress&quot; tab, delete any saved draft, and it will re-appear in your Available quests tab.">Drop Quest</a>
             {% endif %}
+            {# Shown while a submit waits for a file the draft save is still uploading, so the #}
+            {# press visibly did something before the page moves on (#2834) #}
+            <span id="submit-waiting" class="text-muted" role="status" hidden>
+              <i class="fa fa-spinner fa-spin fa-fw"></i> Waiting for your file to finish uploading...
+            </span>
+          {% endif %}
+          {% comment %} TAs can copy the quest from the full submission view too, not just the
+             In Progress/Completed tab preview (#141). Shown regardless of the quest's published
+             state so a TA can always template off a quest they've started. {% endcomment %}
+          {% if request.user.profile.is_TA %}
+            <a title="Copy Quest, available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
+               class="btn btn-default" role="button" href="{% url 'quests:quest_copy' submission.quest.id %}">
+              <i class="fa fa-fw fa-copy"></i> Copy Quest
+            </a>
           {% endif %}
         {% endif %}
         </div>
       </form>
     </div>
   </div>
+  {% endif %}{# submission form hidden when quest no longer available (#798) #}
 
 {% endblock %}
 {% block js %}
     <script>
         $(document).ready(function() {
-            $('[data-toggle="tooltip"]').tooltip();
 
 
             {% if anchor %}
@@ -121,32 +248,178 @@
                 }, 1000);
             {% endif %}
 
-            // Copied from quest_approvals.html
-            $('[id^=btn_quick_text]').on('click', function () {
-                var msg = '<p>{{ quick_reply_text }}<br></p>';
-                var text_area = $('div.note-editable');
+            // The quick reply buttons: the site-wide one and the quest's own (#161). Each carries its
+            // text in data-quick-reply, already sanitized on the server, so it goes in as HTML and a
+            // link in it arrives as a link. Read with .attr(), since .data() would turn text like
+            // "true" or "12" into other types. An empty text (a quest without one, #2114) adds nothing.
+            $('[id^=btn_quick_text], [id^=btn_quest_quick_text]').on('click', function () {
+                var html = $(this).attr('data-quick-reply');
+                if (!html) return;
+                // newlines become <br> so multi-line text keeps its lines in the HTML editor
+                var msg = '<p>' + html.replace(/\r\n|\r|\n/g, '<br>') + '<br></p>';
+                // scoped to the main comment form: question answers add their own editors
+                var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)
                 else
                   text_area.append(msg);
             });
 
+            // Live character counter for the short answers (#2482). With JavaScript off the
+            // hint stays the server-rendered "Up to 200 characters."; here that sentence moves
+            // into a screen-reader-only span (a count re-announced on every keystroke is noise
+            // there) and a visible counter follows the student's typing, turning amber as the
+            // limit approaches. The input's maxlength does the actual enforcing either way.
+            $('.question-submission-form input[type=text][maxlength]').each(function () {
+                var input = $(this);
+                var max = parseInt(input.attr('maxlength'), 10);
+                var hint = $('#hint_' + this.id);  // crispy renders each field's help text with this id
+                if (!max || !hint.length) return;
+                hint.wrapInner('<span class="sr-only"></span>');
+                var counter = $('<span aria-hidden="true"></span>').appendTo(hint);
+                var update = function () {
+                    var used = input.val().length;
+                    counter.text(used + ' / ' + max + ' characters');
+                    counter.toggleClass('text-warning', (max - used) / max <= 0.1);
+                };
+                input.on('input', update);
+                update();
+            });
+
             // Save drafts via Ajax when button pressed
             $('#save-draft-btn').on('click', function(event){
                 event.preventDefault(); // prevent browser from reloading
-                console.log("Draft saved!")  // sanity check
-                save_draft();
+                save_draft(true);  // pressed, so a failure is worth interrupting for
             });
 
-            setInterval(save_draft, 60000); // autosave every 60 seconds
+            // Choosing a file saves the draft straight away rather than leaving it to the next
+            // autosave up to a minute later (#2749). Until the file is stored it is not in the
+            // attached-files list, so a student cannot see that it took, and cannot remove one
+            // they chose by mistake: the Delete button belongs to a stored file. A note under
+            // the input says the file is on its way, since a large one takes a while and the
+            // list cannot show it yet. A save is a save, so a failure interrupts: the student
+            // asked for this one by choosing the file.
+            $('#submission-main-form input[type="file"]').on('change', function() {
+                var files = chosen_files(this);
+                // Nothing chosen, or nothing to save it into: the picker can be opened and
+                // closed again, and a page without the Save Draft control has no draft save
+                // to make. Staff marking a student's submission are the usual case of the
+                // second, and the endpoint takes the submission's owner only: their files go
+                // up with the form they post instead.
+                if (!files.length || !$('#save-draft-btn').length) return;
+
+                var names = files.map(function(file) { return file.name; }).join(', ');
+                file_note_element($(this))
+                    .addClass('draft-file-note-pending')
+                    .html('<i class="fa fa-spinner fa-spin fa-fw"></i> Attaching ' +
+                          $('<i>').text(names).html() + '...');
+
+                // Whatever is in flight was sent before this file was chosen, so it is the
+                // save after it that carries the file: wait for the one in flight to land.
+                // Only for so long, since a save that never comes back would leave this
+                // asking forever; the autosave a minute later carries the file either way.
+                // Once the form is being submitted the file goes with that instead.
+                var waited = 0;
+                (function save_when_free() {
+                    if (submitting || save_draft(true)) return;
+                    waited += 500;
+                    if (waited <= 30000) window.setTimeout(save_when_free, 500);
+                })();
+            });
+
+            // A submit pressed while a draft save is still uploading files the student chose
+            // would send those files a second time, and wait on both uploads (#2834). So it
+            // waits for that save instead, saying so beside the button, and then goes ahead
+            // without them: the save has stored them and emptied their inputs. If the save
+            // fails, the files are still in their inputs and go with the submit as before. If
+            // the server refuses one, the submit stops there, so the reason under the input
+            // can be read. Caught before the page's other submit handlers (the capture phase,
+            // and stopped there), so the double-submission and unsaved-changes guards only
+            // ever see the submit that really goes. Browsers without requestSubmit(), which
+            // sends the form again as the same button, submit as they always have.
+            var mainForm = document.getElementById('submission-main-form');
+            if (mainForm && mainForm.requestSubmit && $('#save-draft-btn').length) {
+                mainForm.addEventListener('submit', function(event) {
+                    if (resuming) {
+                        resuming = false;
+                        submitting = true;
+                        return;
+                    }
+                    if (submitWaiting) {
+                        // already waiting: a second press changes nothing
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        return;
+                    }
+                    if (!uploading_chosen_files()) {
+                        submitting = true;
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    // Where listeners at the form run in the order they were added rather than
+                    // capture first, the double-submission guard has seen this one already.
+                    $(mainForm).data('submitted', false);
+                    var submitter = event.submitter || null;
+                    var refused = false;
+                    submitting = true;
+                    submitWaiting = true;
+                    $('#submit-waiting').prop('hidden', false);
+                    draftSave.done(function(json) {
+                        refused = !$.isEmptyObject((json && json.file_errors) || {});
+                    }).always(function() {
+                        submitWaiting = false;
+                        $('#submit-waiting').prop('hidden', true);
+                        if (refused) {
+                            submitting = false;
+                            return;
+                        }
+                        resuming = true;
+                        mainForm.requestSubmit(submitter);
+                    });
+                }, true);
+            }
+
+            // autosave every 60 seconds, unattended: a failure here reports itself in the
+            // page instead of in a modal the student did not ask for
+            setInterval(function() { save_draft(); }, 60000);
 
 
         });
 
-        function save_draft() {
-            $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
+        // The draft save on its way, and the files it is carrying by input name, from when it
+        // leaves until it lands: what a submit pressed meanwhile waits for (#2834).
+        var draftSave = null;
+        var draftSaveFiles = {};
+        // Set once the form is being submitted: from then on no draft save starts, since the
+        // submit is carrying the whole form, files included.
+        var submitting = false;
+        // Set while a submit waits for the draft save in flight to land.
+        var submitWaiting = false;
+        // Set for the one submit sent again once that wait is over, so it goes straight through.
+        var resuming = false;
+
+        function save_draft(pressed) {
+            if (submitting) return false;
+
+            // scoped to the main comment form: question answers add their own summernote editors
+            $summernoteEditor = $('#main-comment-form div.note-editable')
             draftComment = $summernoteEditor.html()
             xpRequested = $('#id_xp_requested').val()
+
+            // Collect draft answers to the quest's questions. Pairs each row's hidden id
+            // with its response text; chosen files ride along in the FormData below (#1459).
+            var answers = {};
+            $('.question-submission-form [name^="question_submissions-"]').each(function() {
+                var name = $(this).attr('name');
+                if (/-id$/.test(name)) {
+                    answers[name] = $(this).val();
+                } else if (/-response_text$/.test(name)) {
+                    // summernote keeps the textarea in sync as the student types, so its
+                    // value is current for long answers as well as short ones
+                    answers[name] = $(this).val();
+                }
+            });
 
             $draftSaveBtn = $('#save-draft-btn')
             old_text = $draftSaveBtn.html()
@@ -164,32 +437,265 @@
                 $draftText.hide(0) // no delay
                 $draftSpin.show()
 
-                $.ajax({
+                // The whole form goes as FormData so any files chosen on the page (comment
+                // attachments and file answers) are saved with the draft too (#1459). The
+                // named keys below are what the server reads; the rest (the formset's
+                // management form, row ids and files) come from the form itself.
+                var mainForm = document.getElementById('submission-main-form');
+                var formData = mainForm ? new FormData(mainForm) : new FormData();
+                // What each file input is sending, captured with the snapshot above. The
+                // response arrives later (a file answer may be 16 MiB, and the 60s autosave
+                // starts these uploads with no action from the student), and by then they may
+                // have chosen a different file in the same input. The response speaks about
+                // the file that went out, so it is only allowed to touch an input still
+                // holding it (#2563).
+                var sentFiles = chosen_files_by_input();
+                var sentEdits = edits_so_far();
+                formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
+                formData.set('comment', draftComment);
+                formData.set('submission_id', '{{ submission.id }}');
+                formData.set('xp_requested', xpRequested || '');
+                formData.set('answers', JSON.stringify(answers));
+
+                draftSaveFiles = sentFiles;
+                draftSave = $.ajax({
                     url : "{% url 'quests:ajax_save_draft' %}",
                     type : "POST", // http method
-                    data : {
-                      csrfmiddlewaretoken: "{{ csrf_token }}",
-                      comment: draftComment,
-                      submission_id: {{ submission.id }},
-                      xp_requested: xpRequested
-                    }, // data sent with the post request
+                    data : formData,
+                    processData : false, // hand jQuery the FormData as-is
+                    contentType : false, // let the browser set the multipart boundary
+                    // Report how much of the request has gone up, under the note of each file
+                    // it carries, so a student attaching a large file sees it moving (#784).
+                    xhr : function() {
+                        var xhr = $.ajaxSettings.xhr();
+                        if (xhr.upload) {
+                            xhr.upload.addEventListener('progress', function(event) {
+                                if (event.lengthComputable) show_upload_progress(sentFiles, event.loaded, event.total);
+                            });
+                        }
+                        return xhr;
+                    },
 
                     // handle a successful response
                     success : function(json) {
+                      $('#draft-error').hide();
+                      show_saved_files(json, sentFiles);
+                      mark_draft_saved(sentEdits);
                       hide_check_show_text();
                     },
 
                     // handle a non-successful response
                     error : function(xhr,errmsg,err) {
-                        $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
-                            " <a href='#' class='close'>&times;</a></div>"); // add the error to the dom
+                        // Put the button back first: save_draft() only runs while #draft-text is
+                        // visible, so restoring it is what lets the next autosave tick, or a
+                        // click, attempt the save again. #draft-error stays up alongside it
+                        // until a save succeeds, so the failure is visible meanwhile (#2561).
+                        $('#draft-spin').hide();
+                        $('#draft-check').hide();
+                        $('#draft-text').show();
+                        $('#draft-error').show();
+                        // Nothing was stored, so a note saying a file is on its way up is
+                        // claiming something that did not happen (#2749). Only the files this
+                        // request carried, though: an input holding something else was chosen
+                        // while this save was away, and that file is still on its way, since
+                        // the save waiting behind this one takes it.
+                        $('#submission-main-form input[type="file"]').each(function() {
+                            if (!same_files(chosen_files(this), sentFiles[this.name])) return;
+                            file_note_holder($(this)).find('.draft-file-note-pending').remove();
+                        });
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                        alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                        if (pressed && !submitWaiting) {
+                            // The student asked for this save, so tell them it did not happen.
+                            // A timer's failure is reported only in #draft-error: it retries by
+                            // itself, and a modal once a minute would interrupt a whole lesson.
+                            // Nor while a submit waits on it: that submit takes the files itself.
+                            alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                        }
                     }
                 });
+                draftSave.always(function() {
+                    draftSave = null;
+                    draftSaveFiles = {};
+                });
+                return true;
             }
 
+            // A save is already on its way: the button holds its spinner until that response
+            // lands, and this call has done nothing.
+            return false;
         }
+
+        function unsaved_guard() {
+            // The guard warn-unsaved-changes.js attaches to a form carrying data-warn-unsaved.
+            // Absent if that script has not run, which must leave saving working regardless.
+            var form = document.getElementById('submission-main-form');
+            return form && form.warnUnsaved;
+        }
+
+        function edits_so_far() {
+            // How many edits the guard has counted, read before a draft save leaves. Snapshotted
+            // for the same reason chosen_files_by_input() is: what comes back can only be said to
+            // have saved the edits that were there when it was sent.
+            var guard = unsaved_guard();
+            return guard ? guard.edits() : 0;
+        }
+
+        function mark_draft_saved(sentEdits) {
+            // The server has the draft as it stood at sentEdits, so stop warning about those
+            // edits. Anything typed while the request was in flight keeps the guard armed.
+            var guard = unsaved_guard();
+            if (guard) guard.saved(sentEdits);
+        }
+
+        function chosen_files(input) {
+            // The File objects an input currently holds. Identity is what is compared later,
+            // not the names: choosing a file always produces new File objects, so this notices
+            // a replacement even when the student picked another file of the same name. The
+            // comment's Attach files field takes several at once, so the whole list counts.
+            return Array.prototype.slice.call((input && input.files) || []);
+        }
+
+        function chosen_files_by_input() {
+            // Every file input on the form, keyed by name, ready to compare against later.
+            var chosen = {};
+            $('#submission-main-form input[type="file"]').each(function() {
+                chosen[this.name] = chosen_files(this);
+            });
+            return chosen;
+        }
+
+        function same_files(current, sent) {
+            // Whether an input still holds exactly what it sent. An untracked input (no
+            // snapshot) counts as changed, which is the safe answer: it means leave it alone.
+            if (!sent || current.length !== sent.length) return false;
+            return current.every(function(file, index) { return file === sent[index]; });
+        }
+
+        function uploading_chosen_files() {
+            // Whether the draft save on its way is carrying files still sitting in their
+            // inputs, which a submit sent now would upload a second time (#2834). A file
+            // chosen in place of one the save carries is not on its way, so it doesn't count.
+            if (!draftSave) return false;
+            var carrying = false;
+            $('#submission-main-form input[type="file"]').each(function() {
+                var chosen = chosen_files(this);
+                if (chosen.length && same_files(chosen, draftSaveFiles[this.name])) carrying = true;
+            });
+            return carrying;
+        }
+
+        function show_upload_progress(sentFiles, loaded, total) {
+            // The share of a draft save sent so far, shown as a bar and a percentage in the
+            // "Attaching" note of each input whose files went with it (#784). The share is of
+            // the whole request, which a file being attached is nearly all of. An input holding
+            // something else by now was chosen again while this save was away, so its note is
+            // about another file and is left alone.
+            var percent = Math.min(100, Math.round(loaded / total * 100));
+            $('#submission-main-form input[type="file"]').each(function() {
+                var chosen = chosen_files(this);
+                if (!chosen.length || !same_files(chosen, sentFiles[this.name])) return;
+                var note = file_note_holder($(this)).find('.draft-file-note-pending');
+                if (!note.length) return;
+                var bar = note.find('.draft-upload-progress');
+                if (!bar.length) {
+                    bar = $('<span class="progress draft-upload-progress">' +
+                            '<span class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></span>' +
+                            '</span>');
+                    note.append(' <span class="draft-upload-percent"></span>').append(bar);
+                }
+                bar.find('.progress-bar').css('width', percent + '%').attr('aria-valuenow', percent);
+                note.find('.draft-upload-percent').text(percent + '%');
+            });
+        }
+
+        function show_saved_files(json, sentFiles) {
+            // A saved file is stored with the draft, so its input is cleared: the file no
+            // longer needs re-choosing, and the next autosave must not upload it again. A
+            // note under the input says where it went. A rejected file is cleared too, with
+            // the validation error in its place, so the student re-chooses knowing why.
+            $.each(json.saved_answer_files || {}, function(field_name, file_name) {
+                file_note($('[name="' + field_name + '"]'),
+                    '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
+                    ' <small>(saved with your draft)</small>', sentFiles);
+            });
+            if (typeof json.draft_attachments_html === 'string') {
+                // The comment's attachments have a list of their own below the box, which the
+                // server re-renders to include the files just saved, each with the button that
+                // removes it. So this input only needs clearing: naming those files in a note
+                // here as well would say twice what the list already says.
+                file_note($('#submission-main-form input[name="attachments"]'), '', sentFiles);
+                $('#draft-attachments').html(json.draft_attachments_html);
+            }
+            $.each(json.file_errors || {}, function(field_name, error_text) {
+                file_note($('[name="' + field_name + '"]'),
+                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>', sentFiles);
+            });
+        }
+
+        function file_note_holder(input) {
+            // Where a file input's note belongs: inside the attachments control, under the
+            // button that chose the file, and for a question's file answer in its own form
+            // group. closest() takes the nearer of the two.
+            return input.closest('.bt-attachments-add, .form-group');
+        }
+
+        function file_note_element(input) {
+            // The note under a file input, made on first use. One place makes it, since both
+            // the note about a file on its way up and the note about where it ended up are
+            // written into the same paragraph.
+            var holder = file_note_holder(input);
+            var note = holder.find('.draft-file-note');
+            if (!note.length) {
+                note = $('<p class="help-block draft-file-note"></p>');
+                holder.append(note);
+            }
+            return note;
+        }
+
+        function file_note(input, html, sentFiles) {
+            if (!input.length) return;
+            // The response describes the file this input sent. If the input now holds a
+            // different choice, the student replaced it while the request was in flight:
+            // clearing it would throw that newer file away, and the note would name one they
+            // have moved on from (or blame it for the older file's error). Leave both alone;
+            // the next save reports the new file in the ordinary way (#2563).
+            if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
+            input.val('');
+            var note = file_note_holder(input).find('.draft-file-note');
+            if (!html) {
+                // Nothing left to say about this input: drop any note from an earlier save,
+                // rather than leaving a stale one (or an empty paragraph) under it.
+                note.remove();
+                return;
+            }
+            file_note_element(input).html(html).removeClass('draft-file-note-pending');
+        }
+
+        // Removing a file attached by mistake. Delegated from the page, because the list this
+        // button sits in is replaced wholesale every time the server re-renders it.
+        $(document).on('click', '.draft-attachment-delete', function() {
+            var $button = $(this);
+            // No confirmation: the file is one the student just attached to their own draft,
+            // and re-attaching it is a couple of clicks, so a dialog on every removal costs
+            // more than the mistake it guards against (#2749). The button's tooltip says the
+            // file is removed for good.
+            // Against a double click while the request is away: the second delete would 404,
+            // since the first one has already removed the file.
+            $button.prop('disabled', true);
+            $.ajax({
+                url : $button.data('delete-url'),
+                type : "POST",
+                data : { csrfmiddlewaretoken: '{{ csrf_token }}' },
+                success : function(json) {
+                    $('#draft-attachments').html(json.draft_attachments_html);
+                },
+                error : function(xhr, errmsg, err) {
+                    $button.prop('disabled', false);
+                    console.log(xhr.status + ": " + xhr.responseText);
+                    alert("ERROR!\n\nSorry, the file wasn't removed.\n\nReload the page and try again.");
+                }
+            });
+        });
 
         function hide_check_show_text() {
           // after success, animate a check mark, then put text back

@@ -1,14 +1,16 @@
 from functools import wraps
 
 from django.conf import settings
+from django.db import connections
 from django.urls import reverse, path
 from django.contrib.messages import get_messages
-from django.test import override_settings
+from django.test import override_settings, RequestFactory, SimpleTestCase
 from django.http import HttpResponse
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+
+from hackerspace_online.middleware import ForceDebugCursorMiddleware
 from hackerspace_online.urls import urlpatterns as hackerspace_urlpatterns
 
 
@@ -41,14 +43,13 @@ urlpatterns = [
 ] + hackerspace_urlpatterns
 
 
-class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
+class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
     """
     Various tests for `hackerspace_online.middleware.RequestDataTooBigMiddleware` class
     """
 
     def setUp(self):
-        self.client = TenantClient(self.tenant)
-
+        """Use a tenant client and ensure RequestDataTooBigMiddleware is enabled."""
         # make sure RequestDataTooBig middleware is enabled for a testing purpose
         self.old_MIDDLEWARE = settings.MIDDLEWARE
         middleware_class = "hackerspace_online.middleware.RequestDataTooBigMiddleware"
@@ -56,10 +57,11 @@ class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
             settings.MIDDLEWARE = list(settings.MIDDLEWARE) + [middleware_class]
 
     def tearDown(self):
+        """Restore the original MIDDLEWARE setting after each test."""
         settings.MIDDLEWARE = self.old_MIDDLEWARE
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=2621440, ROOT_URLCONF=__name__)
-    def test_default(self):
+    def test_default__passes_request_through(self):
         """
         By default request should pass through middleware as-is, without exceptions.
         """
@@ -72,7 +74,7 @@ class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
 
     @without_requestdatatoobig_middleware
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
-    def test_request_data_too_big_exception_without_requestdatatoobig_middleware(self):
+    def test_request_data_too_big__without_middleware_returns_400(self):
         """
         Somehow request data exceeds the settings.DATA_UPLOAD_MAX_MEMORY_SIZE limit,
         that raises `RequestDataTooBig` exception.
@@ -89,7 +91,7 @@ class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
         self.assertEqual(len(messages), 0)  # nothing, cuz not handled properly
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
-    def test_request_data_too_big_exception_with_requestdatatoobig_middleware(self):
+    def test_request_data_too_big__with_middleware_redirects(self):
         """
         Somehow request data exceeds the settings.DATA_UPLOAD_MAX_MEMORY_SIZE limit,
         that raises `RequestDataTooBig` exception.
@@ -104,10 +106,20 @@ class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
         # check for messages on a response that has no context
         messages = list(get_messages(response.wsgi_request))
         self.assertEqual(len(messages), 1)  # bingo!
-        self.assertIn("requests exceeds the maximum size", str(messages[0]))
+        self.assertIn("Nothing was saved", str(messages[0]))
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
-    def test_request_data_too_big_exception_with_requestdatatoobig_middleware_skip_FILES(self):
+    def test_request_data_too_big__message_says_nothing_was_saved_and_what_to_do(self):
+        """The message tells the user their post was lost, names the limit, and points them to
+        the editor's picture button, since a pasted image is the usual reason for the size (#783)."""
+        response = self.client.post(reverse("empty"), data={"orson": "wells"})
+
+        message = str(list(get_messages(response.wsgi_request))[0])
+        self.assertTrue(message.startswith("Nothing was saved: this page sent more than 8\xa0bytes of text"), message)
+        self.assertIn("Add images with the editor's picture button instead, then try again.", message)
+
+    @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
+    def test_request_data_too_big__with_middleware_skips_files(self):
         """
         Custom middleware should handle uploaded files gracefully by simply skipping them
         """
@@ -119,3 +131,23 @@ class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
         # should receive an empty response (ok) as if nothing has happened
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"")
+
+
+class ForceDebugCursorMiddlewareTestCase(SimpleTestCase):
+    """Tests for `hackerspace_online.middleware.ForceDebugCursorMiddleware`, which forces the
+    default DB connection's debug cursor on so queries get logged (enabled only when DEBUG)."""
+
+    def test_call__enables_force_debug_cursor_and_returns_response(self):
+        """Calling the middleware turns on the default connection's debug cursor and returns get_response's result."""
+        # restore the flag afterwards so this test can't leak state into others
+        original = connections['default'].force_debug_cursor
+        self.addCleanup(setattr, connections['default'], 'force_debug_cursor', original)
+        connections['default'].force_debug_cursor = False
+
+        expected_response = HttpResponse()
+        middleware = ForceDebugCursorMiddleware(get_response=lambda request: expected_response)
+
+        result = middleware(RequestFactory().get('/'))
+
+        self.assertIs(result, expected_response)
+        self.assertTrue(connections['default'].force_debug_cursor)

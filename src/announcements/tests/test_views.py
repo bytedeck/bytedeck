@@ -1,38 +1,46 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from comments.models import Comment
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
+class AnnouncementViewTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.client = TenantClient(self.tenant)
-
-        self.test_password = "password"
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, students, and a published announcement shared across the test methods."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
 
-        self.test_announcement = baker.make(Announcement, draft=False)
-        self.ann_pk = self.test_announcement.pk
+        cls.test_announcement = baker.make(Announcement, draft=False)
+        cls.ann_pk = cls.test_announcement.pk
 
-    def test_all_announcement_page_status_codes_for_anonymous(self):
+    def test_announcement_form__has_unsaved_changes_guard(self):
+        """The announcement create and edit forms opt into the unsaved-changes warning, and the guard script is loaded (#192)."""
+        self.client.force_login(self.test_teacher)
+
+        for url in (reverse('announcements:create'), reverse('announcements:update', args=[self.ann_pk])):
+            response = self.client.get(url)
+            self.assertContains(response, 'data-warn-unsaved')
+            self.assertContains(response, 'warn-unsaved-changes.js')
+
+    def test_all_announcement_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
 
         self.assertRedirectsLogin('announcements:list')
@@ -46,14 +54,10 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('announcements:copy', args=[1])
         self.assertRedirectsLogin('announcements:publish', args=[1])
 
-    def test_all_announcement_page_status_codes_for_students(self):
+    def test_all_announcement_page_status_codes__students(self):
+        """Students can view lists/comments but get 403 on staff-only announcement views."""
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
-
-        # all_fields = self.test_announcement._meta.get_fields()
-        # for field in all_fields:
-        #     print(field, getattr(self.test_announcement, field.name))
+        self.client.force_login(self.test_student1)
 
         # students should have access to these:
         self.assert200('announcements:list')
@@ -79,10 +83,10 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('announcements:publish', args=[1])
         self.assert403('announcements:archived')
 
-    def test_all_announcement_page_status_codes_for_teachers(self):
+    def test_all_announcement_page_status_codes__teachers(self):
+        """Teachers can access the list, archive, comment, and all staff-only announcement views."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         self.assert200('announcements:list')
         self.assert200('announcements:archived')
@@ -111,21 +115,34 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
             expected_url=reverse('announcements:list', args=[self.ann_pk]),
         )
 
-    def test_teachers_have_archive_button(self):
+    @patch('announcements.views.publish_announcement.apply_async')
+    def test_publish__get_is_rejected_and_broadcasts_nothing(self, mock_publish):
+        """Publishing broadcasts and emails an announcement to every student, so it must not happen
+        on a GET: a teacher following a link, or a page with an <img> pointing here, would otherwise
+        send it (#2383)."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('announcements:publish', args=[self.ann_pk])
+
+        self.assertFalse(mock_publish.called)
+
+    def test_archive_button__visible_to_teachers(self):
+        """Teachers see the 'Archived' button on the announcements list."""
         self.client.force_login(self.test_teacher)
         self.assertContains(self.client.get(reverse('announcements:list')), "Archived")
 
-    def test_students_do_not_see_archive_button(self):
+    def test_archive_button__hidden_from_students(self):
+        """Students do not see the 'Archived' button on the announcements list."""
         self.client.force_login(self.test_student1)
         self.assertNotContains(self.client.get(reverse('announcements:list')), "Archived")
 
-    def test_draft_announcement(self):
+    def test_draft_announcement__hidden_from_students_until_published(self):
+        """Students only see an announcement in the list once it is no longer a draft."""
         draft_announcement = baker.make(Announcement)  # default is draft
         self.assertTrue(draft_announcement.draft)
 
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # Students shoudn't see draft announcements in the list
         self.assertNotContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
@@ -138,12 +155,12 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
 
     # @patch('announcements.views.publish_announcement.apply_async')
-    def test_publish_announcement(self):
+    def test_publish_announcement__removes_publish_link(self):
+        """Posting to the publish view redirects to the announcement and the publish link disappears once published."""
         draft_announcement = baker.make(Announcement)
 
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # draft announcement should appear with a link to publish it.  TODO This is crude, should be checking HTML?
         publish_link = reverse('announcements:publish', args=[draft_announcement.pk])
@@ -163,7 +180,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         # publish link for this announcement should no longer appear in the list:
         self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
 
-    def test_create_announcement_from_past_date_auto_publish(self):
+    def test_create_announcement__past_date_auto_publish_invalid(self):
+        """The form rejects an auto-published announcement with a past release date."""
         draft_announcement = baker.make(
             Announcement,
             datetime_released=timezone.now() - timedelta(days=3),
@@ -173,7 +191,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(form.is_valid())
         self.assertEqual(form.errors['datetime_released'], ['An Announcement that is auto published cannot have a past release date.'])
 
-    def test_create_announcement_auto_publish_and_archive(self):
+    def test_create_announcement__auto_publish_and_archived_invalid(self):
+        """The form rejects an announcement that is both archived and auto-published."""
         draft_announcement = baker.make(
             Announcement,
             datetime_released=timezone.now() - timedelta(days=3),
@@ -188,10 +207,11 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(form.errors['auto_publish'], ['An Announcement that is archived cannot be auto published.'])
         # self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
-    def test_comment_on_announcement_by_student(self):
+    def test_comment_on_announcement__by_student(self):
+        """A student's comment post 404s without the comment_button, and succeeds
+        (redirect + comment saved) with it."""
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         form_data = {
             'comment_text': "test comment",
@@ -199,27 +219,60 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
         self.assertEqual(response.status_code, 404)  # invalid submit button
 
-        # make sure it was submitted with the 'comment_button'
+        # With the comment_button present the post succeeds: it redirects back to the
+        # announcement and the comment is saved.
         form_data['comment_button'] = True
         response = self.client.post(
             reverse('announcements:comment', args=[self.test_announcement.id]),
             data=form_data
         )
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
+        self.assertTrue(Comment.objects.all_with_target_object(self.test_announcement).exists())
 
-        # Empty comment strings should be replaced with blank string or we get an error
-        # WHY? THIS SEEMS SILLY! THE FORM SHOULDN'T VALIDATE IF THERE IS NO COMMENT!
-        # Old code not relevant any more?
-        # form_data['comment_text'] = None
-        # response = self.client.post(
-        #     reverse('announcements:comment', args=[self.test_announcement.id]),
-        #     data=form_data
-        # )
-        # self.assertRedirects(response, self.test_announcement.get_absolute_url())
+    def test_comment_on_announcement__sanitizes_html(self):
+        """HTML entered in the announcement comment form is sanitized when the comment
+        is saved: scripts and event handlers are stripped so nothing executes when the
+        comment is rendered. Regression test for issue #1343.
+        """
+        self.client.force_login(self.test_student1)
 
-    def test_copy_announcement(self):
+        payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]),
+            data={'comment_text': payload, 'comment_button': True}
+        )
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
+        comment = Comment.objects.all_with_target_object(self.test_announcement).first()
+        self.assertIsNotNone(comment)
+        # the <script> tag is neutralized (escaped, not a live tag) and the onerror
+        # event handler is stripped, so no JavaScript can run
+        self.assertNotIn('<script', comment.text)
+        self.assertIn('&lt;script&gt;', comment.text)
+        self.assertNotIn('onerror', comment.text)
+
+    def test_comment_on_announcement__preserves_formatting(self):
+        """Legitimate formatting HTML entered in an announcement comment survives so it
+        renders instead of showing its literal tags. Regression test for issue #2113.
+        """
+        self.client.force_login(self.test_student1)
+
+        payload = '<p>hello <b>bold</b> <a href="http://example.com">link</a></p>'
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]),
+            data={'comment_text': payload, 'comment_button': True}
+        )
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
+        comment = Comment.objects.all_with_target_object(self.test_announcement).first()
+        self.assertIsNotNone(comment)
+        self.assertIn('<b>bold</b>', comment.text)
+        self.assertIn('href="http://example.com"', comment.text)
+
+    def test_copy_announcement__creates_new_announcement(self):
+        """Copying an announcement via POST creates a new announcement and redirects to it."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # hit the view as a get request first, to load a copy of the announcement in the form
         response = self.client.get(
@@ -251,6 +304,38 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
             new_ann.get_absolute_url()
         )
 
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_copy_announcement__draft_copy_sends_no_notification(self, mock_send):
+        """Copying to a draft announcement queues no notification (only a published copy does)."""
+        self.client.force_login(self.test_teacher)
+        form_data = {
+            'title': "Draft copy",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",
+            'draft': True,
+        }
+
+        response = self.client.post(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+            data=form_data,
+        )
+
+        new_ann = Announcement.objects.latest('datetime_created')
+        self.assertTrue(new_ann.draft)
+        self.assertRedirects(response, new_ann.get_absolute_url())
+        mock_send.assert_not_called()
+
+    def test_list__anchor_absent_from_student_list_still_renders(self):
+        """Requesting the list anchored to a draft announcement (which students can't see) walks
+        the whole page range without finding it, then falls back and still renders."""
+        draft = baker.make(Announcement)  # draft defaults to True, archived False
+        self.assertTrue(draft.draft)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('announcements:list', args=[draft.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
     # Custom label tests
     def test_announcement_views__header_custom_label_displayed(self):
         """
@@ -258,8 +343,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         field in Siteconfig
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_announcement to a non-default option
         config = SiteConfig.get()
@@ -288,8 +372,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         "CustomAnnouncement commented on"
         """
         # Login a teacher (could be a student, won't affect results but we need a logged-in user)
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_announcement to a non-default option
         config = SiteConfig.get()
@@ -312,7 +395,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "CustomAnnouncement commented on")
 
 
-class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
+class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
     """ Tests for archived announcements view and other archived processes
 
     Mostly this one:
@@ -320,13 +403,14 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         archived = '/archived/' in request.path_info
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_teacher = baker.make(User, is_staff=True)
-        self.test_student = baker.make(User)
-        self.test_announcement = baker.make(Announcement, draft=False)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, student, and a published announcement shared across the test methods."""
+        cls.test_teacher = baker.make(User, is_staff=True)
+        cls.test_student = baker.make(User)
+        cls.test_announcement = baker.make(Announcement, draft=False)
 
-    def test_archived_announcement(self):
+    def test_archived_announcement__hidden_from_list(self):
         """ Archived announcements should not appear in announcements list"""
         archived_announcement = baker.make(Announcement, archived=True)
         self.assertTrue(archived_announcement.archived)
@@ -343,12 +427,13 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Users can now see it
         self.assertContains(self.client.get(reverse('announcements:list')), archived_announcement.title)
 
-    def test_archived_announcements_visible_on_archived_page(self):
+    def test_archived_announcements__visible_on_archived_page(self):
+        """Archived announcements appear on the dedicated archived page."""
         self.client.force_login(self.test_teacher)
         archived_announcement = baker.make(Announcement, archived=True)
         self.assertContains(self.client.get(reverse('announcements:archived')), archived_announcement.title)
 
-    def test_archived_announcements_are_paginated(self):
+    def test_archived_announcements__are_paginated(self):
         """2nd page after 20 announcements, and view forwards to announcements on 2nd page
         """
         # create enough announcements to create a second page, oldest should be on second page
@@ -361,7 +446,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "/announcements/archived/?page=2")
         self.assertNotContains(response, "/announcements/archived/?page=3")
 
-    def test_get_absolute_url_for_archived(self):
+    def test_get_absolute_url__for_archived(self):
         """get_absolute_url should redirect/load the proper page with the archived announcement"""
         # create enough announcements to create a second page
         oldest_announcement = baker.make(Announcement, archived=True, draft=False)
@@ -370,7 +455,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         response = self.client.get(oldest_announcement.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['archived'], True)
+        self.assertTrue(response.context['archived'])
         self.assertContains(response, oldest_announcement.title)
 
         # create enough announcements to create a second page, oldest should be on second page
@@ -386,25 +471,236 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, oldest_announcement.title)
 
-    def test_announcement_draft_not_archived_after_semester_close(self):
-        """ Draft announcements should not be archived when a semester is closed """
+    def test_announcement_draft__not_archived_after_semester_archive(self):
+        """ Draft announcements should not be archived when a semester is archived """
         draft_ann = baker.make(Announcement, archived=False, draft=True)
 
         self.client.force_login(self.test_teacher)
-        self.client.get(reverse('courses:end_active_semester'))
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]), data={'archive_announcements': 'on'})
 
         draft_ann.refresh_from_db()
         self.assertFalse(draft_ann.archived)
 
-    # TODO Fix this, announcements only archive if semester closing is successful, which its not here maybe?
-    # def test_announcements_archived_after_semester_close(self):
-    #     """ All unarchived (non-draft) announcements should be archived when a semester is closed"""
+    def test_announcements__archived_after_semester_archive(self):
+        """ All unarchived (non-draft) announcements should be archived when a semester is
+        archived with the archive_announcements box checked """
+        announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
 
-    #     announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
+        self.client.force_login(self.test_teacher)
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]), data={'archive_announcements': 'on'})
 
-    #     self.client.force_login(self.test_teacher)
-    #     self.client.get(reverse('courses:end_active_semester'))
+        for announcement in announcements:
+            announcement.refresh_from_db()
+            self.assertTrue(announcement.archived)
 
-    #     for announcement in announcements:
-    #         announcement.refresh_from_db()
-    #         self.assertTrue(announcement.archived)
+
+class AnnouncementCreateUpdateViewTests(ByteDeckTenantTestCase):
+    """Covers the Create/Update CBV form_valid + success-message branches and EmptyPage paging."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff author and one existing published announcement to edit."""
+        cls.teacher = User.objects.create_user('cu_teacher', is_staff=True)
+        cls.announcement = baker.make(Announcement, draft=False)
+
+    def _form_data(self, **overrides):
+        """Return valid AnnouncementForm POST data (title/content/release), with overrides applied."""
+        data = {
+            'title': 'Test Announcement',
+            'content': 'Some content',
+            'datetime_released': timezone.now().strftime('%Y-%m-%d %H:%M'),
+            'auto_publish': False,
+            'draft': False,
+            'sticky': False,
+            'archived': False,
+        }
+        data.update(overrides)
+        return data
+
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_create__published_saves_sets_author_and_broadcasts(self, mock_send):
+        """Creating a non-draft announcement saves it, sets the author, and queues notifications."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(reverse('announcements:create'), self._form_data(draft=False))
+
+        new = Announcement.objects.get(title='Test Announcement')
+        self.assertRedirects(response, new.get_absolute_url())
+        self.assertEqual(new.author, self.teacher)
+        self.assertFalse(new.draft)
+        mock_send.assert_called_once()
+        # Non-draft create shows the "published and broadcast" success message.
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('published and broadcast' in str(m) for m in messages))
+
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_create__draft_does_not_broadcast(self, mock_send):
+        """Creating a draft announcement saves it but does not queue notifications."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(reverse('announcements:create'), self._form_data(draft=True))
+
+        new = Announcement.objects.get(title='Test Announcement')
+        self.assertRedirects(response, new.get_absolute_url())
+        self.assertTrue(new.draft)
+        mock_send.assert_not_called()
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Draft' in str(m) and 'created' in str(m) for m in messages))
+
+    def test_update__published_shows_not_rebroadcast_message(self):
+        """Editing a published announcement shows the 'updated but NOT (re-)broadcasted' message."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(
+            reverse('announcements:update', args=[self.announcement.pk]),
+            self._form_data(draft=False, title='Edited Title'),
+        )
+
+        self.announcement.refresh_from_db()
+        self.assertRedirects(response, self.announcement.get_absolute_url())
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('NOT (re-)broadcasted' in str(m) for m in messages))
+
+    def test_update__draft_shows_draft_updated_message(self):
+        """Editing an announcement as a draft shows the 'Draft ... updated' message."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(
+            reverse('announcements:update', args=[self.announcement.pk]),
+            self._form_data(draft=True, title='Edited Draft'),
+        )
+
+        self.announcement.refresh_from_db()
+        self.assertRedirects(response, self.announcement.get_absolute_url())
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Draft' in str(m) and 'updated' in str(m) for m in messages))
+
+    def test_list__out_of_range_page_returns_last_page(self):
+        """Requesting a page past the end delivers the LAST page, not page 1 (EmptyPage fallback)."""
+        # The list paginates at 20/page; make enough active announcements for at least 2 pages
+        # (setUpTestData already created one), so serving page 1 vs the last page is distinguishable.
+        baker.make(Announcement, draft=False, datetime_released=timezone.now() - timedelta(days=1), _quantity=25)
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'page': 9999})
+
+        self.assertEqual(response.status_code, 200)
+        page = response.context['object_list']
+        self.assertGreater(page.paginator.num_pages, 1)
+        self.assertEqual(page.number, page.paginator.num_pages)
+
+
+class AnnouncementSearchViewTests(ByteDeckTenantTestCase):
+    """The current and archived lists can be searched from a box above them (#2667)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, a student, and announcements with distinguishable titles and content."""
+        cls.teacher = User.objects.create_user('search_teacher', is_staff=True)
+        cls.student = User.objects.create_user('search_student')
+
+        cls.field_trip = baker.make(
+            Announcement, draft=False, title="Field trip on Friday", content="<p>Bring a bagged lunch.</p>")
+        cls.cafeteria = baker.make(
+            Announcement, draft=False, title="Cafeteria menu", content="<p>Lunch is pizza this week.</p>")
+
+    def test_list__search_shows_only_the_matching_announcements(self):
+        """Searching the current list keeps the announcements that match and drops the rest."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'field'})
+
+        self.assertContains(response, self.field_trip.title)
+        self.assertNotContains(response, self.cafeteria.title)
+
+    def test_list__search_matches_the_content_not_just_the_title(self):
+        """A word only in an announcement's body still finds it, since the body is most of what it says."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'pizza'})
+
+        self.assertContains(response, self.cafeteria.title)
+        self.assertNotContains(response, self.field_trip.title)
+
+    def test_list__search_covers_the_whole_list_not_only_the_page_in_view(self):
+        """A match sitting on page 2 is found, because the search runs in the database before paginating."""
+        # The list paginates at 20, ordered newest first, so the oldest announcement is on page 2.
+        baker.make(Announcement, draft=False, datetime_released=timezone.now(), _quantity=25)
+        buried = baker.make(
+            Announcement, draft=False, title="Yearbook photos",
+            datetime_released=timezone.now() - timedelta(days=365))
+        self.client.force_login(self.teacher)
+
+        # It really is off the first page before searching
+        self.assertNotContains(self.client.get(reverse('announcements:list')), buried.title)
+
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'yearbook'}), buried.title)
+
+    def test_list__pagination_links_keep_the_search(self):
+        """Page links carry the search, so page 2 of a search is not page 2 of everything."""
+        baker.make(Announcement, draft=False, title="Reminder to hand in forms", _quantity=25)
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'forms'})
+
+        self.assertGreater(response.context['object_list'].paginator.num_pages, 1)
+        self.assertContains(response, "/announcements/?page=2&amp;q=forms")
+
+    def test_list__search_reports_how_many_matched(self):
+        """The list says how many announcements matched, so an empty page reads as a result rather than a fault."""
+        self.client.force_login(self.teacher)
+
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'field'}), '1 announcement matches')
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'lunch'}), '2 announcements match')
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'kayaking'}), '0 announcements match')
+
+    def test_list__unsearched_list_has_a_search_box_and_no_count(self):
+        """Without a search the box is there to be used, and nothing claims a number of matches."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'))
+
+        self.assertContains(response, 'id="announcement-search"')
+        self.assertNotContains(response, 'announcement matches')
+        self.assertNotContains(response, 'announcements match')
+        self.assertContains(response, self.field_trip.title)
+        self.assertContains(response, self.cafeteria.title)
+
+    def test_list__a_blank_search_is_not_a_search(self):
+        """A box submitted with only spaces shows the whole list rather than filtering on nothing."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': '   '})
+
+        self.assertEqual(response.context['search_term'], '')
+        self.assertContains(response, self.field_trip.title)
+        self.assertContains(response, self.cafeteria.title)
+
+    def test_archived__search_shows_only_the_matching_archived_announcements(self):
+        """The archived page is searched the same way, which is half of what the issue asked for."""
+        archived_match = baker.make(Announcement, draft=False, archived=True, title="Field trip to the museum")
+        archived_other = baker.make(Announcement, draft=False, archived=True, title="Old cafeteria menu")
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:archived'), {'q': 'field'})
+
+        self.assertContains(response, archived_match.title)
+        self.assertNotContains(response, archived_other.title)
+        # the current list's match is not dragged onto the archived page by the search
+        self.assertNotContains(response, self.field_trip.title)
+
+    def test_list__a_students_search_reaches_only_what_they_may_see(self):
+        """A student gets the search box, and it narrows their own list rather than reaching past it."""
+        draft = baker.make(Announcement, draft=True, title="Field trip draft, not published yet")
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'field'})
+
+        self.assertContains(response, 'id="announcement-search"')
+        self.assertContains(response, self.field_trip.title)
+        self.assertNotContains(response, draft.title)
+
+    def test_list__a_search_offers_a_way_to_clear_it(self):
+        """A search shows a clear button back to the unfiltered list; an unsearched list has nothing to clear."""
+        self.client.force_login(self.teacher)
+
+        searched = self.client.get(reverse('announcements:list'), {'q': 'field'})
+        self.assertContains(searched, 'title="Clear this search"')
+
+        self.assertNotContains(self.client.get(reverse('announcements:list')), 'title="Clear this search"')

@@ -1,0 +1,28 @@
+{# The single heads-up before an auto-renewing subscription bills again (#2586). #}
+{# Nothing here asks the owner to act: the point is that they do not have to. #}
+<p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
+
+{# the deck link stays OUTSIDE the <strong>: textify/html2text swallows the space before a link that opens inside one #}
+<p>Your deck <a href="{{ deck.get_root_url }}">{{ deck.name }}</a> <strong>renews automatically
+  on {{ renewal_date }}{% if renewal_days > 0 %}
+  ({{ renewal_days }} day{{ renewal_days|pluralize }} from now){% endif %}</strong>.
+  There is nothing you need to do: your card is charged on that date and the deck carries on
+  uninterrupted.</p>
+
+{% if plan_summary %}
+  <p>The subscription being renewed is <strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %},
+    {{ plan_summary.renewal_phrase }}{% endif %}.</p>
+{% endif %}
+
+<p>Your deck currently uses {{ count }} of
+  {% if cap == -1 %}unlimited{% else %}{{ cap }}{% endif %} current-student
+  seat{% if cap != 1 %}s{% endif %}. If you need a different number of seats for next year,
+  changing your plan before the renewal date is the easiest time to do it.</p>
+
+<p>To change your plan, update the card being charged, see past invoices, or cancel the
+  subscription, go to your <a href="{{ subscribe_url }}">subscription details page</a>.
+  {# access ends at the GOVERNING deadline, which outlasts the billing date on a deck whose trial runs longer #}
+  If you cancel, the deck stays fully available through {{ deck.governing_deadline }}, and we
+  will email you before it is suspended.</p>
+
+{% include "tenant/email/_email_footer.html" %}

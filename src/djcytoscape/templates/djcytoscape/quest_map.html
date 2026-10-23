@@ -20,14 +20,22 @@
       <a id="btn-fullscreen" role="button" class="btn btn-default">Fullscreen <i class="fa fa-arrows-alt"></i></a>
       <a class="btn btn-default" href="{% url 'djcytoscape:list' %}" role="button"
         title = "List all maps"><i class="fa fa-list-ul"></i></a>
-      <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
-        title = "Recalculate ALL Maps.  This may take a few moments." >
-        <i class="fa fa-refresh"></i>
-      </a>
-      <a class="btn btn-success" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
-        title = "Recalculate this Map." >
-        <i class="fa fa-undo"></i>
-      </a>
+      {% comment %}
+        Regenerating rebuilds a map (and removes one whose initial object is gone), so these post
+        rather than link (#2383).
+      {% endcomment %}
+      <form method="post" action="{% url 'djcytoscape:regenerate_all' %}" class="preview-action-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" title="Recalculate ALL Maps.  This may take a few moments.">
+          <i class="fa fa-refresh"></i>
+        </button>
+      </form>
+      <form method="post" action="{% url 'djcytoscape:regenerate' scape.id %}" class="preview-action-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success" title="Recalculate this Map.">
+          <i class="fa fa-undo"></i>
+        </button>
+      </form>
       <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button"
         title = "Edit the Map" >
         <i class="fa fa-edit"></i>
@@ -47,6 +55,12 @@
     <p>Back to <a href="{{ scape.parent_scape.get_absolute_url }}">{{ scape.parent_scape }} Quest Map</a></p>
   {% endif %}
   <div id="cy"></div>
+
+  {{ elements|json_script:"map-elements" }}
+  {{ class_styles|json_script:"map-class-styles" }}
+  {{ approved_quests|json_script:"approved-quest-ids" }}
+  {{ awaiting_approval_quests|json_script:"awaiting-approval-quest-ids" }}
+  {{ earned_badges|json_script:"earned-badge-ids" }}
 
 {% endblock %}
 {% block js %}
@@ -72,23 +86,46 @@
       userZoomingEnabled: false,
       autoungrabify: true,
       autounselectify: true,
-      elements: {{ elements|safe }},
-      style: {{ class_styles|safe }},
+      elements: JSON.parse(document.getElementById('map-elements').textContent),
+      style: JSON.parse(document.getElementById('map-class-styles').textContent),
     });
 
-    // completed quests
-    cy.ready( function(event) {
-        {% for id in completed_quests %}
-        cy.nodes('[Quest = {{id}}]').addClass('completed');
-        {% endfor %}
+    {% comment %}
+    Colour this student's own progress onto the map (#2678): green outline for a quest they
+    have had approved or a badge they hold, yellow for a quest handed in and still waiting on
+    a teacher. Badges share the green because a badge is granted or not, with nothing
+    corresponding to work sitting in an approval queue.
+
+    A node carries its object's id under a data key named for its type ("Quest" or "Badge"),
+    which is what the selector matches on. The ids come down as JSON rather than a line of
+    script per object, so a big map does not carry hundreds of statements; every list is
+    empty for staff, who see an uncoloured map.
+    {% endcomment %}
+    cy.ready(function (event) {
+        var markNodes = function (elementId, dataKey, className) {
+            var ids = JSON.parse(document.getElementById(elementId).textContent);
+            ids.forEach(function (id) {
+                cy.nodes('[' + dataKey + ' = ' + id + ']').addClass(className);
+            });
+        };
+        markNodes('approved-quest-ids', 'Quest', 'approved');
+        markNodes('awaiting-approval-quest-ids', 'Quest', 'awaiting-approval');
+        markNodes('earned-badge-ids', 'Badge', 'approved');
     });
 
 </script>
 
-<script src="{% static 'djcytoscape/js/maps.js' %}"></script>
+{% comment %}
+  Cache-bust the map scripts with a ?v= query (same convention as the versioned CSS in
+  head_css.html and other JS like jquery-double-submission.js). maps.js has no hashed
+  filename, so without this a browser keeps serving a stale copy — which is why the campaign
+  name-wrap fix (#1289 / PR #1937) never reached users who had already cached the old maps.js.
+  Bump this version whenever maps.js / maps-dark.js changes.
+{% endcomment %}
+<script src="{% static 'djcytoscape/js/maps.js' %}?v=1.4"></script>
 
 {% if request.user.profile.dark_theme %}
- <script src="{% static 'djcytoscape/js/maps-dark.js' %}"></script>
+ <script src="{% static 'djcytoscape/js/maps-dark.js' %}?v=1.4"></script>
 {% endif %}
 
 

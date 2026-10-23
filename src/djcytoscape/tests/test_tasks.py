@@ -1,18 +1,60 @@
-from django_tenants.test.cases import TenantTestCase
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
-from djcytoscape.tasks import regenerate_map
+from djcytoscape.tasks import pending_regeneration_key, regenerate_all_maps, regenerate_map
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from notifications.models import Notification
+
+User = get_user_model()
 
 
-class CytoScapeTaskTests(TenantTestCase):
+class CytoScapeTaskTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.quest = baker.make('quest_manager.Quest')
+    @classmethod
+    def setUpTestData(cls):
+        """Create a shared quest used as maps' initial object across the task tests."""
+        cls.quest = baker.make('quest_manager.Quest')
 
-    def test_regenerate_map(self):
-        """ tests if regenerate map task runs successfully """
+    def _bad_map(self):
+        """A map whose initial object no longer exists (initial_object_id points at nothing)."""
+        quest_ct = ContentType.objects.get(app_label='quest_manager', model='quest')
+        return CytoScape.objects.create(
+            name="Bad Map", initial_content_type=quest_ct, initial_object_id=999999,
+        )
+
+    def test_regenerate_all_maps__regenerates_valid_deletes_broken_and_notifies(self):
+        """regenerate_all_maps regenerates valid maps, deletes maps whose initial
+        object is gone, and notifies the requesting user of the failure and of the
+        overall completion."""
+        requesting_user = baker.make(User, is_staff=True)
+        good_map = CytoScape.generate_map(self.quest, "Good Map")
+        bad_map = self._bad_map()
+
+        notes_before = Notification.objects.all_for_user(requesting_user).count()
+        regenerate_all_maps.apply(args=[requesting_user.id], queue='default').get()
+
+        # the valid map survives; the broken one is removed
+        self.assertTrue(CytoScape.objects.filter(id=good_map.id).exists())
+        self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
+
+        # one "failed to regenerate" notice for the bad map + one "completed" notice
+        notes_after = Notification.objects.all_for_user(requesting_user).count()
+        self.assertEqual(notes_after - notes_before, 2)
+
+    def test_regenerate_map__deleted_initial_object_is_swallowed(self):
+        """regenerate_map silently drops a map whose initial object no longer exists (no raise)."""
+        bad_map = self._bad_map()
+        regenerate_map.apply(args=[[bad_map.id]], queue='default').get()
+        self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
+
+    def test_regenerate_map__links_quest_to_related_maps(self):
+        """regenerate_map relinks a quest to every map that references it as a prereq."""
         map_origins = baker.make('quest_manager.Quest', _quantity=3)
 
         # create map for each origin (3 maps)
@@ -33,3 +75,28 @@ class CytoScapeTaskTests(TenantTestCase):
 
         # should be 3 as self.quest got linked to 3 maps
         self.assertEqual(CytoScape.objects.get_related_maps(self.quest).count(), 3)
+
+    def test_regenerate_map__gives_up_its_claim_from_inside_the_rebuild(self):
+        """The task holds its claim on a map until the rebuild has that map's row.
+
+        The claim is what keeps a second regeneration off the queue. Giving it up on the
+        way in would surrender it before the wait for the row, which can be as long as
+        the rebuild ahead of it, and queue a redundant rebuild for every save made during
+        that wait: saves this task has not read past and so still covers. Holding it past
+        the row would lose them instead, since the rebuild is reading from there (#2658).
+        """
+        scape = CytoScape.generate_map(self.quest, "Map")
+        key = pending_regeneration_key(scape.id)
+        cache.set(key, True, 60)
+
+        claim = {}
+
+        def rebuild(map_, on_lock_acquired=None):
+            claim['on the way in'] = cache.get(key)
+            on_lock_acquired()
+            claim['once the row is held'] = cache.get(key)
+
+        with patch.object(CytoScape, 'regenerate', autospec=True, side_effect=rebuild):
+            regenerate_map.apply(args=[[scape.id]], queue='default').get()
+
+        self.assertEqual(claim, {'on the way in': True, 'once the row is held': None})

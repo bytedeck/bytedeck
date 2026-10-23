@@ -1,4 +1,3 @@
-from django_tenants.test.cases import TenantTestCase
 from django.contrib.auth import get_user_model
 from django.db.utils import ProgrammingError
 
@@ -9,6 +8,7 @@ from tags.models import (
     total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags,
     get_quest_submission_total_xp, get_badge_assertion_total_xp,
 )
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
@@ -17,6 +17,19 @@ User = get_user_model()
 
 
 class TagHelper:
+
+    @staticmethod
+    def register_in_active_semester(user):
+        """Register `user` in the deck's semester and return the registration.
+
+        A user's semester is the one their own registration names (issue #2441), so without
+        one they are in none and the semester-scoped XP totals these tests read come back
+        empty however much work is stamped with the deck's semester.
+        """
+        return baker.make(
+            'courses.CourseStudent', user=user, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
 
     def create_quest_and_submissions(self, xp, quest_submission_quantity=1):
         """
@@ -56,19 +69,29 @@ class TagHelper:
             tuple[Badge, list[BadgeAssertion]]: tuple of Badge object + list of BadgeAssertion objects
         """
         badge = baker.make(Badge, xp=xp)
-        badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
+        # stamp the active semester, as BadgeAssertion.objects.create_assertion() does: the
+        # field is nullable (an assertion granted with no semester open belongs to none), so
+        # baker would otherwise leave it unset and the assertion wouldn't count this semester
+        badge_assertion = baker.make(
+            BadgeAssertion, badge=badge, user=self.user,
+            semester=SiteConfig.get().active_semester, _quantity=badge_assertion_quantity,
+        )
 
         return badge, badge_assertion
 
 
-class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTestCase):
+class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for both get_quest_submission_by_tags and get_badge_assertion_by_tags
     """
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
+        cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
-    def test_multiple_quest_submission_tagged(self):
+    def test_get_quest_submission_by_tag__multiple_tags(self):
         """  check if multiple tags can be caught by get_quest_submission_by_tag """
 
         for _i in range(2):
@@ -86,7 +109,7 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTes
         quest_submission_qs = get_quest_submission_by_tag(self.user, ['tag0', 'tag1', 'tag2'])
         self.assertEqual(quest_submission_qs.count(), 6)
 
-    def test_multiple_badge_assertion_tagged(self):
+    def test_get_badge_assertion_by_tags__multiple_tags(self):
         """  check if multiple tags can be caught by get_badge_assertion_by_tags """
 
         for _i in range(2):
@@ -129,8 +152,8 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTes
         self.assertEqual(quest_submission_qs.count(), 2)
 
         # check if the submissions are the correct ones
-        self.assertTrue(submission_1 in quest_submission_qs)
-        self.assertTrue(submission_2 in quest_submission_qs)
+        self.assertIn(submission_1, quest_submission_qs)
+        self.assertIn(submission_2, quest_submission_qs)
 
     def test_get_badge_assertion_by_tags__correct_badge_assertion_tagged(self):
         """ check if 'correct tag' is retrieved and no other assertion from a different tag or no tag """
@@ -158,19 +181,23 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTes
         self.assertEqual(badge_assertion_qs.count(), 2)
 
         # check if the submissions are the correct ones
-        self.assertTrue(assertion_1 in badge_assertion_qs)
-        self.assertTrue(assertion_2 in badge_assertion_qs)
+        self.assertIn(assertion_1, badge_assertion_qs)
+        self.assertIn(assertion_2, badge_assertion_qs)
 
 
-class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
+class Tag_get_user_tags_and_xp_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for testing get_user_tags_and_xp function
     """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
+        cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
-    def test_unique_tag_quest_badges(self):
+    def test_get_user_tags_and_xp__unique_tag_quest_badges(self):
         """
             Unique tags per quest and badge, xp representing tag's index
         """
@@ -192,7 +219,7 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
 
         self.assertEqual(expected_order, calculated_order)
 
-    def test_same_tag_per_quest_badges(self):
+    def test_get_user_tags_and_xp__same_tag_per_quest_badges(self):
         """
             Same tag for quest and badges, xp representing tag's index
         """
@@ -212,7 +239,7 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
 
         self.assertEqual(expected_order, calculated_order)
 
-    def test_multiple_tags_per_quest_badges(self):
+    def test_get_user_tags_and_xp__multiple_tags_per_quest_badges(self):
         """
             Two tags per generated quest and badges, xp representing tag_tuples's index
         """
@@ -236,7 +263,7 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
 
         self.assertEqual(expected_order, calculated_order)
 
-    def test_query_tag_from_approved_quest(self):
+    def test_get_user_tags_and_xp__only_approved_submissions(self):
         """
             When getting all quests related to tag and user, check if only submitted and approved tags show
         """
@@ -256,11 +283,11 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
         # check if only q_approved is in the query
         tags = [tag_tuple[0].name for tag_tuple in get_user_tags_and_xp(self.user)]
 
-        self.assertFalse('unrelated' in tags)
-        self.assertTrue('approved' in tags)
-        self.assertFalse('submitted' in tags)
+        self.assertNotIn('unrelated', tags)
+        self.assertIn('approved', tags)
+        self.assertNotIn('submitted', tags)
 
-    def test_total_xp_is_correct(self):
+    def test_get_user_tags_and_xp__total_xp_is_correct(self):
         """ check if get_user_tags_and_xp's xp adds up correctly """
 
         # quest only
@@ -282,15 +309,19 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
         self.assertEqual(total_xp, 17)  # sanity check
 
 
-class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
+class Tag_get_tags_from_user_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for testing get_tags_from_user function
     """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
+        cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
-    def test_unique_tag_per_quest_badges(self):
+    def test_get_tags_from_user__unique_tag_per_quest_badges(self):
         """
             Unique tags per quest and badge
         """
@@ -310,7 +341,7 @@ class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
         tag_names = list(get_tags_from_user(self.user).order_by('name').values_list('name', flat=True))
         self.assertEqual(tag_names, tag_list)
 
-    def test_same_tag_per_quest_badges(self):
+    def test_get_tags_from_user__same_tag_per_quest_badges(self):
         """
             Same tag for quest and badges
         """
@@ -327,7 +358,7 @@ class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
         tag_names = list(get_tags_from_user(self.user).order_by('name').values_list('name', flat=True))
         self.assertEqual(tag_names, tag_list)
 
-    def test_multiple_tags_per_quest_badges(self):
+    def test_get_tags_from_user__multiple_tags_per_quest_badges(self):
         """
             Two tags per generated quest and badges
         """
@@ -352,7 +383,7 @@ class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
         self.assertEqual(tag_names, unpacked_tag_tuples)
 
 
-class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTestCase):
+class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for testing function:
             total_xp_by_tags
@@ -360,12 +391,16 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
             get_badge_assertion_total_xp
     """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
+        cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
     # MISC. TEST
 
-    def test_list_input(self):
+    def test_total_xp_by_tags__list_input(self):
         """
             check if total_xp_by_tags can accept test without exception
         """
@@ -377,7 +412,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         except ProgrammingError:
             self.fail("total_xp_by_tags raised ProgrammingError when using list as input")
 
-    def test_queryset_input(self):
+    def test_total_xp_by_tags__queryset_input(self):
         """
             check if total_xp_by_tags can accept a queryset without exception
         """
@@ -391,7 +426,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
 
     # QUEST ONLY TESTS
 
-    def test_submission_with_xp_requested(self):
+    def test_total_xp_by_tags__submission_with_xp_requested(self):
         """
             Verify that the xp_requested value is being used instead of quest.xp.
             This could happen when `quest.xp_can_be_entered_by_students = True`, which means the
@@ -416,7 +451,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         # Method should recognize the 100 XP requested and approved, instead of quest.xp = 50:
         self.assertEqual(total_xp_by_tags(self.user, ["TEST"]), 100)
 
-    def test_submission_with_max_xp_surpassed(self):
+    def test_total_xp_by_tags__submission_with_max_xp_surpassed(self):
         """
             Verify that no more than quest.max_xp is counted toward a tag's XP when there are multiple submissions of the same quest.
             Create 3 submissions of a 50XP quest, but quest.max_xp=100 so this method should return 100
@@ -440,7 +475,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         # Method should recognize a max of 100XP, instead of 150 (3 * quest.xp):
         self.assertEqual(total_xp_by_tags(self.user, ["TEST"]), 100)
 
-    def test_one_tag_quests_only(self):
+    def test_total_xp_by_tags__one_tag_quests_only(self):
         """
             See if correct xp is returned using only 1 tag added to Quest objects
         """
@@ -454,7 +489,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), sum(xp_list))
         self.assertEqual(get_quest_submission_total_xp(self.user, ["TAG"]), sum(xp_list))
 
-    def test_multiple_separate_tags_quests_only(self):
+    def test_total_xp_by_tags__multiple_separate_tags_quests_only(self):
         """
             See if correct xp is returned using only multiple tags added to Quest objects
             only 1 unique tag per quest
@@ -470,7 +505,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
         self.assertEqual(get_quest_submission_total_xp(self.user, tag_list), sum(xp_list))
 
-    def test_multiple_crossing_tags_quests_only(self):
+    def test_total_xp_by_tags__multiple_crossing_tags_quests_only(self):
         """
             See if correct xp is returned using only multiple tags added to Quest objects
             each quest object should have multiple tags
@@ -488,7 +523,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
         self.assertEqual(get_quest_submission_total_xp(self.user, unpacked_tag_tuples), sum(xp_list))
 
-    def test_one_tag_multiple_quests_only(self):
+    def test_total_xp_by_tags__one_tag_multiple_quests_only(self):
         """
             See if correct xp is returned using only one tag + quests with multiple questsubmissions
         """
@@ -531,7 +566,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
 
     # BADGE ONLY TESTS
 
-    def test_one_tag_badges_only(self):
+    def test_total_xp_by_tags__one_tag_badges_only(self):
         """
             See if correct xp is returned using only 1 tag added to Badge objects
         """
@@ -545,7 +580,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), sum(xp_list))
         self.assertEqual(get_badge_assertion_total_xp(self.user, ["TAG"]), sum(xp_list))
 
-    def test_multiple_separate_tags_badges_only(self):
+    def test_total_xp_by_tags__multiple_separate_tags_badges_only(self):
         """
             See if correct xp is returned using only multiple tags added to Badge objects
             only 1 unique tag per badge
@@ -561,7 +596,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
         self.assertEqual(get_badge_assertion_total_xp(self.user, tag_list), sum(xp_list))
 
-    def test_multiple_crossing_tags_badges_only(self):
+    def test_total_xp_by_tags__multiple_crossing_tags_badges_only(self):
         """
             See if correct xp is returned using only multiple tags added to Badge objects
             each Badge object should have multiple tags
@@ -579,7 +614,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
         self.assertEqual(get_badge_assertion_total_xp(self.user, unpacked_tag_tuples), sum(xp_list))
 
-    def test_one_tag_multiple_badges_only(self):
+    def test_total_xp_by_tags__one_tag_multiple_badges_only(self):
         """
             See if correct xp is returned using only one tag + badges with multiple BadgeAssertions
         """
@@ -622,7 +657,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
 
     # QUEST + BADGE TESTS
 
-    def test_one_tag_quests_badges(self):
+    def test_total_xp_by_tags__one_tag_quests_badges(self):
         """
             See if correct xp is returned using only 1 tag added to Quest and Badge objects
         """
@@ -641,7 +676,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
 
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), sum(xp_list))
 
-    def test_multiple_separate_tags_quests_badges(self):
+    def test_total_xp_by_tags__multiple_separate_tags_quests_badges(self):
         """
             See if correct xp is returned using only 1 tag added to Quest and Badge objects
             only 1 unique tag per quest and badge
@@ -659,7 +694,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
 
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
 
-    def test_multiple_crossing_tags_quest_badges(self):
+    def test_total_xp_by_tags__multiple_crossing_tags_quest_badges(self):
         """
             See if correct xp is returned using two tags per Quest and Badge object
             each Quest and Badge object should have multiple tags
@@ -683,7 +718,7 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
         unpacked_tag_tuples = [tag_tuple[index] for tag_tuple in tag_tuples for index in range(len(tag_tuple))]
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
 
-    def test_one_tag_multiple_quests_badges(self):
+    def test_total_xp_by_tags__one_tag_multiple_quests_badges(self):
         """
              See if correct xp is returned using only one tag + quests and badges with multiple QuestSubmissions and BadgeAssertions
         """
