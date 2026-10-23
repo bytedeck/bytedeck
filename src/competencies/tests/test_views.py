@@ -79,10 +79,12 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assert403('competencies:export')
 
     def test_sidebar__link_shown_to_staff(self):
-        """ With the flag on, staff see the Competencies link in the sidebar """
+        """ With the flag on, staff see the Competencies link in both menus, each under Quest Setup:
+        the sidebar's Quests menu, and the top navbar's Admin menu (which the navbar renders twice,
+        once for wide screens and once for the collapsed phone menu) """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('quests:quests'))
-        self.assertContains(response, reverse('competencies:list'))
+        self.assertContains(response, f'href="{reverse("competencies:list")}"', count=3)
 
     def test_list_view__shows_competencies(self):
         """ The list view renders the deck's competencies for staff """
