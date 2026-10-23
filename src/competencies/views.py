@@ -25,9 +25,12 @@ def competencies_enabled(f):
     """ Raises 404 unless this deck has competencies enabled: the feature flag gates
     all user-visible parts of the feature. Must be applied outermost (before any
     auth decorators) so that a disabled deck reveals nothing, not even a 403.
+    The public schema has no SiteConfig (SiteConfig.get() returns None there), which
+    counts as disabled.
     """
     def wrapper(request, *args, **kwargs):
-        if not SiteConfig.get().enable_competencies:
+        config = SiteConfig.get()
+        if config is None or not config.enable_competencies:
             raise Http404
         return f(request, *args, **kwargs)
     return wrapper
