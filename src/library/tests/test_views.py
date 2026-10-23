@@ -28,6 +28,7 @@ from library.exporter import (
 )
 from model_bakery import baker
 from notifications.models import Notification
+from competencies.models import Competency, QuestCompetency
 from courses.models import Rank
 from prerequisites.models import Prereq
 from quest_manager.models import Category, CommonData, Quest
@@ -3347,6 +3348,28 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
         )
+
+    def test_ImportQuestView__shows_the_library_quests_own_competencies(self):
+        """The quest import preview shows the Library quest's competencies read from the Library,
+        not the ones linked to this deck's quest at the same id, which a lazily-evaluated
+        `quest.quest_competencies` would find once the schema switches back."""
+        config = SiteConfig.get()
+        config.enable_competencies = True
+        config.full_clean()
+        config.save()
+        decoy = Quest.objects.get(pk=self.library_quest.id)
+        QuestCompetency.objects.create(quest=decoy, competency=baker.make(Competency, name="Local-only Competency"))
+        with library_schema_context():
+            QuestCompetency.objects.create(
+                quest=Quest.objects.get(pk=self.library_quest.id),
+                competency=baker.make(Competency, name="Library Competency"),
+            )
+
+        response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Library Competency")
+        self.assertNotContains(response, "Local-only Competency")
 
     def test_ImportQuestView__shows_the_library_quests_own_prereqs(self):
         """The quest import preview names the Library quest's prerequisite, not this deck's (#2529).

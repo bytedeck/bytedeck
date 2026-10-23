@@ -112,9 +112,10 @@ def load_library_quests_for_render(quests):
             `prefetch_related_objects` needs the rows to exist.
 
     Returns:
-        list[Quest]: the same list, with `tags`, `question_set` and `campaign` populated.
+        list[Quest]: the same list, with `tags`, `question_set`, `campaign` and `quest_competencies`
+        (with their competencies) populated.
     """
-    prefetch_related_objects(quests, 'tags', 'question_set', 'campaign')
+    prefetch_related_objects(quests, 'tags', 'question_set', 'campaign', 'quest_competencies__competency')
 
     return quests
 

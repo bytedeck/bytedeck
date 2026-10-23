@@ -4,6 +4,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from siteconfig.models import SiteConfig
+
 
 class ProficiencyLevel(models.IntegerChoices):
     """ The BC 4-point proficiency scale: https://curriculum.gov.bc.ca/
@@ -90,11 +92,17 @@ class QuestCompetency(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['quest', 'competency'], name='unique_quest_competency')
         ]
+        ordering = ['competency__category', 'competency__name']
         verbose_name_plural = 'quest competencies'
 
     def __str__(self):
         """ Returns "<quest> - <competency>", identifying both ends of the link. """
         return f"{self.quest} - {self.competency}"
+
+    def get_default_level_label(self):
+        """ Returns this deck's display label for the link's default level (the custom
+        proficiency scale labels in SiteConfig, e.g. "Proficient"). """
+        return SiteConfig.get().get_competency_scale_labels()[self.default_level]
 
 
 class CompetencyAssessment(models.Model):
