@@ -2,8 +2,9 @@
   A submission's competency levels on its approval form (the competency_approval_levels tag):
   one segmented control per competency the quest gives evidence of, pre-selected to the link's
   default level, so approving with the defaults takes no extra clicks. Approving records the
-  selected levels; returning or commenting records nothing. approval-levels.js shows the nudge
-  when a competency is set to the lowest level.
+  selected levels; returning or commenting records nothing. The nudge shows while any competency
+  is set to the lowest level: rendered that way when a default starts there, and kept in step by
+  approval-levels.js as levels change.
 {% endcomment %}
 {% if rows %}
 <div class="competency-approval-levels">
@@ -20,7 +21,7 @@
     </div>
   </div>
   {% endfor %}
-  <p class="help-block text-warning competency-lowest-nudge hidden" role="status">
+  <p class="help-block text-warning competency-lowest-nudge{% if not starts_on_lowest %} hidden{% endif %}" role="status">
     <i class="fa fa-exclamation-triangle fa-fw"></i>
     {{ lowest_label }} usually means the quest isn't complete yet: return it for revision instead? You can still approve it.
   </p>

@@ -24,7 +24,8 @@ def competency_approval_levels(submission):
 
     Returns:
         dict: the snippet's context: 'rows', each with the competency, the posted field's name and
-        its (level, label, selected) choices, and the deck's label for the lowest level.
+        its (level, label, selected) choices; the deck's label for the lowest level; and whether any
+        row starts on it (so the nudge shows from the first render, not only once a level changes).
     """
     config = SiteConfig.get()
     if config is None or not config.enable_competencies:
@@ -39,4 +40,5 @@ def competency_approval_levels(submission):
         }
         for link in approval_links(submission.quest)
     ]
-    return {'rows': rows, 'lowest_label': labels[ProficiencyLevel.EMERGING]}
+    starts_on_lowest = any(selected for row in rows for level, _label, selected in row['levels'] if level == ProficiencyLevel.EMERGING)
+    return {'rows': rows, 'lowest_label': labels[ProficiencyLevel.EMERGING], 'starts_on_lowest': starts_on_lowest}

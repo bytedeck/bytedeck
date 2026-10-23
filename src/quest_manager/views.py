@@ -1398,6 +1398,24 @@ def quest_user_status(request, quest_id):
 #
 # #################################
 
+def lock_is_approved(submission):
+    """Lock the submission's row until the end of the transaction and return whether it is approved.
+
+    Two requests approving the same submission at once (a double-clicked Approve, a duplicate hand-in)
+    can each read it as unapproved before either saves. With the row locked, the second waits for the
+    first to commit and then reads it as approved, so only the first records what an approval records.
+    The in-memory submission isn't trusted for this: it was loaded before the lock was taken.
+
+    Args:
+        submission (QuestSubmission): the submission about to be approved. Call inside transaction.atomic().
+
+    Returns:
+        bool: whether the submission is already approved in the database.
+    """
+    # the base manager: the default one leaves out some submissions (those of archived quests, for one)
+    return QuestSubmission._base_manager.select_for_update().filter(pk=submission.pk).values_list('is_approved', flat=True).get()
+
+
 class ApproveView(NonPublicOnlyViewMixin, View):
     """ When staff approves, returns, skips, or comments on a quest submission, this view is called.
     """
@@ -1493,8 +1511,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # with the approval, in one transaction so neither is saved without the other. Only an
             # approval that changes the submission records them, so a double-clicked Approve doesn't
             # record a second set; a return clears is_approved, so approving after one does.
-            newly_approved = not self.submission.is_approved
             with transaction.atomic():
+                newly_approved = not lock_is_approved(self.submission)
                 self.submission.mark_approved()
                 if newly_approved:
                     record_approval_assessments(self.submission, assessed_by=self.request.user, data=self.request.POST)
@@ -2638,8 +2656,8 @@ def complete(request, submission_id):
             # No teacher approves this quest, so its competency evidence is recorded at each
             # link's default level with no assessor (system-assessed): once, not again for a
             # duplicate submit of a submission this already approved.
-            newly_approved = not submission.is_approved
             with transaction.atomic():
+                newly_approved = not lock_is_approved(submission)
                 submission.mark_approved()
                 if newly_approved:
                     record_approval_assessments(submission)

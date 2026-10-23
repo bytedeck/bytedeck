@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.urls import reverse
 
 from model_bakery import baker
@@ -8,6 +11,7 @@ from competencies.forms import competency_level_field_name
 from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel, QuestCompetency
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
+from quest_manager.views import lock_is_approved
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -183,6 +187,28 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(CompetencyAssessment.objects.count(), 2)
 
+    def test_approve__a_concurrent_approval_records_nothing_more(self):
+        """ When another request approves the submission after this one loaded it (two Approve
+        clicks handled at once), the locked recheck sees the approval and records nothing more """
+        stale = QuestSubmission.objects.get(pk=self.submission.pk)  # loaded while still unapproved
+        self.post_decision('approve_button')  # the other request gets there first
+
+        with patch('quest_manager.views.ApproveView.get_submission', return_value=stale):
+            self.post_decision('approve_button')
+
+        self.assertEqual(CompetencyAssessment.objects.count(), 2)
+
+    def test_lock_is_approved__reads_the_database_for_any_submission(self):
+        """ lock_is_approved reads the row, not the in-memory submission, and finds a submission
+        the default manager leaves out (one of an archived quest) """
+        archived = self.make_submission(quest=baker.make(Quest, archived=True))
+        stale = QuestSubmission.objects.get(pk=self.submission.pk)
+        QuestSubmission.objects.filter(pk=self.submission.pk).update(is_approved=True)
+
+        with transaction.atomic():
+            self.assertFalse(lock_is_approved(archived))
+            self.assertTrue(lock_is_approved(stale))
+
     def test_approve__records_nothing_when_disabled_or_without_competencies(self):
         """ No evidence is recorded with the flag off, nor for a quest with no competencies """
         self.post_decision('approve_button', submission=self.make_submission(quest=baker.make(Quest)))
@@ -262,6 +288,16 @@ class ApprovalLevelsWidgetTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "Beginning usually means the quest isn't complete yet")
         self.assertContains(response, 'competencies/js/approval-levels.js')
         self.assertNotContains(response, competency_level_field_name(self.retired.pk))
+
+    def test_levels__nudge_shows_from_the_start_when_a_default_is_the_lowest(self):
+        """ The nudge renders visible when a competency's default level is already the lowest,
+        and hidden otherwise, without waiting for a level to change """
+        url = reverse('quests:submission', args=[self.submission.pk])
+        self.assertContains(self.client.get(url), 'class="help-block text-warning competency-lowest-nudge hidden"')
+
+        QuestCompetency.objects.filter(quest=self.quest, competency=self.communicating).update(default_level=ProficiencyLevel.EMERGING)
+
+        self.assertContains(self.client.get(url), 'class="help-block text-warning competency-lowest-nudge"')
 
     def test_approvals_tab__shows_the_levels_preselected(self):
         """ Each submission's quick reply form on the approvals page carries its level controls """
