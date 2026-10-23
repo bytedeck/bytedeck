@@ -51,6 +51,29 @@ class CompetencyModelTest(ByteDeckTenantTestCase):
         self.assertEqual(str(self.competency), "Communicating")
         self.assertTrue(self.competency.active)
 
+    def test_qualified_name__puts_the_course_and_category_first(self):
+        """ qualified_name reads "Course: Category: Name", leaving out whichever parts are blank """
+        cases = [
+            ({'course': 'Core', 'category': 'Communication'}, 'Core: Communication', 'Core: Communication: Collaborating'),
+            ({'course': 'ADST 9', 'category': ''}, 'ADST 9', 'ADST 9: Collaborating'),
+            ({'course': '', 'category': 'Communication'}, 'Communication', 'Communication: Collaborating'),
+            ({'course': '', 'category': ''}, '', 'Collaborating'),
+        ]
+        for fields, course_and_category, qualified_name in cases:
+            with self.subTest(**fields):
+                competency = Competency(name='Collaborating', **fields)
+                self.assertEqual(competency.course_and_category, course_and_category)
+                self.assertEqual(competency.qualified_name, qualified_name)
+
+    def test_ordering__by_course_then_category_then_name(self):
+        """ Competencies list by course first, so each course's sit together """
+        Competency.objects.all().delete()
+        baker.make(Competency, course='Media Design 10', category='Defining', name='B')
+        baker.make(Competency, course='ADST 9', category='Making', name='A')
+        baker.make(Competency, course='ADST 9', category='Defining', name='C')
+
+        self.assertEqual(list(Competency.objects.values_list('name', flat=True)), ['C', 'A', 'B'])
+
     def test_active__excludes_deactivated(self):
         """ Competency.objects.active() includes active competencies and excludes deactivated ones """
         inactive_competency = baker.make(Competency, active=False)

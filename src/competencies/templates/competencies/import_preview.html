@@ -29,8 +29,9 @@
             <thead>
                 <tr>
                     <th><input type="checkbox" id="toggle-all-entries" checked title="Select all"></th>
-                    <th>Competency</th>
+                    <th>Course</th>
                     <th>Category</th>
+                    <th>Competency</th>
                     <th></th>
                 </tr>
             </thead>
@@ -38,12 +39,13 @@
                 {% for entry in entries %}
                     <tr>
                         <td><input type="checkbox" name="entries" value="{{ forloop.counter0 }}" checked></td>
+                        <td>{{ entry.course }}</td>
+                        <td>{{ entry.category }}</td>
                         <td>
                             {{ entry.name }}
                             {% if entry.description %}<br><small class="text-muted">{{ entry.description }}</small>{% endif %}
                             {% if entry.source_id %}<br><small class="text-muted">{{ entry.source_id }}</small>{% endif %}
                         </td>
-                        <td>{{ entry.category }}</td>
                         <td>
                             {% if entry.status == 'update' %}
                                 <span class="label label-info">update</span>

@@ -7,9 +7,9 @@ from .models import Competency, CompetencyAssessment, QuestCompetency
 
 class CompetencyAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     """ Admin for the deck's competency library. """
-    list_display = ('name', 'category', 'source_id', 'active')
-    list_filter = ('active', 'category')
-    search_fields = ('name', 'description', 'source_id')
+    list_display = ('name', 'course', 'category', 'source_id', 'active')
+    list_filter = ('active', 'course', 'category')
+    search_fields = ('name', 'course', 'description', 'source_id')
 
 
 class QuestCompetencyAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):

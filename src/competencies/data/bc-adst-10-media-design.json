@@ -1,0 +1,198 @@
+{
+    "format": "bytedeck-competency-set",
+    "version": 1,
+    "name": "BC Media Design 10 Curricular Competencies",
+    "jurisdiction": "BC",
+    "subject": "Applied Design, Skills, and Technologies",
+    "grade": "10",
+    "source_url": "https://curriculum.gov.bc.ca/curriculum/adst/10/media-design",
+    "course": "Media Design 10",
+    "entries": [
+        {
+            "source_id": "bc:adst:10:media-design:understanding-context-1",
+            "name": "Engage in a period of research and empathetic observation",
+            "description": "",
+            "category": "Understanding context"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:understanding-context-2",
+            "name": "Engage in reciprocal relationships throughout the design process",
+            "description": "",
+            "category": "Understanding context"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:defining-1",
+            "name": "Identify potential users and relevant contextual factors for a chosen design opportunity",
+            "description": "",
+            "category": "Defining"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:defining-2",
+            "name": "Identify criteria for success, intended impact, and any constraints",
+            "description": "",
+            "category": "Defining"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:defining-3",
+            "name": "Identify potential user, intended impact, and possible unintended negative consequences",
+            "description": "",
+            "category": "Defining"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:ideating-1",
+            "name": "Take creative risks in generating ideas and add to others’ ideas in ways that enhance them",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:ideating-2",
+            "name": "Screen ideas against criteria and constraints",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:ideating-3",
+            "name": "Critically analyze and prioritize competing factors to meet community needs for preferred futures",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:ideating-4",
+            "name": "Recognize community needs for balanced futures",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:ideating-5",
+            "name": "Maintain an open mind about potentially viable ideas",
+            "description": "",
+            "category": "Ideating"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:prototyping-1",
+            "name": "Identify and apply sources of inspiration and information",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:prototyping-2",
+            "name": "Choose a form for prototyping and develop a plan that includes key stages and resources",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:prototyping-3",
+            "name": "Evaluate a variety of materials for effective use and potential for reuse, recycling, and biodegradability",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:prototyping-4",
+            "name": "Prototype, making changes to tools, materials, and procedures as needed",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:prototyping-5",
+            "name": "Record iterations of prototyping",
+            "description": "",
+            "category": "Prototyping"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:testing-1",
+            "name": "Identify and communicate with sources of feedback",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:testing-2",
+            "name": "Edit based on feedback from critiques",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:testing-3",
+            "name": "Iterate the prototype or abandon the design idea",
+            "description": "",
+            "category": "Testing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:making-1",
+            "name": "Identify and use appropriate tools, technologies, materials, and processes for production",
+            "description": "",
+            "category": "Making"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:making-2",
+            "name": "Make a step-by-step plan for production and carry it out, making changes as needed",
+            "description": "",
+            "category": "Making"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:making-3",
+            "name": "Use materials in ways that minimize waste",
+            "description": "",
+            "category": "Making"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:sharing-1",
+            "name": "Share progress while creating design to enable ongoing feedback",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:sharing-2",
+            "name": "Decide on how and with whom to share or promote design",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:sharing-3",
+            "name": "Critically evaluate the success of the design, and explain how ideas contribute to the individual, family, community, and/or environment",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:sharing-4",
+            "name": "Critically reflect on their design thinking and processes, and identify new design goals",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:sharing-5",
+            "name": "Assess ability to work effectively both as individuals and collaboratively in a group, including ability to share and maintain an efficient collaborative work space",
+            "description": "",
+            "category": "Sharing"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:applied-skills-1",
+            "name": "Demonstrate an awareness of precautionary and emergency safety procedures in both physical and digital environments",
+            "description": "",
+            "category": "Applied Skills"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:applied-skills-2",
+            "name": "Identify the skills needed in relation to specific projects, and develop and refine them",
+            "description": "",
+            "category": "Applied Skills"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:applied-technologies-1",
+            "name": "Choose, adapt, and if necessary learn more about appropriate tools and technologies to use for tasks",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:applied-technologies-2",
+            "name": "Evaluate impacts, including unintended negative consequences, of choices made about technology use",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:10:media-design:applied-technologies-3",
+            "name": "Evaluate the influences of land, natural resources, and culture on the development and use of tools and technologies",
+            "description": "",
+            "category": "Applied Technologies"
+        }
+    ]
+}

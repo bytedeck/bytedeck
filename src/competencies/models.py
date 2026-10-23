@@ -45,6 +45,15 @@ class Competency(models.Model):
         help_text="A free-text strand or grouping, e.g. \"Curricular Competency\", \"Big Idea\", or \"Core Competency\"."
     )
 
+    # db_default as well as default: during a deploy the outgoing version still inserts competencies
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and the
+    # deploy window").
+    course = models.CharField(
+        max_length=255, blank=True, default='', db_default='',
+        help_text="The course this competency comes from, e.g. \"ADST 9\", or \"Core\" for the BC Core Competencies. "
+                  "Competency pickers show it before the category, e.g. \"ADST 9: Defining: Choose a design opportunity\"."
+    )
+
     source_id = models.CharField(
         max_length=255, null=True, blank=True,
         help_text="A stable identifier into a source taxonomy such as the BC curriculum. "
@@ -61,12 +70,24 @@ class Competency(models.Model):
     objects = CompetencyQuerySet.as_manager()
 
     class Meta:
-        ordering = ['category', 'name']
+        ordering = ['course', 'category', 'name']
         verbose_name_plural = 'competencies'
 
     def __str__(self):
         """ Returns the competency's name. """
         return self.name
+
+    @property
+    def course_and_category(self):
+        """ Where the competency sits: its course and category, e.g. "Core: Communication" (either
+        part left out when blank, so possibly ''). """
+        return ": ".join(part for part in (self.course, self.category) if part)
+
+    @property
+    def qualified_name(self):
+        """ The name with its course and category in front, e.g. "Core: Communication: Collaborating",
+        so competencies from different courses can be told apart in a picker. """
+        return ": ".join(part for part in (self.course_and_category, self.name) if part)
 
 
 class QuestCompetencyManager(models.Manager):
@@ -105,7 +126,7 @@ class QuestCompetency(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['quest', 'competency'], name='unique_quest_competency')
         ]
-        ordering = ['competency__category', 'competency__name']
+        ordering = ['competency__course', 'competency__category', 'competency__name']
         verbose_name_plural = 'quest competencies'
 
     def __str__(self):
