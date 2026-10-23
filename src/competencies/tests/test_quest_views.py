@@ -108,6 +108,7 @@ class QuestCompetencyViewsTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, 'quest-competency-levels')
 
         self.client.post(reverse('quests:quest_create'), data={**self.post_data, COMPETENCIES_FIELD: [self.thinking.pk]})
+        self.assertTrue(Quest.objects.filter(name="Competency Quest").exists())
         self.assertFalse(QuestCompetency.objects.exists())
 
     def test_quest_copy__carries_the_competencies_over(self):
