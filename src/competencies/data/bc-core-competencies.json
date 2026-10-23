@@ -1,0 +1,53 @@
+{
+    "format": "bytedeck-competency-set",
+    "version": 1,
+    "name": "BC Core Competencies",
+    "jurisdiction": "BC",
+    "subject": "Core Competencies",
+    "grade": "K-12",
+    "source_url": "https://curriculum.gov.bc.ca/competencies",
+    "entries": [
+        {
+            "source_id": "bc:core:k-12:communicating",
+            "name": "Communicating",
+            "description": "Communicating encompasses the set of abilities that people use to impart and exchange information, experiences, and ideas; to explore the world around them; and to understand and effectively use communication forms, strategies, and technologies.",
+            "category": "Communication"
+        },
+        {
+            "source_id": "bc:core:k-12:collaborating",
+            "name": "Collaborating",
+            "description": "Collaborating involves the skills, strategies, and dispositions that people use to work together to pursue common purposes and accomplish common goals.",
+            "category": "Communication"
+        },
+        {
+            "source_id": "bc:core:k-12:creative-thinking",
+            "name": "Creative Thinking",
+            "description": "Creative Thinking involves the generation of ideas and concepts that are novel and innovative in the context in which they are generated, reflection on their value to the individual or others, and the development of chosen ideas and concepts from thought to reality.",
+            "category": "Thinking"
+        },
+        {
+            "source_id": "bc:core:k-12:critical-and-reflective-thinking",
+            "name": "Critical and Reflective Thinking",
+            "description": "Critical and Reflective Thinking encompasses a set of abilities that students use to examine their own thinking and that of others. This involves making judgments based on reasoning, where students consider options, analyze options using specific criteria, and draw conclusions.",
+            "category": "Thinking"
+        },
+        {
+            "source_id": "bc:core:k-12:personal-awareness-and-responsibility",
+            "name": "Personal Awareness and Responsibility",
+            "description": "Personal Awareness and Responsibility involves understanding the connections between personal and social behaviour and well-being; it encourages people to make constructive and ethical decisions and act on them.",
+            "category": "Personal and Social"
+        },
+        {
+            "source_id": "bc:core:k-12:positive-personal-and-cultural-identity",
+            "name": "Positive Personal and Cultural Identity",
+            "description": "Positive Personal and Cultural Identity involves the awareness, understanding, and appreciation of the factors that contribute to a healthy sense of oneself; it includes knowledge of one's family background, heritage(s), language(s), beliefs, and perspectives in a pluralistic society.",
+            "category": "Personal and Social"
+        },
+        {
+            "source_id": "bc:core:k-12:social-awareness-and-responsibility",
+            "name": "Social Awareness and Responsibility",
+            "description": "Social Awareness and Responsibility involves the awareness, understanding, and appreciation of connections among people, including between people and the natural environment. Social Awareness and Responsibility focuses on interacting with others and the natural world in respectful and caring ways.",
+            "category": "Personal and Social"
+        }
+    ]
+}
