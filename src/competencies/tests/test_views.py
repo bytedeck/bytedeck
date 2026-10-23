@@ -1,13 +1,17 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import Http404, HttpResponse
+from django.test import RequestFactory
 from django.urls import reverse
 
 from model_bakery import baker
 
 from competencies.import_export import load_bundled_set
 from competencies.models import Competency
+from competencies.views import competencies_enabled
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
@@ -37,6 +41,15 @@ class CompetencyViewsFeatureFlagTest(ByteDeckTenantTestCase):
         self.client.force_login(staff)
         response = self.client.get(reverse('quests:quests'))
         self.assertNotContains(response, reverse('competencies:list'))
+
+    def test_competencies_enabled__no_siteconfig_is_404(self):
+        """ On the public schema SiteConfig.get() returns None: the flag check treats that as
+        disabled and 404s, rather than raising AttributeError (a 500) """
+        view = competencies_enabled(lambda request: HttpResponse('ok'))
+
+        with patch('competencies.views.SiteConfig.get', return_value=None):
+            with self.assertRaises(Http404):
+                view(RequestFactory().get('/competencies/'))
 
 
 class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
