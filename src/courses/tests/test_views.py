@@ -1,4 +1,5 @@
 import math
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -10,6 +11,7 @@ from django.utils import timezone
 
 from model_bakery import baker
 from freezegun import freeze_time
+from kombu.exceptions import OperationalError
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
@@ -1958,6 +1960,197 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(registration, response.context['registrations'])
+
+
+@freeze_time('2026-10-01')  # a Thursday, 19 class days into the semester set up below
+class SemesterClassDaysCachedMarkTests(ByteDeckTenantTestCase):
+    """Saving an open semester's class days works its students' cached marks out again (#2899).
+
+    A mark is a student's XP over the share of the semester's class days that has passed, so an
+    excluded date or a moved first or last day changes it. The header color, the student list and
+    the Mark Distribution chart read Profile.mark_cached, which has to follow straight away rather
+    than at the nightly recalculation.
+    """
+
+    def setUp(self):
+        """Give the open semester 40 class days, Monday 7 September to Friday 30 October 2026, and
+        register a student whose 95 XP, in a course out of 1000, is a mark of 20.0% today."""
+        self.semester = SiteConfig.get().active_semester
+        self.semester.first_day = datetime.date(2026, 9, 7)
+        self.semester.last_day = datetime.date(2026, 10, 30)
+        self.semester.save()
+
+        self.student = baker.make(User)
+        baker.make(
+            CourseStudent, user=self.student, semester=self.semester, block=baker.make(Block),
+            course=baker.make(Course, xp_for_100_percent=1000), xp_adjustment=95,
+        )
+        self.assertEqual(self._cached_mark(), 20.0)
+
+    def _admin_login(self):
+        """Log in as a superuser, who may change a semester from the admin."""
+        self.client.force_login(User.objects.create_superuser('semester_admin', password='password'))
+
+    def _cached_mark(self):
+        """Return the student's mark as cached on their profile.
+
+        Returns:
+            Decimal: their mark_cached.
+        """
+        self.student.profile.refresh_from_db()
+        return self.student.profile.mark_cached
+
+    def _post(self, url, data, queueing=None):
+        """Post to url, running any recalculation it queues in place once the save commits, as the
+        worker would.
+
+        Args:
+            url (str): where to post.
+            data (dict): the form data.
+            queueing: what queueing the recalculation does instead, e.g. an exception to raise.
+
+        Returns:
+            tuple: the response, and the mock standing in for queueing the recalculation.
+        """
+        from profile_manager.tasks import invalidate_profile_xp_cache_on_schema
+
+        if queueing is None:
+            def queueing(**kwargs):
+                return invalidate_profile_xp_cache_on_schema()
+
+        with patch.object(invalidate_profile_xp_cache_on_schema, 'apply_async', side_effect=queueing) as queue, \
+                self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(url, data=data)
+        return response, queue
+
+    def _form_data(self, semester, excluded_dates=(), **changes):
+        """Return the semester form's data for semester, with changes and new excluded dates.
+
+        The first and last day default to date.today, a callable, so the page also sends each
+        one's value as it was loaded, in a hidden initial-* input, and Django compares the posted
+        date with that to tell whether it changed. The browser posts them, so this does too.
+
+        Args:
+            semester (Semester): the semester being edited.
+            excluded_dates (iterable of date): excluded dates to add.
+            **changes: the semester's own fields to change, e.g. last_day='2026-10-29'.
+
+        Returns:
+            dict: the form and formset data to post.
+        """
+        excluded_dates = list(excluded_dates)
+        return {
+            'name': semester.name, 'first_day': semester.first_day.isoformat(), 'last_day': semester.last_day.isoformat(),
+            'initial-first_day': semester.first_day.isoformat(), 'initial-last_day': semester.last_day.isoformat(),
+            **changes,
+            **generate_formset_data(ExcludedDateFormset, quantity=len(excluded_dates), date=itertools.cycle(excluded_dates)),
+        }
+
+    def test_SemesterUpdate__excluded_date__recalculates_cached_marks(self):
+        """Excluding Friday 30 October leaves 39 class days, 19 of them passed, so the student's
+        cached mark drops from 20.0% to 19.5%, as Mark Calculations already shows it."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[self.semester.pk]),
+            self._form_data(self.semester, excluded_dates=[datetime.date(2026, 10, 30)]),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterUpdate__last_day_moved__recalculates_cached_marks(self):
+        """Ending the semester a day sooner leaves 39 class days, the same as excluding one."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[self.semester.pk]),
+            self._form_data(self.semester, last_day='2026-10-29'),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterUpdate__task_queue_unavailable__still_saves(self):
+        """A task queue that can't take the recalculation is logged, and the save it follows
+        still succeeds: the excluded date is kept, and the cached mark waits for the nightly
+        recalculation."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        with self.assertLogs('django.test', level='ERROR') as logs:
+            response, queue = self._post(
+                reverse('courses:semester_update', args=[self.semester.pk]),
+                self._form_data(self.semester, excluded_dates=[datetime.date(2026, 10, 30)]),
+                queueing=OperationalError('the broker is down'),
+            )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertIn('the broker is down', logs.output[0])
+        self.assertTrue(self.semester.excludeddate_set.filter(date=datetime.date(2026, 10, 30)).exists())
+        self.assertEqual(self._cached_mark(), Decimal('20.0'))
+
+    def test_SemesterUpdate__name_only__recalculates_nothing(self):
+        """Renaming the semester leaves its class days, and so every mark, as they were, so no
+        recalculation is queued."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[self.semester.pk]),
+            self._form_data(self.semester, name='Fall 2026'),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_not_called()
+
+    def test_SemesterUpdate__upcoming_semester__recalculates_nothing(self):
+        """No cached mark comes from a semester that isn't open yet, so excluding one of its dates
+        queues nothing."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+        upcoming = baker.make(Semester, first_day=datetime.date(2027, 2, 1), last_day=datetime.date(2027, 6, 25))
+
+        response, queue = self._post(
+            reverse('courses:semester_update', args=[upcoming.pk]),
+            self._form_data(upcoming, excluded_dates=[datetime.date(2027, 2, 15)]),
+        )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_not_called()
+
+    def test_SemesterAdmin__excluded_date__recalculates_cached_marks(self):
+        """Excluding a date from the semester's admin page recalculates the cached marks too."""
+        self._admin_login()
+        data = {
+            'name': self.semester.name, 'first_day': '2026-09-07', 'last_day': '2026-10-30',
+            'initial-first_day': '2026-09-07', 'initial-last_day': '2026-10-30', 'status': self.semester.status,
+            'excludeddate_set-TOTAL_FORMS': 1, 'excludeddate_set-INITIAL_FORMS': 0,
+            'excludeddate_set-MIN_NUM_FORMS': 0, 'excludeddate_set-MAX_NUM_FORMS': 1000,
+            'excludeddate_set-0-date': '2026-10-30', 'excludeddate_set-0-label': '',
+            'excludeddate_set-0-semester': self.semester.pk,
+        }
+
+        response, queue = self._post(reverse('admin:courses_semester_change', args=[self.semester.pk]), data)
+
+        self.assertRedirects(response, reverse('admin:courses_semester_changelist'))
+        queue.assert_called_once_with(queue='default')
+        self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterAdmin__name_only__recalculates_nothing(self):
+        """Renaming the semester from its admin page queues no recalculation."""
+        self._admin_login()
+        data = {
+            'name': 'Fall 2026', 'first_day': '2026-09-07', 'last_day': '2026-10-30',
+            'initial-first_day': '2026-09-07', 'initial-last_day': '2026-10-30', 'status': self.semester.status,
+            'excludeddate_set-TOTAL_FORMS': 0, 'excludeddate_set-INITIAL_FORMS': 0,
+            'excludeddate_set-MIN_NUM_FORMS': 0, 'excludeddate_set-MAX_NUM_FORMS': 1000,
+        }
+
+        response, queue = self._post(reverse('admin:courses_semester_change', args=[self.semester.pk]), data)
+
+        self.assertRedirects(response, reverse('admin:courses_semester_changelist'))
+        queue.assert_not_called()
 
 
 class BlockViewTests(ByteDeckTenantTestCase):

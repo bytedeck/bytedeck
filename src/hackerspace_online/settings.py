@@ -951,12 +951,15 @@ SUMMERNOTE_CONFIG = {
 
         # The menus that pop up over a clicked image, link or table. They belong here with the toolbar:
         # django-summernote hands the editor only this 'summernote' dict (#268). The image menu's size
-        # buttons carry Summernote 0.8.20's names, and "custom" holds the buttons our plugins add.
+        # buttons carry Summernote 0.8.20's names, and "custom", "imagelink" and "imagealign" hold the
+        # buttons our plugins add.
         'popover': {
             'image': [
-                ['custom', ['imageShapes']],
+                ['custom', ['imageShapes', 'imageSource']],
+                ['imagelink', ['imageLink', 'imageUnlink']],
                 ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
                 ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                ['imagealign', ['imageAlignLeft', 'imageAlignCenter', 'imageAlignRight']],
                 ['remove', ['removeMedia']]
             ],
             'link': [
@@ -1022,6 +1025,9 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-source.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-link.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-align.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
@@ -1056,6 +1062,9 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-source.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-link.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-align.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),

@@ -21,7 +21,9 @@
     imageShapes: {
       icon: '<i class="note-icon-picture"/>',
       /* Must keep the same order as in lang.imageAttributes.tooltipShapeOptions */
-      shapes: ['img-responsive', 'img-rounded', 'img-circle', 'img-thumbnail', '']
+      shapes: ['img-responsive', 'img-rounded', 'img-circle', 'img-thumbnail', ''],
+      /* The shape an image has when it is added to the editor, or '' for none (bytedeck/bytedeck#2906) */
+      insertShape: 'img-responsive'
     }
   });
   $.extend($.summernote.plugins, {
@@ -47,6 +49,33 @@
         $menu.find('a').filter(function() {
           return shapes[$.inArray($(this).data('value'), labels)] === '';
         }).toggleClass('checked', !hasShape);
+      };
+
+      /* Give each image added to the editor the starting shape. Every way of adding one goes
+         through the editor's insertImage: the Insert Image dialog's file and URL, and an image
+         dropped or pasted in. insertImage sizes the image itself only when it is not handed a
+         function that arranges it, so the function here sizes it the same way: its own width,
+         no wider than the editor, and the file name insertImage was given, if any. */
+      self.initialize = function() {
+        var editor = context.modules.editor,
+            insertImage = editor.insertImage,
+            insertShape = options.imageShapes.insertShape;
+        if (!insertShape) {
+          return;
+        }
+        editor.insertImage = function(src, param) {
+          return insertImage.call(editor, src, function($image) {
+            if (typeof param === 'function') {
+              param($image);
+            } else {
+              if (typeof param === 'string') {
+                $image.attr('data-filename', param);
+              }
+              $image.css('width', Math.min($editable.width(), $image.width()));
+            }
+            $image.addClass(insertShape);
+          });
+        };
       };
 
       context.memo('button.imageShapes', function() {

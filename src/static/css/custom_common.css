@@ -338,6 +338,15 @@ img.note-float-left, img.pull-left {
     margin-right: 10px;
 }
 
+/* An image on a line of its own at the right, as Bootstrap 3's center-block puts one in the center:
+   the editor's image menu aligns an image with either (#2910). Being a block, it is placed by its
+   margins, since a paragraph's text-align moves only inline content. */
+img.img-align-right {
+    display: block;
+    margin-left: auto;
+    margin-right: 0;
+}
+
 /*************** Lists *******************/
 
 ol > ol {
@@ -1129,6 +1138,17 @@ div.btn-group.action-btn-group {
     figure.pull-right, figure.pull-left {
         margin-left: 0px;
         float: none !important;
+    }
+
+    /* A floated image sits on a line of its own too, with the text below it: beside an image of a
+       fixed width, a phone has room for a column of text too narrow to read (#2918). The editor's
+       Float Left and Float Right put the float in the image's style, which only !important outranks. */
+    img.note-float-left, img.note-float-right, img.pull-left, img.pull-right {
+        display: block;
+        float: none !important;
+        margin-left: 0;
+        margin-right: 0;
+        margin-bottom: 10px;
     }
 
 
