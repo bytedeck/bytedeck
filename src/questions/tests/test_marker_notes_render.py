@@ -260,6 +260,21 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertNotIn("danger", (x.locator("xpath=ancestor::tr[1]").get_attribute("class") or "").split())
         self.assertTrue(x.is_enabled())
 
+    def test_mark__a_row_marked_wrong_in_the_dark_theme(self):
+        """In the dark theme a row marked wrong is a dark red, not Slate's own danger coral, which
+        is the colour of the red X itself and would hide it (#2933)."""
+        self.page.add_style_tag(path=finders.find("css/bootstrap_slate-3.4.1.min.css"))
+        self.page.add_style_tag(path=finders.find("css/custom_slate.css"))
+        x = self.page.locator(f'.answer-mark-wrong[data-mark-url="{self.mark_path}"]')
+
+        x.click()
+
+        self.page.wait_for_function(
+            "document.querySelector('.question-answers tr.danger') !== null", timeout=10000)
+        backgrounds = self.page.eval_on_selector_all(
+            ".question-answers tr.danger > td", "cells => cells.map(cell => getComputedStyle(cell).backgroundColor)")
+        self.assertEqual(set(backgrounds), {"rgb(70, 40, 42)"})
+
     def test_layout__stacked_on_a_narrow_screen(self):
         """Below Bootstrap's sm breakpoint the question comes first, then the answer, then the
         solution, one under another, each under a label of its own in place of the header row."""
