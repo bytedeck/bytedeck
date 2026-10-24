@@ -8,7 +8,8 @@
 {% comment %}
   The evidence behind a student's level in one competency (CompetencyEvidenceView): each assessment,
   most recent first, with the quest it came from (linked to the submission for staff, named for the
-  student), its level and who assessed it.
+  student, or noted when the quest was deleted or the evidence came from elsewhere), its level and
+  who assessed it.
 {% endcomment %}
 <p>
   {% if competency.course_and_category %}<span class="text-muted">{{ competency.course_and_category }}</span><br>{% endif %}
@@ -32,10 +33,11 @@
     <tr>
       <td title="{{ assessment.timestamp }}">{{ assessment.timestamp|date }}</td>
       <td>
-        {% with submission=assessment.source_object %}
-          {% if not submission %}<em>A deleted quest</em>
-          {% elif request.user.is_staff %}<a href="{{ submission.get_absolute_url }}">{{ submission.quest.name }}</a>
-          {% else %}{{ submission.quest.name }}{% endif %}
+        {% with submission=row.submission %}
+          {% if submission and request.user.is_staff %}<a href="{{ submission.get_absolute_url }}">{{ submission.quest.name }}</a>
+          {% elif submission %}{{ submission.quest.name }}
+          {% elif row.from_quest %}<em>A deleted quest</em>
+          {% else %}<em>Not from a quest</em>{% endif %}
         {% endwith %}
       </td>
       <td><span class="label competency-level competency-level-{{ assessment.level }}">{{ row.label }}</span></td>

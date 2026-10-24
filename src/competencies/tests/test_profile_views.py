@@ -208,6 +208,19 @@ class CompetencyEvidenceViewTest(CompetencyEvidenceMixin, ByteDeckTenantTestCase
         self.assertContains(response, "<em>A deleted quest</em>", html=True)
         self.assertNotContains(response, "Gone Quest")
 
+    def test_evidence__evidence_not_from_a_quest_says_so(self):
+        """ Evidence with no source, or from something other than a quest submission, is marked as not
+        from a quest, rather than as a deleted quest or with a quest it doesn't have """
+        self.assess(self.thinking, ProficiencyLevel.PROFICIENT, minutes_ago=10)
+        self.assess(self.thinking, ProficiencyLevel.EXTENDING, minutes_ago=5, source=baker.make(Quest, name="Not A Submission"))
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(self.evidence_url(self.thinking))
+
+        self.assertEqual(response.content.decode().count("<em>Not from a quest</em>"), 2)
+        self.assertNotContains(response, "A deleted quest")
+        self.assertNotContains(response, "Not A Submission")
+
     def test_evidence__empty_state(self):
         """ A competency the student has no evidence for yet says so, with no current level """
         self.client.force_login(self.student)
