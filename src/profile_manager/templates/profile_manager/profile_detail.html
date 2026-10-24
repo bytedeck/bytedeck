@@ -1,6 +1,7 @@
 {% extends "profile_manager/base.html" %}
 {% load utility_tags %}
 {% load filters %}
+{% load competency_tags %}
 
 {% block heading_inner %}{{ object.get_preferred_name|default:"<<no name>>"|add_possessive }} Profile
     <div class="btn-group" role="group">
@@ -261,8 +262,9 @@
 {#       </div> <!--panel -->#}
   </div>
 
-  <!-- BADGES -->
+  <!-- COMPETENCIES (on decks that have them) and BADGES -->
   <div class="col-sm-6">
+    {% if not object.user.is_staff %}{% profile_competencies object.user %}{% endif %}
     <div class="panel panel-primary">
       <div class="panel-heading">
         <i class="pull-right fa fa-fw fa-certificate"></i>

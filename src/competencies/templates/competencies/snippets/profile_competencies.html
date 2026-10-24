@@ -1,0 +1,28 @@
+{% comment %}
+  The Competencies panel of a student's profile (the profile_competencies tag): each competency the
+  student has evidence for, at its current level, grouped under its course and category. It sits
+  beside the XP, which it leaves alone: a level is never turned into XP or a percentage. Each links
+  to the evidence behind it; a long name is cut to one line, in full in the title.
+{% endcomment %}
+{% if enabled %}
+<div class="panel panel-primary">
+  <div class="panel-heading">
+    <i class="pull-right fa fa-fw fa-graduation-cap"></i>
+    <h3 class="panel-title">Competencies</h3>
+  </div>
+  <div class="list-group">
+    {% regroup rows by competency.course_and_category as groups %}
+    {% for group in groups %}
+      {% if group.grouper %}<div class="list-group-item list-group-item-info">{{ group.grouper }}</div>{% endif %}
+      {% for row in group.list %}
+      <a href="{% url 'competencies:evidence' student.pk row.competency.pk %}" class="list-group-item list-group-item-packed competency-level-row" title="{{ row.competency.qualified_name }}">
+        <span class="competency-level-row-name">{{ row.competency.name }}</span>
+        <span class="label competency-level competency-level-{{ row.level }}">{{ row.label }}</span>
+      </a>
+      {% endfor %}
+    {% empty %}
+      <div class="list-group-item">None yet.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

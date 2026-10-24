@@ -1,13 +1,18 @@
 import json
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.prefetch import GenericPrefetch
 from django.http import Http404, HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.views.generic import FormView, ListView, TemplateView
 
 from hackerspace_online.decorators import staff_member_required
+
+from quest_manager.models import QuestSubmission
 
 from siteconfig.models import SiteConfig
 
@@ -15,7 +20,7 @@ from tenant.views import NonPublicOnlyViewMixin
 
 from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
-from .models import Competency
+from .models import Competency, CompetencyAssessment
 
 # session key holding the parsed competency set between the upload and preview steps
 IMPORT_SESSION_KEY = 'competency_import_set'
@@ -136,3 +141,47 @@ class CompetencyExportView(NonPublicOnlyViewMixin, TemplateView):
         else:
             raise Http404
         return response
+
+
+@method_decorator([competencies_enabled, login_required], name='dispatch')
+class CompetencyEvidenceView(NonPublicOnlyViewMixin, TemplateView):
+    """ The evidence behind a student's level in one competency, which their profile's Competencies
+    panel links to: every assessment of it, most recent first, with the quest it came from, its
+    level and who assessed it. Students see their own evidence; staff see anyone's.
+    """
+    template_name = 'competencies/evidence.html'
+
+    def get(self, request, *args, **kwargs):
+        """ Renders the page for the student and competency in the URL.
+
+        Raises:
+            Http404: if either doesn't exist, or the student is someone else and the requesting
+                user isn't staff (so another student's evidence isn't even confirmed to exist).
+        """
+        self.student = get_object_or_404(get_user_model(), pk=kwargs['user_pk'])
+        if self.student != request.user and not request.user.is_staff:
+            raise Http404
+        self.competency = get_object_or_404(Competency, pk=kwargs['competency_pk'])
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """ Returns the template context: the student, the competency, their current assessment of
+        it with the deck's label, and 'rows', each assessment with its label.
+
+        Each assessment's submission and quest are prefetched, through the base manager so that
+        submissions of quests since archived or unpublished still name their quest.
+        """
+        labels = SiteConfig.get().get_competency_scale_labels()
+        evidence = CompetencyAssessment.objects.filter(user=self.student, competency=self.competency)
+        current = evidence.current().first()
+        assessments = evidence.select_related('assessed_by__profile').prefetch_related(
+            GenericPrefetch('source_object', [QuestSubmission._base_manager.select_related('quest')]),
+        )
+        kwargs.update({
+            'student': self.student,
+            'competency': self.competency,
+            'current': current,
+            'current_label': labels[current.level] if current else '',
+            'rows': [{'assessment': assessment, 'label': labels[assessment.level]} for assessment in assessments],
+        })
+        return super().get_context_data(**kwargs)

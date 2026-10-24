@@ -4,7 +4,7 @@ from siteconfig.models import SiteConfig
 
 from ..assessments import approval_links, posted_level
 from ..forms import competency_level_field_name
-from ..models import ProficiencyLevel
+from ..models import CompetencyAssessment, ProficiencyLevel
 
 register = template.Library()
 
@@ -22,6 +22,33 @@ def quest_competency_list(quest):
         dict: the snippet's context: 'links', the quest's links to its active competencies.
     """
     return {'links': approval_links(quest)}
+
+
+@register.inclusion_tag('competencies/snippets/profile_competencies.html')
+def profile_competencies(student):
+    """ The Competencies panel of a student's profile: each competency they have evidence for, at
+    its current level (see CompetencyAssessmentQuerySet.current) in the deck's label, in course,
+    category and name order. Renders nothing when the deck has competencies disabled.
+
+    The levels come from one query, however many competencies the student has.
+
+    Args:
+        student (User): the student whose profile it is.
+
+    Returns:
+        dict: the snippet's context: 'enabled', the student, and 'rows', each with the competency,
+        its current level and the deck's label for it.
+    """
+    config = SiteConfig.get()
+    if config is None or not config.enable_competencies:
+        return {'enabled': False}
+
+    labels = config.get_competency_scale_labels()
+    current = CompetencyAssessment.objects.filter(user=student).current().select_related('competency').order_by(
+        'competency__course', 'competency__category', 'competency__name',
+    )
+    rows = [{'competency': assessment.competency, 'level': assessment.level, 'label': labels[assessment.level]} for assessment in current]
+    return {'enabled': True, 'student': student, 'rows': rows}
 
 
 @register.inclusion_tag('competencies/snippets/approval_levels.html', takes_context=True)

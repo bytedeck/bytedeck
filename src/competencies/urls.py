@@ -9,4 +9,5 @@ urlpatterns = [
     path('import/', views.CompetencyImportView.as_view(), name='import'),
     path('import/preview/', views.CompetencyImportPreviewView.as_view(), name='import_preview'),
     path('export/', views.CompetencyExportView.as_view(), name='export'),
+    path('evidence/<int:user_pk>/<int:competency_pk>/', views.CompetencyEvidenceView.as_view(), name='evidence'),
 ]
