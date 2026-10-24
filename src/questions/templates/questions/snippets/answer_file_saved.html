@@ -1,0 +1,31 @@
+{% load comment_tags %}
+{% comment %}
+  The file saved with a student's draft answer to a file question, with the button that removes
+  it (#2925), listed the way the submission's own attachments are
+  (quest_manager/snippets/draft_attachments.html). A file input always renders empty, since
+  browsers never repopulate one, so this is the only record of what the answer holds.
+
+  A file a browser would run a script from is linked through the download view, never at its
+  storage URL, where following the link would run that script in the student's own signed-in
+  session (#2559, #2785).
+
+  Rendered from `answer` (the QuestionSubmission), and re-rendered into the page by the
+  draft-save and answer-file-delete endpoints, so the markup has a single source.
+{% endcomment %}
+{% if answer.response_file %}
+  <ul class="file-links">
+    <li class="file-link">
+      {% if answer.response_file_is_script_capable %}
+        <a href="{% url 'questions:answer_file_download' answer.id %}">
+          <i class="fa fa-fw fa-download"></i>{{ answer.response_file|filename }}</a>
+      {% else %}
+        <a href="{{ answer.response_file.url }}" target="_blank">{{ answer.response_file|filename }}</a>
+      {% endif %}
+      <button type="button" class="btn btn-default btn-xs pull-right answer-file-delete"
+              data-delete-url="{% url 'questions:ajax_delete_draft_answer_file' answer.id %}"
+              title="Delete {{ answer.response_file|filename|striptags }} from your answer. It is removed for good, so choose it again if you still need it.">
+        <i class="fa fa-trash-o text-danger"></i> Delete
+      </button>
+    </li>
+  </ul>
+{% endif %}

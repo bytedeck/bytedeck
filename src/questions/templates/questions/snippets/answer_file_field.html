@@ -1,0 +1,29 @@
+{% comment %}
+  A file question's answer, drawn as the submission's own attachments are
+  (quest_manager/snippets/attachments_field.html, #2749) but for one file (#2925): the file saved
+  with the draft, with the button that removes it, and below it the button that chooses one. A
+  chosen file is saved with the draft at once (quest_manager/submission.html), and choosing
+  another replaces it.
+
+  The crispy field template for QuestionSubmissionForm's response_file, rendered with `field`
+  and the answer form as `form`, whose instance is the draft row holding the saved file. The
+  file input itself is reachable only through the button, for the reasons the attachments
+  control gives.
+{% endcomment %}
+<div id="div_{{ field.auto_id }}" class="form-group bt-attachments{% if field.errors %} has-error{% endif %}">
+  <label class="control-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="asteriskField">*</span>{% endif %}</label>
+  {# what the draft-save and answer-file-delete endpoints re-render into, so it stays current without a reload #}
+  <div class="answer-file-saved" data-for="{{ field.html_name }}">
+    {% include "questions/snippets/answer_file_saved.html" with answer=form.instance %}
+  </div>
+  <div class="bt-attachments-add">
+    {{ field }}
+    <label class="btn btn-default btn-sm" for="{{ field.id_for_label }}">
+      <i class="fa fa-fw fa-paperclip"></i> Choose file
+    </label>
+    <span id="hint_{{ field.auto_id }}" class="help-block">{{ field.help_text|safe }}</span>
+    {% for error in field.errors %}
+      <span class="help-block text-danger">{{ error }}</span>
+    {% endfor %}
+  </div>
+</div>

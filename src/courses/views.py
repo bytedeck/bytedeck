@@ -31,7 +31,7 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import (
-    BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
+    BlockForm, CourseForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
     ExcludedDateFormset, ExcludedDateFormsetHelper, class_days_changed,
 )
 from .models import Block, Course, CourseStudent, ExcludedDate, Rank, Semester, MarkRange, semester_for
@@ -302,7 +302,7 @@ class CourseList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active')
+    form_class = CourseForm
     model = Course
     success_url = reverse_lazy('courses:course_list')
 
@@ -316,7 +316,7 @@ class CourseCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active')
+    form_class = CourseForm
     model = Course
     success_url = reverse_lazy('courses:course_list')
 

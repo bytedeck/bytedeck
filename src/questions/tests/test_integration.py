@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from unittest.mock import patch
 
@@ -162,6 +163,24 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         content = response.content.decode()
         self.assertContains(response, "You must provide a text response")
         self.assertEqual(content.count("summernote.min.js"), 1)
+
+    def test_complete__failed_submit_rerenders_the_comment_editor(self):
+        """A submission bounced back for a validation error shows the comment box as the editor,
+        with what the student wrote in it, and the attachments control below it (#2926).
+
+        With no files attached, the POST is validated by `SubmissionQuickReplyFormStudent`,
+        whose `comment_text` is a plain textarea and which has no attachments field. Shown
+        back as it is, the page's Additional Submission Comments box is that textarea, holding
+        the editor's markup (`<p><br></p>` for an empty comment) as text.
+        """
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "<p>My notes</p>", **self.formset_data(short_text="")})
+
+        self.assertEqual(response.status_code, 200, "expected the validation-error re-render")
+        self.assertContains(response, "initSummernote_id_comment_text()")
+        self.assertContains(response, 'name="attachments"')
+        self.assertEqual(response.context["submission_form"]["comment_text"].value(), "<p>My notes</p>")
 
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset."""
@@ -851,6 +870,150 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(self.submission.draft_comment.text, "<p>still saves</p>")
 
 
+class AnswerFileControlTest(QuestionSubmissionFlowTestBase):
+    """A file answer's control lists its saved file with a Delete button, as the submission's
+    attachments do (#2925), and never links a script-capable one at its storage URL (#2785)."""
+
+    def setUp(self):
+        """An optional image question that takes an SVG, added to the submission's quest."""
+        self.file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Upload your logo.</p>", allowed_file_type="image",
+            allow_script_capable_files=True,
+        )
+        super().setUp()
+
+    def save_file(self, upload):
+        """Choose a file for the question, as the page does: a draft save carrying it.
+
+        Args:
+            upload (SimpleUploadedFile): the chosen file.
+
+        Returns:
+            tuple: the draft save's JSON payload, and the answer row, refreshed.
+        """
+        field_name = self.file_field_name(self.file_question)
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={"comment": "", "submission_id": self.submission.id,
+                  **self.formset_data(short_text="draft"), field_name: upload},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=self.file_question)
+        return json.loads(response.content), row
+
+    def delete_file(self, row):
+        """Press the Delete button beside the answer's saved file.
+
+        Args:
+            row (QuestionSubmission): the answer whose file to remove.
+
+        Returns:
+            HttpResponse: the endpoint's response.
+        """
+        return self.client.post(
+            reverse("questions:ajax_delete_draft_answer_file", args=[row.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def png(self, name="logo.png"):
+        """A small PNG upload."""
+        return SimpleUploadedFile(name, b"png-bytes", content_type="image/png")
+
+    def test_save_draft__returns_the_file_as_its_control_lists_it(self):
+        """The draft save hands back the answer's saved file with its Delete button, for the page
+        to show in place of the old list."""
+        payload, row = self.save_file(self.png())
+
+        html = payload["answer_files_html"][self.file_field_name(self.file_question)]
+        self.assertIn(os.path.basename(row.response_file.name), html)
+        self.assertIn(reverse("questions:ajax_delete_draft_answer_file", args=[row.id]), html)
+
+    def test_submission_page__lists_the_saved_file_with_its_delete_button(self):
+        """A returning student sees the file their draft holds, with the button that removes it,
+        and no "Currently:" line from the input (#2925)."""
+        _, row = self.save_file(self.png())
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, 'class="answer-file-saved"')
+        self.assertContains(response, os.path.basename(row.response_file.name))
+        self.assertContains(response, reverse("questions:ajax_delete_draft_answer_file", args=[row.id]))
+        self.assertContains(response, "Choose file")
+        self.assertNotContains(response, "Currently")
+
+    def test_submission_page__a_saved_svg_is_never_linked_at_its_url(self):
+        """A draft-saved SVG is offered through the download view and nowhere at its storage URL,
+        where following the link would run its script in the student's session (#2785)."""
+        _, row = self.save_file(SimpleUploadedFile(
+            "logo.svg", b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            content_type="image/svg+xml"))
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, reverse("questions:answer_file_download", args=[row.id]))
+        self.assertNotContains(response, row.response_file.url)
+
+    def test_delete__removes_the_file_from_the_answer_and_storage(self):
+        """Delete empties the answer and its list, and the stored file goes once that commits."""
+        _, row = self.save_file(self.png())
+        stored = row.response_file.name
+        self.assertTrue(default_storage.exists(stored))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.delete_file(row)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["answer_file_html"].strip(), "")
+        row.refresh_from_db()
+        self.assertFalse(row.response_file)
+        self.assertFalse(default_storage.exists(stored))
+
+    def test_delete__another_students_answer_is_404(self):
+        """Only the student whose draft it is can remove its file."""
+        _, row = self.save_file(self.png())
+        self.client.force_login(User.objects.create_user("nosy", password="password"))
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+        row.refresh_from_db()
+        self.assertTrue(row.response_file)
+
+    def test_delete__a_published_answer_is_404(self):
+        """An answer handed in with the quest is the teacher's to read, not the student's to empty."""
+        _, row = self.save_file(self.png())
+        QuestionSubmission.objects.filter(pk=row.pk).update(comment=self.submission.draft_comment)
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+        row.refresh_from_db()
+        self.assertTrue(row.response_file)
+
+    def test_delete__a_finished_submission_is_404(self):
+        """Once the quest is handed in there is no draft left to change."""
+        _, row = self.save_file(self.png())
+        QuestSubmission.objects.filter(pk=self.submission.pk).update(draft_comment=None)
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+
+    def test_delete__an_answer_with_no_file_is_404(self):
+        """Nothing to remove, so the endpoint refuses rather than saving the row for nothing."""
+        row = sync_draft_question_submissions(self.submission).get(question=self.file_question)
+
+        self.assertEqual(self.delete_file(row).status_code, 404)
+
+    def test_delete__post_only(self):
+        """A GET removes nothing, so a link followed by mistake cannot empty an answer."""
+        _, row = self.save_file(self.png())
+
+        response = self.client.get(
+            reverse("questions:ajax_delete_draft_answer_file", args=[row.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 405)
+        row.refresh_from_db()
+        self.assertTrue(row.response_file)
+
+
 class DraftSaveRacesSubmitTest(QuestionSubmissionFlowTestBase):
     """A draft save that lands while the student's submit is publishing writes only the
     answer it carries, so it cannot revert a published answer to a draft (#2565).
@@ -976,20 +1139,40 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "An URL like https://example.com")
         self.assertContains(response, "Check it loads.")
 
-    def test_display__multiparagraph_marker_notes_render_in_div(self):
-        """Multi-paragraph marker notes keep their <p> tags (unwrap_p only strips a single
-        wrapping one), so the label wrapper is a <div>, not a <p>: a <p> nested in a <p> is
-        invalid and the browser would auto-close the outer one, breaking the label layout."""
-        self.short_question.marker_notes = "<p>First note.</p><p>Second note.</p>"
+    def test_display__staff_get_a_solution_column(self):
+        """Markers get three columns, Question, Answer provided and Solution, with the solution
+        in a cell of its own beside the answer (#2927), its heading noting that students don't see it."""
+        self.short_question.solution_text = "An URL like https://example.com"
         self.short_question.save()
         self.complete_with_answers()
 
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertContains(response, '<div class="text-muted"><small><b>Marker notes:</b>')
-        # both paragraphs survive verbatim: unwrap_p only strips a single wrapping <p>, so
-        # multi-paragraph notes keep their tags (rather than being flattened or escaped)
-        self.assertContains(response, "<p>First note.</p><p>Second note.</p>")
+
+        content = response.content.decode()
+        headers = re.findall(r'<th class="col-sm-\d">(.*?)</th>', content)
+        self.assertEqual(headers, ["Question", "Answer provided", "Solution <small>(visible to staff only)</small>"])
+        solution_cell = re.search(r'<td class="col-sm-3">(.*?)</td>', content, re.S).group(1)
+        self.assertIn("An URL like https://example.com", solution_cell)
+        # the long answer has no solution, so its cell says so rather than standing empty
+        self.assertEqual(len(re.findall(r'<td class="col-sm-3">', content)), 2)
+        self.assertContains(response, '<span class="text-muted">-</span>')
+
+    def test_display__marker_notes_are_kept_as_written_beside_the_solution(self):
+        """The marker notes sit behind an info button in the Solution cell, as the teacher wrote
+        them, paragraphs, images and links included, ready for the popover to show (#2923)."""
+        notes = '<p>First note.</p><p><img src="/media/rubric.png"> <a href="https://example.com">rubric</a></p>'
+        self.short_question.marker_notes = notes
+        self.short_question.save()
+        self.complete_with_answers()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        content = response.content.decode()
+        solution_cell = re.search(r'<td class="col-sm-3">(.*?)</td>', content, re.S).group(1)
+        self.assertIn('class="btn btn-link marker-notes-popover"', solution_cell)
+        self.assertIn(f'<template class="marker-notes-content">{notes}</template>', solution_cell)
 
     def publish_file_answer(self, file_name, content=b"pretend media"):
         """Give the submission a published file answer, as if the student had uploaded one.
@@ -1065,18 +1248,36 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
 
         self.short_question.refresh_from_db()
-        self.assertContains(response, "<b>Solution file:</b>")
         self.assertContains(response, self.short_question.solution_file.url)
         self.assertContains(response, '<img class="question-media"')
 
+    def test_display__a_script_capable_solution_downloads(self):
+        """A solution a browser would run a script from is linked through the download view,
+        never at its storage URL, beside the answers it is compared with (#2924)."""
+        self.short_question.solution_file = SimpleUploadedFile("example.html", b"<h1>example</h1>")
+        self.short_question.save()
+        self.complete_with_answers()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.short_question.refresh_from_db()
+        self.assertContains(response, reverse("questions:solution_file_download", args=[self.short_question.pk]))
+        self.assertNotContains(response, f'href="{self.short_question.solution_file.url}"')
+
     def test_display__student_does_not_see_marker_notes(self):
-        """Solutions and marker notes stay staff-only in the answers display."""
+        """Solutions and marker notes stay staff-only in the answers display, which keeps its
+        two columns for the student."""
         self.short_question.solution_text = "SECRET SOLUTION"
+        self.short_question.marker_notes = "<p>SECRET NOTES</p>"
         self.short_question.save()
         self.complete_with_answers()
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.assertContains(response, "My answer")
         self.assertNotContains(response, "SECRET SOLUTION")
+        self.assertNotContains(response, "SECRET NOTES")
+        headers = re.findall(r'<th class="col-sm-\d">([^<]*)</th>', response.content.decode())
+        self.assertEqual(headers, ["Question", "Your answer"])
 
 
 class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
@@ -1111,22 +1312,53 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "Tom &amp; Jerry")
         self.assertNotContains(response, "&amp;amp;")
 
-    def test_quest_detail__marker_notes_popover_is_initialized(self):
-        """The marker-notes popover in the question table is activated on this page (#2166).
+    def test_quest_detail__marker_notes_popover_shows_the_notes_as_written(self):
+        """The question table's marker notes keep their HTML for the popover that shows them,
+        and the page sets that popover up (#2166, #2923).
 
-        A bootstrap popover does nothing until something initializes it: without the site-wide
-        initializer this icon offers only its native "Marker Notes" title, leaving the notes
-        themselves unreadable on the page a teacher marks from.
+        The popover's behaviour, opening and closing and what it shows, is covered in a browser
+        by test_marker_notes_render.py.
         """
-        self.short_question.marker_notes = "<p>Accept any working URL.</p>"
+        notes = '<p>Accept any <b>working</b> URL.</p><p><img src="/media/example.png"></p>'
+        self.short_question.marker_notes = notes
         self.short_question.save()
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
 
-        self.assertContains(response, "Accept any working URL.")
-        self.assertContains(response, 'data-toggle="popover"')
-        self.assertContains(response, """$('[data-toggle="popover"]').popover();""")
+        self.assertContains(response, f'<template class="marker-notes-content">{notes}</template>')
+        self.assertContains(response, "selector: '.marker-notes-popover'")
+        self.assertContains(response, "sanitize: false")
+
+    def test_quest_detail__marker_notes_drop_what_could_run_a_script(self):
+        """Marker notes keep their formatting but lose script and event handlers on the way to
+        the page: a quest imported from the Shared Library brings notes written on another
+        deck, which must not run in the session of the staff reading them (#2923)."""
+        self.short_question.marker_notes = (
+            '<p><b>Check</b> it <img src="/media/x.png" onerror="alert(1)"></p><script>alert(2)</script>')
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        notes = re.search(r'<template class="marker-notes-content">(.*?)</template>', response.content.decode(), re.S).group(1)
+        self.assertIn('<b>Check</b>', notes)
+        self.assertIn('<img src="/media/x.png">', notes)
+        self.assertNotIn("onerror", notes)
+        self.assertNotIn("<script>", notes)
+
+    def test_quest_detail__questions_panel_follows_quest_details(self):
+        """Staff see the Submission Questions panel right after Quest Details, ahead of the
+        Submission Instructions and Instructor Notes (#2922)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        content = response.content.decode()
+        panels = [f'id="{name}-{self.quest.id}"' for name in
+                  ("quest-instructions", "quest-questions", "submission-instructions", "instructor-notes")]
+        positions = [content.index(panel) for panel in panels]
+        self.assertEqual(positions, sorted(positions))
 
 
 class DraftRowHealingTest(QuestionSubmissionFlowTestBase):

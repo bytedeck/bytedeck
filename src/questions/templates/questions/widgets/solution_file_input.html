@@ -1,0 +1,11 @@
+{% comment %}
+  Django's clearable file input (django/forms/widgets/clearable_file_input.html), except that the
+  file the question already has is linked at `widget.download_url` when the form sets one: a
+  solution file a browser would run a script from is handed over as a download, never opened
+  at its storage URL (questions.forms.SolutionFileInput, #2924).
+{% endcomment %}
+{% if widget.is_initial %}{{ widget.initial_text }}: <a href="{% if widget.download_url %}{{ widget.download_url }}{% else %}{{ widget.value.url }}{% endif %}">{{ widget.value }}</a>{% if not widget.required %}
+<input type="checkbox" name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}"{% if widget.attrs.disabled %} disabled{% endif %}{% if widget.attrs.checked %} checked{% endif %}>
+<label for="{{ widget.checkbox_id }}">{{ widget.clear_checkbox_label }}</label>{% endif %}<br>
+{{ widget.input_text }}:{% endif %}
+<input type="{{ widget.type }}" name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>

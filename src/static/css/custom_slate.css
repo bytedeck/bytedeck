@@ -318,3 +318,11 @@ input, textarea {
 .list-group-item.sidebar-menu-row:not(.active):hover {
     background-color: #3e444c;
 }
+
+/* The row of an answer marked wrong in the marking table (questions/snippets/comment_answers.html,
+   #2933). Slate's own danger row is #ee5f5b, the same coral as its red X, so the X disappears into
+   it and the row's text falls under 2:1. This dark red still reads as red against the page, with
+   the X at 4:1 and the text at 7.9:1. */
+.table.question-answers > tbody > tr.danger > td {
+    background-color: #46282a;
+}

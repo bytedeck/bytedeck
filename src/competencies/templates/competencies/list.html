@@ -1,0 +1,72 @@
+{% extends "competencies/base.html" %}
+{% load static %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
+<script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>
+{% endblock %}
+
+{% block heading_inner %}
+    Competencies
+
+    <a class="btn btn-primary" href="{% url 'competencies:import' %}" role="button">
+        <i class="fa fa-upload"></i>&nbsp;Import
+    </a>
+    <div class="btn-group">
+        <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown"
+                aria-haspopup="true" aria-expanded="false" {% if not object_list %}disabled{% endif %}>
+            <i class="fa fa-download"></i>&nbsp;Export <span class="caret"></span>
+        </button>
+        <ul class="dropdown-menu">
+            <li><a href="{% url 'competencies:export' %}">as JSON</a></li>
+            <li><a href="{% url 'competencies:export' %}?format=csv">as CSV</a></li>
+        </ul>
+    </div>
+{% endblock %}
+
+{% block content %}
+
+    {% if object_list %}
+        {% include 'snippets/table_loading.html' %}
+        <table
+            data-toggle='table'
+            data-search='true'
+            data-classes="table table-striped"
+            data-pagination='true'
+            data-page-size=25
+            data-page-list="[25, 50, 100, all]"
+        >
+            <thead>
+                <tr>
+                    <th data-sortable='true' data-field='course' class="col-sm-2">Course</th>
+                    <th data-sortable='true' data-field='category' class="col-sm-2">Category</th>
+                    <th data-sortable='true' data-field='name' class="col-sm-5">Competency</th>
+                    <th data-sortable='true' data-field='source_id' class="col-sm-2">ID</th>
+                    <th data-sortable='true' data-field='active' class="col-sm-1">Active</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for competency in object_list %}
+                    <tr>
+                        <td>{{ competency.course }}</td>
+                        <td>{{ competency.category }}</td>
+                        <td>{{ competency.name }}</td>
+                        <td><small>{{ competency.source_id|default_if_none:"" }}</small></td>
+                        <td>
+                            {% if competency.active %}
+                                <i class="fa fa-check text-success"></i>
+                            {% else %}
+                                <span class="label label-default">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>This deck doesn't have any competencies yet.
+            <a href="{% url 'competencies:import' %}">Import a competency set</a> to get started.</p>
+    {% endif %}
+
+{% endblock %}

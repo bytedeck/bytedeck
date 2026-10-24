@@ -1,12 +1,14 @@
 import html
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from questions.forms import (
+    MAX_RESPONSE_FILE_SIZE,
     SHORT_ANSWER_MAX_LENGTH,
     QuestionForm,
     QuestionSubmissionForm,
@@ -62,6 +64,62 @@ class QuestionFormTest(ByteDeckTenantTestCase):
         question.full_clean()
         question.save()
         self.assertEqual(Question.objects.get(id=question.id).instructions, "What did you learn?")
+
+
+    def solution_form(self, solution_file, instance=None):
+        """A file question's form, bound to a valid POST carrying the given solution file.
+
+        Args:
+            solution_file (UploadedFile): the file chosen as the solution.
+            instance (Question): the question being edited, or None for a new one.
+
+        Returns:
+            QuestionForm: the bound form, not yet validated.
+        """
+        return QuestionForm(
+            data={"type": "file_upload", "instructions": "Build a page", "allowed_file_type": "all", "required": True},
+            files={"solution_file": solution_file},
+            instance=instance,
+            question_type="file_upload",
+        )
+
+    def test_solution_file__accepts_a_script_capable_file(self):
+        """A solution can be a web page or an SVG, the formats a web or graphic design question's
+        students answer in (#2924)."""
+        for name, content_type in (("index.html", "text/html"), ("logo.svg", "image/svg+xml")):
+            with self.subTest(name=name):
+                form = self.solution_form(SimpleUploadedFile(name, b"<p>example</p>", content_type=content_type))
+                self.assertTrue(form.is_valid(), form.errors)
+
+    def test_solution_file__allowed_up_to_the_size_of_an_answer(self):
+        """A solution is held to the size a student's answer is, not the 500 KB the model
+        field's default form field allows, so an example video fits (#2924)."""
+        big = SimpleUploadedFile("example.mp4", b"x" * 600_000, content_type="video/mp4")
+        self.assertTrue(self.solution_form(big).is_valid())
+
+        too_big = SimpleUploadedFile("example.mp4", b"x", content_type="video/mp4")
+        too_big.size = MAX_RESPONSE_FILE_SIZE + 1
+        form = self.solution_form(too_big)
+        self.assertFalse(form.is_valid())
+        self.assertIn("Max filesize", str(form.errors["solution_file"]))
+
+    def test_solution_file__a_script_capable_solution_is_linked_as_a_download(self):
+        """Editing a question whose solution is a web page links it through the download view,
+        never at its storage URL, where it would open as a page in the teacher's session (#2924)."""
+        question = baker.make(Question, type="file_upload", solution_file="quest/question/solution/index.html")
+
+        rendered = str(QuestionForm(instance=question, question_type="file_upload")["solution_file"])
+
+        self.assertIn(f'href="{reverse("questions:solution_file_download", args=[question.pk])}"', rendered)
+        self.assertNotIn(f'href="{question.solution_file.url}"', rendered)
+
+    def test_solution_file__any_other_solution_keeps_its_direct_link(self):
+        """A solution a browser runs no script from is linked where it is stored, as before."""
+        question = baker.make(Question, type="file_upload", solution_file="quest/question/solution/photo.png")
+
+        rendered = str(QuestionForm(instance=question, question_type="file_upload")["solution_file"])
+
+        self.assertIn(f'href="{question.solution_file.url}"', rendered)
 
 
 class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
@@ -140,6 +198,28 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertNotIn("response_text", form.fields)
         self.assertEqual(form.fields["response_file"].content_types, self.file_question.allowed_mime_types())
 
+    def test_init__file_upload_field_draws_no_currently_link(self):
+        """A file saved with the draft is not linked by the input itself (#2785, #2925).
+
+        The answer's control lists the saved file, through the download view when it is one a
+        browser would run a script from. A clearable input would draw its own "Currently:" line
+        as well, linking the file at its storage URL, where following it runs that script.
+        """
+        self.file_answer.response_file = "quest/question/submission/2026/10/23/abc/logo.svg"
+
+        rendered = str(QuestionSubmissionForm(instance=self.file_answer)["response_file"])
+
+        self.assertNotIn("Currently", rendered)
+        self.assertNotIn(self.file_answer.response_file.url, rendered)
+
+    def test_init__file_upload_help_text_says_a_chosen_file_saves_at_once(self):
+        """The help says what the control does: one file up to 16MB, saved with the draft as
+        soon as it is chosen, and replaced by choosing another (#2925)."""
+        help_text = QuestionSubmissionForm(instance=self.file_answer).fields["response_file"].help_text
+
+        self.assertIn("16MB limit", help_text)
+        self.assertIn("saved with your draft as soon as you choose it, and choosing another replaces it", help_text)
+
     def test_init__file_upload_help_text_carries_the_mime_type_popover(self):
         """The info icon listing exact MIME types sits inside the help text (#2169).
 
@@ -165,7 +245,8 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         help_text = QuestionSubmissionForm(instance=answer).fields["response_file"].help_text
 
-        self.assertEqual(help_text, "Allowed file types: All")
+        self.assertTrue(help_text.endswith("Allowed file types: All"), help_text)
+        self.assertNotIn("popover", help_text)
 
     def test_init__the_answer_field_opts_in_only_as_far_as_the_question_did(self):
         """The form field carries the question's own opt-in, and nothing wider (#2559).
@@ -213,9 +294,11 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertFalse(form.fields["response_text"].required)
 
     def test_short_answer__distinct_aria_labels_in_formset(self):
-        """Each short-answer input in a formset gets a position-based aria-label matching its
-        visible 'Question N:' heading, so screen-reader users can tell multiple short-answer
-        inputs apart (they'd otherwise all announce the identical 'Response')."""
+        """Each short-answer input in a formset gets an aria-label with its question's number,
+        matching its visible 'Question N:' heading, so screen-reader users can tell multiple
+        short-answer inputs apart (they'd otherwise all announce the identical 'Response'). The
+        number is the question's place in the quest, so the second short answer here, the
+        quest's fourth question, is question 4 (#2933)."""
         # a second short-answer question so the formset renders two short-answer inputs
         second_short = baker.make(
             Question, quest=self.quest, ordinal=6, type="short_answer", required=True,
@@ -228,7 +311,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
 
         labels = [form.fields["response_text"].widget.attrs["aria-label"] for form in formset.forms]
-        self.assertEqual(labels, ["Response to question 1", "Response to question 2"])
+        self.assertEqual(labels, ["Response to question 1", "Response to question 4"])
 
     def test_short_answer__aria_label_fallback_without_formset(self):
         """A standalone short-answer form (no numeric formset prefix) falls back to a generic
@@ -241,7 +324,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         A quest with several questions renders several answer fields with no visible labels of
         their own (or, for file uploads, the identical one), so without this a screen-reader
-        student hears "Attach files" twice over and an unnamed editor between them (#2570).
+        student hears "Attach a file" twice over and an unnamed editor between them (#2570).
         """
         queryset = QuestionSubmission.objects.filter(
             quest_submission=self.submission,
@@ -255,7 +338,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         ]
         self.assertEqual(
             labels,
-            ["Response to question 1", "Response to question 2", "Attach files for question 3"],
+            ["Response to question 1", "Response to question 2", "Attach a file for question 3"],
         )
 
     def test_init__file_aria_label_contains_its_visible_label(self):
@@ -280,7 +363,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         file_form = QuestionSubmissionForm(instance=self.file_answer)
 
         self.assertEqual(long_form.fields["response_text"].widget.attrs["aria-label"], "Response")
-        self.assertEqual(file_form.fields["response_file"].widget.attrs["aria-label"], "Attach files")
+        self.assertEqual(file_form.fields["response_file"].widget.attrs["aria-label"], "Attach a file")
 
     def test_init__answer_fields_render_their_aria_label(self):
         """The aria-label survives rendering, on the editor's wrapper and on the file input.
@@ -298,7 +381,7 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         self.assertIn("$wrap.attr('aria-label', 'Response to question 2');", long_html)
         self.assertIn(".note-editable').attr('aria-label', ariaLabel)", long_html)
-        self.assertIn('aria-label="Attach files for question 3"', file_html)
+        self.assertIn('aria-label="Attach a file for question 3"', file_html)
 
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and

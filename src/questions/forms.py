@@ -1,14 +1,15 @@
 from django import forms
 from django.forms import ValidationError
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Div, HTML
+from crispy_forms.layout import Layout, Div, Field, HTML
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget, ByteDeckSummernoteSafeInplaceWidget
 from comments.sanitize import sanitize_comment_html
 from quest_manager.models import QuestSubmission
-from utilities.fields import FILE_MIME_TYPES, RestrictedFileFormField
+from utilities.fields import ALL_SCRIPT_CAPABLE_TYPES, FILE_MIME_TYPES, RestrictedFileFormField
 from utilities.html import is_empty_html
 
 from .models import SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE, Question, QuestionSubmission, QuestionType
@@ -45,6 +46,28 @@ class AnswerSummernoteWidget(ByteDeckSummernoteSafeInplaceWidget):
         return settings
 
 
+class SolutionFileInput(forms.ClearableFileInput):
+    """The solution file's upload control, which can link the file it already holds somewhere
+    other than its storage URL.
+
+    Its form sets ``download_url`` when that file is one a browser would run a script from, so
+    the "Currently:" link saves the file rather than opening it in the teacher's session (#2924).
+    """
+
+    template_name = "questions/widgets/solution_file_input.html"
+    download_url = None
+
+    def get_context(self, name, value, attrs):
+        """The input's template context, with the link to give the file it already holds.
+
+        Returns:
+            dict: Django's context for a clearable file input, plus ``widget.download_url``.
+        """
+        context = super().get_context(name, value, attrs)
+        context["widget"]["download_url"] = self.download_url
+        return context
+
+
 class QuestionForm(forms.ModelForm):
     """Displayed to the teacher when they are creating or editing a Question.
 
@@ -53,6 +76,19 @@ class QuestionForm(forms.ModelForm):
     is mandatory. Views are responsible for validating the type from the URL (and 404ing on
     unknown values) before constructing the form.
     """
+
+    # Any type of file, script-capable ones included, up to the size of a student's answer, so a
+    # teacher can give the marker an example in the format the students answer in: a web page for
+    # a web design question, an SVG for a graphic design one (#2924). The pages that show a
+    # script-capable solution hand it over as a download (views.solution_file_download), the
+    # way they do a script-capable answer (#2559).
+    solution_file = RestrictedFileFormField(
+        required=False,
+        max_upload_size=MAX_RESPONSE_FILE_SIZE,
+        script_capable_types=ALL_SCRIPT_CAPABLE_TYPES,
+        widget=SolutionFileInput,
+        help_text=Question._meta.get_field("solution_file").help_text,
+    )
 
     class Meta:
         model = Question
@@ -95,6 +131,10 @@ class QuestionForm(forms.ModelForm):
             solution_fields = Div('solution_text')
         elif question_type == QuestionType.FILE_UPLOAD:
             del self.fields['solution_text']
+
+            if self.instance.solution_file_is_script_capable:
+                self.fields['solution_file'].widget.download_url = reverse(
+                    'questions:solution_file_download', args=[self.instance.pk])
 
             # add additional information about the allowed MIME types for each option
             allowed_file_types_html_list = ''
@@ -252,6 +292,13 @@ class QuestionSubmissionForm(forms.ModelForm):
                     <i class="fa fa-fw fa-lg fa-info-circle"></i>
                 </a>
                 """)
+            # The control saves a chosen file straight away, as the submission's attachments do
+            # (#2925), so the help says so, and that a second choice replaces the first. Ahead of
+            # the file types, so the popover's icon still ends the line.
+            help_text = mark_safe(
+                f"{MAX_RESPONSE_FILE_SIZE // (1024 * 1024)}MB limit. It is saved with your draft as soon as "
+                f"you choose it, and choosing another replaces it. {help_text}"
+            )
 
             self.fields["response_file"] = RestrictedFileFormField(
                 required=self.question.required,
@@ -265,12 +312,14 @@ class QuestionSubmissionForm(forms.ModelForm):
                 # one page are indistinguishable by name. The aria-label adds the question number
                 # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)
                 # requires of a control whose visible label is text (#2570).
-                widget=forms.ClearableFileInput(attrs={"multiple": False, "aria-label": self._file_aria_label()}),
-                label="Attach files",
+                widget=forms.FileInput(attrs={"aria-label": self._file_aria_label()}),
+                label="Attach a file",
                 help_text=help_text,
             )
 
-            form_fields = Div("response_file")
+            # Drawn as the submission's own attachments are (#2749), for one file (#2925): the
+            # file saved with the draft, with its Delete button, then the button that chooses one.
+            form_fields = Div(Field("response_file", template="questions/snippets/answer_file_field.html"))
         else:
             raise NotImplementedError(
                 f"Question of type {self.question.type} not supported yet."
@@ -286,19 +335,20 @@ class QuestionSubmissionForm(forms.ModelForm):
         )
 
     def _question_position(self):
-        """Return this question's 1-based position on the submission page, or None.
+        """Return this question's number, as the "Question N:" heading above its answer field
+        in submission.html shows it, or None.
 
-        The form's formset prefix is "question_submissions-<i>" (0-based); i + 1 matches the
-        visible "Question N:" heading rendered just above the answer field in submission.html.
+        That is the question's own place in the quest (`Question.number`), so a student
+        answering only some questions again after a return still sees each under its number
+        (#2933).
 
         Returns:
             int | None: the question number, or None if the form isn't in a formset (no numeric
             prefix, e.g. the formset's empty_form placeholder).
         """
-        try:
-            return int(self.prefix.rsplit("-", 1)[-1]) + 1
-        except (AttributeError, ValueError):
+        if not (self.prefix or "").rsplit("-", 1)[-1].isdigit():
             return None
+        return self.question.number
 
     def _response_aria_label(self):
         """Return a per-question aria-label for the short-answer input or long-answer editor.
@@ -319,15 +369,15 @@ class QuestionSubmissionForm(forms.ModelForm):
 
         Keeps the visible label's own words and adds the question number: WCAG 2.5.3 (Label in
         Name) asks that a control's accessible name contain its visible label text, so that
-        someone driving the page by voice can still say "attach files" to reach it.
+        someone driving the page by voice can still say "attach a file" to reach it.
 
         Returns:
-            str: the aria-label for this input, e.g. "Attach files for question 3".
+            str: the aria-label for this input, e.g. "Attach a file for question 3".
         """
         position = self._question_position()
         if position is None:
-            return "Attach files"
-        return f"Attach files for question {position}"
+            return "Attach a file"
+        return f"Attach a file for question {position}"
 
     def clean_response_text(self):
         """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).

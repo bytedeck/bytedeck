@@ -1006,6 +1006,15 @@ class Course(IsAPrereqMixin, models.Model):
                   "\"Use mark percentages\" is on for the deck as a whole."
     )
 
+    # db_default as well as default: during a deploy the outgoing version still inserts courses
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and the
+    # deploy window").
+    competency_set = models.CharField(
+        max_length=255, blank=True, default='', db_default='',
+        help_text="The official course whose competencies this course teaches, e.g. \"ADST 9\": one of the competency "
+                  "sets imported on this deck (Admin > Competencies). This course's own title can be anything."
+    )
+
     def __str__(self):
         return self.title
 

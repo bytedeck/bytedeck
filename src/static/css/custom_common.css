@@ -1140,6 +1140,17 @@ div.btn-group.action-btn-group {
         float: none !important;
     }
 
+    /* A floated image sits on a line of its own too, with the text below it: beside an image of a
+       fixed width, a phone has room for a column of text too narrow to read (#2918). The editor's
+       Float Left and Float Right put the float in the image's style, which only !important outranks. */
+    img.note-float-left, img.note-float-right, img.pull-left, img.pull-right {
+        display: block;
+        float: none !important;
+        margin-left: 0;
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+
 
     #main-container {
         padding-left: 7px;
@@ -1464,6 +1475,79 @@ table[data-toggle="table"].bt-reveal {
     max-height: 40px;
 }
 
+/* A table opened in a bootstrap-table's detail row (the preview under a quest or a submission on
+   the quest tabs: a submission's answers, a quest's questions) reads from the top of each cell,
+   as a Bootstrap table does anywhere else. bootstrap-table centres its own cells vertically,
+   and its selector reaches the cells of every table nested inside them too (#2927). */
+.bootstrap-table .fixed-table-container .table .table td,
+.bootstrap-table .fixed-table-container .table .table th {
+    vertical-align: top;
+}
+
+/* An answer's mark in the marking table (questions/snippets/answer_mark.html, #2933): the X staff
+   mark it wrong with, or the check or X it was given, at the right of the answer's cell with
+   room between it and the answer. */
+.question-answers .answer-mark,
+.question-answers .answer-mark-wrong {
+    margin-left: 8px;
+}
+
+/* The label over each answer and solution in a submission's question answers
+   (questions/snippets/comment_answers.html). On a wide screen the header row names the
+   columns, so the labels are for a narrow one, where the columns stack (#2927). */
+.question-answers-label {
+    display: none;
+}
+@media (max-width: 767px) {
+    /* Bootstrap's sm breakpoint, as the grid's: below it, each answer's question, then its
+       answer, then its solution, one under another, with a rule between answers but not
+       between the parts of one. */
+    .question-answers > thead {
+        display: none;
+    }
+    table.question-answers > tbody > tr > td {
+        display: block;
+        width: 100%;
+    }
+    table.question-answers > tbody > tr > td + td {
+        border-top: none;
+    }
+    .question-answers-label {
+        display: block;
+        font-weight: bold;
+    }
+}
+
+/* A question's marker notes, opened from their info button (#2923). They show as written, so
+   the popover is wider than a hint's, what is in it is held to its width, and long notes
+   scroll inside it rather than running off the screen. */
+.btn.marker-notes-popover {
+    padding: 0 2px;
+    vertical-align: baseline;
+}
+/* Bootstrap rings a button it has focus on, so a click would leave one round the icon while
+   the notes are open; the ring stays for someone reaching the button by keyboard. */
+.btn.marker-notes-popover:focus:not(:focus-visible) {
+    outline: none;
+}
+.popover.marker-notes-tip {
+    max-width: min(600px, calc(100vw - 20px));
+}
+.popover.marker-notes-tip .popover-content {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+}
+.popover.marker-notes-tip img,
+.popover.marker-notes-tip video,
+.popover.marker-notes-tip iframe {
+    max-width: 100%;
+}
+.popover.marker-notes-tip img,
+.popover.marker-notes-tip video {
+    height: auto;
+}
+
 /* The bar under a file being attached by a draft save (#784): a slim Bootstrap progress bar on a
    line of its own, inside the note's paragraph under the file input. */
 .draft-upload-progress {
@@ -1480,4 +1564,54 @@ table[data-toggle="table"].bt-reveal {
 }
 .fa-stack.unflag-icon .fa-ban {
     color: tomato;
+}
+
+/* Competency levels on the approval forms (competencies/snippets/approval_levels.html): one
+   segmented control per competency, colour-coded once selected so the chosen levels read at a
+   glance, in Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning),
+   Proficient green (success) and Extending blue (info). The shades are darker than Bootstrap's
+   buttons so each text and background pair has at least 4.5:1 contrast (WCAG AA), and yellow takes
+   dark text. */
+.competency-approval-levels {
+    margin-bottom: 10px;
+}
+.competency-approval-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 3px 0;
+}
+.competency-approval-levels .btn.competency-level.active {
+    color: #fff;
+}
+.competency-approval-levels .btn.competency-level-1.active {
+    background-color: #c9302c;
+    border-color: #ac2925;
+}
+.competency-approval-levels .btn.competency-level-2.active {
+    background-color: #f0ad4e;
+    border-color: #eea236;
+    color: #333;
+}
+.competency-approval-levels .btn.competency-level-3.active {
+    background-color: #3c763d;
+    border-color: #326432;
+}
+.competency-approval-levels .btn.competency-level-4.active {
+    background-color: #31708f;
+    border-color: #2b6380;
+}
+
+/* The quest form's competency picker (QuestCompetenciesSelect2Widget): a competency's
+   "Course: Category: Competency" label is often longer than a line, so each dropdown row and each
+   chosen chip shows one line cut short with an ellipsis, and the full text is its title on hover.
+   Cut by CSS rather than in the text, so searching still matches every word. */
+#select2-id_competencies-results .select2-results__option,
+#div_id_competencies .select2-selection__choice {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
