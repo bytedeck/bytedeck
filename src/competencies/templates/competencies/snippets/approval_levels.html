@@ -1,7 +1,8 @@
 {% comment %}
   A submission's competency levels on its approval form (the competency_approval_levels tag):
   one segmented control per competency the quest gives evidence of, pre-selected to the link's
-  default level, so approving with the defaults takes no extra clicks. Approving records the
+  default level (or the level posted, on a form re-rendered with errors), so approving with the
+  defaults takes no extra clicks. Approving records the
   selected levels; returning or commenting records nothing. The nudge shows while any competency
   is set to the lowest level: rendered that way when a default starts there, and kept in step by
   approval-levels.js as levels change.

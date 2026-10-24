@@ -2,24 +2,26 @@ from django import template
 
 from siteconfig.models import SiteConfig
 
-from ..assessments import approval_links
+from ..assessments import approval_links, posted_level
 from ..forms import competency_level_field_name
 from ..models import ProficiencyLevel
 
 register = template.Library()
 
 
-@register.inclusion_tag('competencies/snippets/approval_levels.html')
-def competency_approval_levels(submission):
+@register.inclusion_tag('competencies/snippets/approval_levels.html', takes_context=True)
+def competency_approval_levels(context, submission):
     """ The competency level controls for a submission's approval form: one per competency the
-    quest gives evidence of, pre-selected to the link's default level and labelled with the
-    deck's proficiency scale. Renders nothing when the deck has competencies disabled or the quest
-    has no active competencies.
+    quest gives evidence of, labelled with the deck's proficiency scale. Each starts on the link's
+    default level, or, when the page is re-rendered for a posted form that didn't validate, on the
+    level the teacher posted, so resubmitting it records their choice rather than the default.
+    Renders nothing when the deck has competencies disabled or the quest has no active competencies.
 
     Reads ``submission.quest.quest_competencies``, so a page with many submissions should prefetch
     ``quest__quest_competencies``.
 
     Args:
+        context (Context): the template context, for the request whose POST holds any posted levels.
         submission (QuestSubmission): the submission the approval form acts on.
 
     Returns:
@@ -31,14 +33,16 @@ def competency_approval_levels(submission):
     if config is None or not config.enable_competencies:
         return {'rows': []}
 
+    request = context.get('request')
+    data = request.POST if request is not None and request.method == 'POST' else None
     labels = config.get_competency_scale_labels()
-    rows = [
-        {
+    rows = []
+    for link in approval_links(submission.quest):
+        chosen = posted_level(data, link)
+        rows.append({
             'competency': link.competency,
             'field_name': competency_level_field_name(link.competency_id),
-            'levels': [(level, labels[level], level == link.default_level) for level in ProficiencyLevel.values],
-        }
-        for link in approval_links(submission.quest)
-    ]
+            'levels': [(level, labels[level], level == chosen) for level in ProficiencyLevel.values],
+        })
     starts_on_lowest = any(selected for row in rows for level, _label, selected in row['levels'] if level == ProficiencyLevel.EMERGING)
     return {'rows': rows, 'lowest_label': labels[ProficiencyLevel.EMERGING], 'starts_on_lowest': starts_on_lowest}

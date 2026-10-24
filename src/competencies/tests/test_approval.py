@@ -299,6 +299,21 @@ class ApprovalLevelsWidgetTest(ApprovalTestMixin, ByteDeckTenantTestCase):
 
         self.assertContains(self.client.get(url), 'class="help-block text-warning competency-lowest-nudge"')
 
+    def test_levels__keep_the_posted_choice_when_the_form_comes_back_with_errors(self):
+        """ When an approval doesn't validate (here, a badge that can't be granted) and the
+        submission page comes back with the errors, each level stays on what the teacher posted,
+        so pressing Approve again records their choice rather than the default """
+        thinking_field = competency_level_field_name(self.thinking.pk)
+
+        response = self.client.post(reverse('quests:approve', args=[self.submission.pk]), data={
+            'approve_button': True, 'awards': [999999], thinking_field: ProficiencyLevel.DEVELOPING,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'<input type="radio" name="{thinking_field}" value="2" autocomplete="off" checked>')
+        self.assertContains(response, f'<input type="radio" name="{thinking_field}" value="4" autocomplete="off">')
+        self.assertFalse(CompetencyAssessment.objects.exists())
+
     def test_approvals_tab__shows_the_levels_preselected(self):
         """ Each submission's quick reply form on the approvals page carries its level controls """
         self.assertShowsLevels(self.client.get(reverse('quests:submitted_all')))
