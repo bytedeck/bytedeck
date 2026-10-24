@@ -1578,8 +1578,10 @@ table[data-toggle="table"].bt-reveal {
 
 /* Competency levels on the approval forms (competencies/snippets/approval_levels.html): one
    segmented control per competency, colour-coded once selected so the chosen levels read at a
-   glance: the lowest red, then amber, blue and green. Each text and background pair has at least
-   4.5:1 contrast (WCAG AA), so amber takes dark text. */
+   glance, in Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning),
+   Proficient green (success) and Extending blue (info). The shades are darker than Bootstrap's
+   buttons so each text and background pair has at least 4.5:1 contrast (WCAG AA), and yellow takes
+   dark text. */
 .competency-approval-levels {
     margin-bottom: 10px;
 }
@@ -1604,10 +1606,10 @@ table[data-toggle="table"].bt-reveal {
     color: #333;
 }
 .competency-approval-levels .btn.competency-level-3.active {
-    background-color: #31708f;
-    border-color: #2b6380;
-}
-.competency-approval-levels .btn.competency-level-4.active {
     background-color: #3c763d;
     border-color: #326432;
+}
+.competency-approval-levels .btn.competency-level-4.active {
+    background-color: #31708f;
+    border-color: #2b6380;
 }
