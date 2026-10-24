@@ -1,6 +1,7 @@
 {% comment %}
   The X beside each answer in the marking table (answer_mark.html, #2933): a click marks the
-  answer wrong, or takes the mark back, and saves it at once. Delegated from the document,
+  answer wrong, or takes the mark back, and saves it at once, highlighting the answer's row red
+  while it is marked wrong (comment_answers.html). Delegated from the document,
   because the Approvals tab loads its tables into the page after it has loaded.
 {% endcomment %}
 <script>
@@ -18,6 +19,7 @@
                .toggleClass('btn-danger', json.marked_wrong)
                .toggleClass('btn-default', !json.marked_wrong)
                .attr('title', $button.data(json.marked_wrong ? 'title-marked' : 'title-unmarked'));
+        $button.closest('tr').toggleClass('danger', json.marked_wrong);
       },
       error: function(xhr) {
         console.log(xhr.status + ": " + xhr.responseText);

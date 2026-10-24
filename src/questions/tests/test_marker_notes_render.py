@@ -189,11 +189,41 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertLess(cells[1]["x"], cells[2]["x"])
         self.assertFalse(self.page.locator(".question-answers-label").first.is_visible())
 
+    def test_layout__top_aligned_inside_a_bootstrap_table(self):
+        """On the approvals tab a submission opens in a bootstrap-table's detail row, whose own
+        rule centres every cell under it vertically, nested tables included. The answers still
+        read from the top of each cell there (#2927).
+
+        The answers table is moved into bootstrap-table's markup, with its stylesheet loaded, as
+        the tab's detail row holds it.
+        """
+        self.page.add_style_tag(path=finders.find("css/bootstrap-table-1.20.2.min.css"))
+        self.page.evaluate("""() => {
+            const answers = document.querySelector('.question-answers');
+            const holder = document.createElement('div');
+            holder.innerHTML = '<div class="bootstrap-table"><div class="fixed-table-container">' +
+                '<table class="table"><tbody><tr class="detail-view"><td></td></tr></tbody></table></div></div>';
+            answers.parentNode.insertBefore(holder, answers);
+            holder.querySelector('.detail-view td').appendChild(answers);
+        }""")
+
+        alignments = self.page.eval_on_selector_all(
+            ".bootstrap-table .question-answers td, .bootstrap-table .question-answers th",
+            "cells => cells.map(cell => getComputedStyle(cell).verticalAlign)")
+
+        self.assertTrue(alignments)
+        self.assertEqual(set(alignments), {"top"})
+        outer = self.page.eval_on_selector(".detail-view > td", "cell => getComputedStyle(cell).verticalAlign")
+        self.assertEqual(outer, "middle", "bootstrap-table's own cells keep its alignment")
+
     def test_mark__the_x_marks_an_answer_wrong_and_back(self):
-        """The X beside an answer saves the mark as it is clicked, and shows it: pressed and red
-        once marked wrong, plain again once the mark is taken back (#2933)."""
+        """The X beside an answer saves the mark as it is clicked, and shows it: pressed and red,
+        with the answer's row highlighted, once marked wrong, plain again once the mark is taken
+        back (#2933)."""
         x = self.page.locator(f'.answer-mark-wrong[data-mark-url="{self.mark_path}"]')
+        row = x.locator("xpath=ancestor::tr[1]")
         self.assertEqual(x.get_attribute("aria-pressed"), "false")
+        self.assertNotIn("danger", (row.get_attribute("class") or "").split())
 
         x.click()
 
@@ -203,6 +233,7 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertIn("wrong=true", self.marks[0])
         self.assertIn("btn-danger", x.get_attribute("class"))
         self.assertIn("take the mark back", x.get_attribute("title"))
+        self.assertIn("danger", (row.get_attribute("class") or "").split())
 
         x.click()
 
@@ -211,6 +242,7 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
             timeout=10000)
         self.assertIn("wrong=false", self.marks[1])
         self.assertNotIn("btn-danger", x.get_attribute("class"))
+        self.assertNotIn("danger", (row.get_attribute("class") or "").split())
         self.assertEqual(self.dialogs, [])
 
     def test_mark__a_failed_save_says_so_and_leaves_the_x_as_it_was(self):
@@ -225,7 +257,23 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(len(self.dialogs), 1)
         self.assertIn("wasn't saved", self.dialogs[0])
         self.assertEqual(x.get_attribute("aria-pressed"), "false")
+        self.assertNotIn("danger", (x.locator("xpath=ancestor::tr[1]").get_attribute("class") or "").split())
         self.assertTrue(x.is_enabled())
+
+    def test_mark__a_row_marked_wrong_in_the_dark_theme(self):
+        """In the dark theme a row marked wrong is a dark red, not Slate's own danger coral, which
+        is the colour of the red X itself and would hide it (#2933)."""
+        self.page.add_style_tag(path=finders.find("css/bootstrap_slate-3.4.1.min.css"))
+        self.page.add_style_tag(path=finders.find("css/custom_slate.css"))
+        x = self.page.locator(f'.answer-mark-wrong[data-mark-url="{self.mark_path}"]')
+
+        x.click()
+
+        self.page.wait_for_function(
+            "document.querySelector('.question-answers tr.danger') !== null", timeout=10000)
+        backgrounds = self.page.eval_on_selector_all(
+            ".question-answers tr.danger > td", "cells => cells.map(cell => getComputedStyle(cell).backgroundColor)")
+        self.assertEqual(set(backgrounds), {"rgb(70, 40, 42)"})
 
     def test_layout__stacked_on_a_narrow_screen(self):
         """Below Bootstrap's sm breakpoint the question comes first, then the answer, then the
@@ -239,5 +287,5 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertGreaterEqual(cells[1]["y"], cells[0]["y"] + cells[0]["height"] - 1)
         self.assertGreaterEqual(cells[2]["y"], cells[1]["y"] + cells[1]["height"] - 1)
         labels = self.page.locator(".question-answers tbody tr:first-child .question-answers-label")
-        self.assertEqual(labels.all_inner_texts(), ["Answer provided", "Solution"])
+        self.assertEqual(labels.all_inner_texts(), ["Answer provided", "Solution (visible to staff only)"])
         self.assertTrue(labels.first.is_visible())
