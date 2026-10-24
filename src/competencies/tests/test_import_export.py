@@ -295,7 +295,7 @@ class BundledSetsTest(ByteDeckTenantTestCase):
         """ The ADST 8 set carries grade 8's own Testing competencies, as published at its
         source_url, not the grade 9 wording an earlier version of the set had """
         competency_set = load_bundled_set('bc-adst-8')
-        testing = [entry['name'] for entry in competency_set['entries'] if entry['category'] == 'Testing']
+        testing = [entry['name'] for entry in competency_set['entries'] if entry['category'] == 'Applied Design - Testing']
 
         self.assertEqual(testing, [
             "Test the first version of the product or the prototype",
