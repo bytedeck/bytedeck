@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Div, HTML
+from crispy_forms.layout import Layout, Div, Field, HTML
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget, ByteDeckSummernoteSafeInplaceWidget
 from comments.sanitize import sanitize_comment_html
@@ -292,6 +292,13 @@ class QuestionSubmissionForm(forms.ModelForm):
                     <i class="fa fa-fw fa-lg fa-info-circle"></i>
                 </a>
                 """)
+            # The control saves a chosen file straight away, as the submission's attachments do
+            # (#2925), so the help says so, and that a second choice replaces the first. Ahead of
+            # the file types, so the popover's icon still ends the line.
+            help_text = mark_safe(
+                f"{MAX_RESPONSE_FILE_SIZE // (1024 * 1024)}MB limit. It is saved with your draft as soon as "
+                f"you choose it, and choosing another replaces it. {help_text}"
+            )
 
             self.fields["response_file"] = RestrictedFileFormField(
                 required=self.question.required,
@@ -305,12 +312,14 @@ class QuestionSubmissionForm(forms.ModelForm):
                 # one page are indistinguishable by name. The aria-label adds the question number
                 # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)
                 # requires of a control whose visible label is text (#2570).
-                widget=forms.ClearableFileInput(attrs={"multiple": False, "aria-label": self._file_aria_label()}),
-                label="Attach files",
+                widget=forms.FileInput(attrs={"aria-label": self._file_aria_label()}),
+                label="Attach a file",
                 help_text=help_text,
             )
 
-            form_fields = Div("response_file")
+            # Drawn as the submission's own attachments are (#2749), for one file (#2925): the
+            # file saved with the draft, with its Delete button, then the button that chooses one.
+            form_fields = Div(Field("response_file", template="questions/snippets/answer_file_field.html"))
         else:
             raise NotImplementedError(
                 f"Question of type {self.question.type} not supported yet."
@@ -360,15 +369,15 @@ class QuestionSubmissionForm(forms.ModelForm):
 
         Keeps the visible label's own words and adds the question number: WCAG 2.5.3 (Label in
         Name) asks that a control's accessible name contain its visible label text, so that
-        someone driving the page by voice can still say "attach files" to reach it.
+        someone driving the page by voice can still say "attach a file" to reach it.
 
         Returns:
-            str: the aria-label for this input, e.g. "Attach files for question 3".
+            str: the aria-label for this input, e.g. "Attach a file for question 3".
         """
         position = self._question_position()
         if position is None:
-            return "Attach files"
-        return f"Attach files for question {position}"
+            return "Attach a file"
+        return f"Attach a file for question {position}"
 
     def clean_response_text(self):
         """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).
