@@ -217,42 +217,42 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
 
         self.assertFalse(CompetencyAssessment.objects.exists())
 
-    def recorded_chip(self, name, level, label):
-        """ The chip a submission's Quest Info shows for a competency with a recorded level. """
-        return (f'<span class="label competency-chip competency-level-{level}" '
-                f'title="Level recorded when this submission was approved">{name}: {label}</span>')
+    def approval_comment(self):
+        """ The text of the latest comment on this test's submission. """
+        return Comment.objects.filter(target_object_id=self.submission.pk).order_by('-pk').first().text
 
-    def test_submission_page__student_sees_their_recorded_levels(self):
-        """ Once approved, the student's own submission shows each competency with the level
-        recorded for them, coloured by level; a competency with nothing recorded shows its name """
-        self.post_decision('approve_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING})
-        self.client.force_login(self.student)
+    def test_approve__comment_lists_the_recorded_levels(self):
+        """ The comment that approves the submission lists each competency with the level recorded,
+        in the deck's labels, after the teacher's own text """
+        self.post_decision('approve_button', comment_text='Nice work', **{
+            competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING,
+        })
 
-        response = self.client.get(reverse('quests:submission', args=[self.submission.pk]))
+        text = self.approval_comment()
+        self.assertIn('Nice work', text)
+        self.assertIn('<p>Competencies:</p>', text)
+        self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>Developing</b>', text)
+        self.assertIn('<span title="Communication: Communicating">Communicating</span>: <b>Proficient</b>', text)
+        self.assertNotIn('Retired Competency', text)
 
-        self.assertContains(response, self.recorded_chip('Critical Thinking', 2, 'Developing'))
-        self.assertContains(response, self.recorded_chip('Communicating', 3, 'Proficient'))
-        self.assertContains(response, '<span class="label label-info competency-chip">Retired Competency</span>')
+    def test_approve__comment_cuts_a_long_competency_name_short(self):
+        """ A long competency name in the approving comment is cut short, in full in its title """
+        long_name = "Critically analyze and prioritize competing factors to meet community needs"
+        QuestCompetency.objects.create(quest=self.quest, competency=baker.make(Competency, name=long_name, category="Ideating"))
 
-    def test_submission_page__shows_the_latest_level_after_a_reapproval(self):
-        """ A submission approved, returned and approved again shows the levels from the latest approval """
         self.post_decision('approve_button')
+
+        self.assertIn(f'<span title="Ideating: {long_name}">{long_name[:49]}\u2026</span>', self.approval_comment())
+
+    def test_return_and_repeated_approval__comments_list_no_levels(self):
+        """ Returning records nothing, so its comment lists no levels; nor does a second Approve on a
+        submission already approved, which records nothing more """
         self.post_decision('return_button')
-        self.post_decision('approve_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.EMERGING})
+        self.assertNotIn('Competencies:', self.approval_comment())
 
-        response = self.client.get(reverse('quests:submission', args=[self.submission.pk]))
-
-        self.assertContains(response, self.recorded_chip('Critical Thinking', 1, 'Emerging'))
-        self.assertNotContains(response, self.recorded_chip('Critical Thinking', 4, 'Extending'))
-
-    def test_submission_page__before_approval_shows_names_or_default_levels(self):
-        """ Before anything is recorded, the student sees the competency names and staff see the
-        default levels, as on the quest page """
-        url = reverse('quests:submission', args=[self.submission.pk])
-        self.assertContains(self.client.get(url), '<span class="label label-info competency-chip">Critical Thinking: Extending</span>')
-
-        self.client.force_login(self.student)
-        self.assertContains(self.client.get(url), '<span class="label label-info competency-chip">Critical Thinking</span>')
+        self.post_decision('approve_button')
+        self.post_decision('approve_button')
+        self.assertNotIn('Competencies:', self.approval_comment())
 
     def test_complete__auto_approved_quest_records_defaults_without_an_assessor(self):
         """ Handing in a quest that needs no approval records its competencies at their default

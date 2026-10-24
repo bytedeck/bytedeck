@@ -38,7 +38,7 @@ from badges.models import BadgeAssertion
 from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
-from competencies.assessments import record_approval_assessments
+from competencies.assessments import assessments_comment_html, record_approval_assessments
 from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
@@ -1515,7 +1515,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 newly_approved = not lock_is_approved(self.submission)
                 self.submission.mark_approved()
                 if newly_approved:
-                    record_approval_assessments(self.submission, assessed_by=self.request.user, data=self.request.POST)
+                    self.recorded_assessments = record_approval_assessments(
+                        self.submission, assessed_by=self.request.user, data=self.request.POST,
+                    )
         elif "comment_button" in self.request.POST:
             note_verb = "commented on"
             icon = (
@@ -1731,6 +1733,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
+        # the competency levels an approval records (set by handle_form_button), for its comment
+        self.recorded_assessments = []
 
         if self.form.is_valid():
             if self.has_nothing_to_send():
@@ -1746,7 +1750,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
             #
             blank_comment_text = self.handle_form_button(notification_kwargs)
-            comment_text_addition = self.handle_award()
+            comment_text_addition = self.handle_award() + assessments_comment_html(self.recorded_assessments)
 
             # handle comment text
             # if staff didnt write any text for comment use blank_comment_text

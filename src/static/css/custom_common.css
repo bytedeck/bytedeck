@@ -1566,19 +1566,9 @@ table[data-toggle="table"].bt-reveal {
     color: tomato;
 }
 
-/* Competency chips on the quest detail page. Bootstrap labels never wrap, and curriculum
-   competency names are often a full sentence, so let a chip wrap within the column. */
-.competency-chip {
-    display: inline-block;
-    white-space: normal;
-    text-align: left;
-    line-height: 1.4;
-    margin: 0 2px 4px 0;
-}
-
-/* Competency levels: the selected level on the approval forms (competencies/snippets/approval_levels.html,
-   one segmented control per competency) and a recorded level's chip on a submission's Quest Info
-   (quest_competency_chips.html), colour-coded so levels read at a glance, in Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning),
+/* Competency levels on the approval forms (competencies/snippets/approval_levels.html): one
+   segmented control per competency, colour-coded once selected so the chosen levels read at a
+   glance, in Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning),
    Proficient green (success) and Extending blue (info). The shades are darker than Bootstrap's
    buttons so each text and background pair has at least 4.5:1 contrast (WCAG AA), and yellow takes
    dark text. */
@@ -1596,24 +1586,20 @@ table[data-toggle="table"].bt-reveal {
 .competency-approval-levels .btn.competency-level.active {
     color: #fff;
 }
-.competency-approval-levels .btn.competency-level-1.active,
-.competency-chip.competency-level-1 {
+.competency-approval-levels .btn.competency-level-1.active {
     background-color: #c9302c;
     border-color: #ac2925;
 }
-.competency-approval-levels .btn.competency-level-2.active,
-.competency-chip.competency-level-2 {
+.competency-approval-levels .btn.competency-level-2.active {
     background-color: #f0ad4e;
     border-color: #eea236;
     color: #333;
 }
-.competency-approval-levels .btn.competency-level-3.active,
-.competency-chip.competency-level-3 {
+.competency-approval-levels .btn.competency-level-3.active {
     background-color: #3c763d;
     border-color: #326432;
 }
-.competency-approval-levels .btn.competency-level-4.active,
-.competency-chip.competency-level-4 {
+.competency-approval-levels .btn.competency-level-4.active {
     background-color: #31708f;
     border-color: #2b6380;
 }

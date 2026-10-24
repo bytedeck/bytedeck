@@ -1,11 +1,10 @@
 from django import template
-from django.contrib.contenttypes.models import ContentType
 
 from siteconfig.models import SiteConfig
 
 from ..assessments import approval_links, posted_level
 from ..forms import competency_level_field_name
-from ..models import CompetencyAssessment, ProficiencyLevel
+from ..models import ProficiencyLevel
 
 register = template.Library()
 
@@ -47,45 +46,3 @@ def competency_approval_levels(context, submission):
         })
     starts_on_lowest = any(selected for row in rows for level, _label, selected in row['levels'] if level == ProficiencyLevel.EMERGING)
     return {'rows': rows, 'lowest_label': labels[ProficiencyLevel.EMERGING], 'starts_on_lowest': starts_on_lowest}
-
-
-@register.inclusion_tag('competencies/snippets/quest_competency_chips.html', takes_context=True)
-def quest_competency_chips(context, quest, submission=None):
-    """ A quest's competencies as chips for its Quest Info list.
-
-    On a submission's page, a competency assessed when that submission was approved shows the
-    level recorded for it, coloured by level (the latest, if it was approved again after a return),
-    so the student sees how their work on this quest was assessed. Otherwise staff see each
-    competency's default level and students see its name, so they know what the quest gives
-    evidence of.
-
-    Args:
-        context (Context): the template context, for the viewing user.
-        quest (Quest): the quest whose competencies to list.
-        submission (QuestSubmission, optional): the submission the page shows, if any.
-
-    Returns:
-        dict: the snippet's context: 'chips', each with the competency's name and, when it has
-        one, the 'label' to show after it and the recorded 'level' that colours it.
-    """
-    recorded = {}
-    if submission:
-        assessments = CompetencyAssessment.objects.filter(
-            source_content_type=ContentType.objects.get_for_model(submission), source_object_id=submission.pk,
-        ).order_by('-timestamp', '-pk')
-        for assessment in assessments:
-            recorded.setdefault(assessment.competency_id, assessment.level)
-
-    request = context.get('request')
-    is_staff = request is not None and request.user.is_staff
-    labels = SiteConfig.get().get_competency_scale_labels()
-    chips = []
-    for link in quest.quest_competencies.all():
-        level = recorded.get(link.competency_id)
-        if level:
-            chips.append({'name': link.competency.name, 'label': labels[level], 'level': level})
-        elif is_staff:
-            chips.append({'name': link.competency.name, 'label': labels[link.default_level]})
-        else:
-            chips.append({'name': link.competency.name})
-    return {'chips': chips}

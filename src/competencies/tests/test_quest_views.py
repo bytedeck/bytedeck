@@ -130,34 +130,36 @@ class QuestCompetencyViewsTest(ByteDeckTenantTestCase):
         copy = Quest.objects.get(name="Source Quest - COPY")
         self.assertEqual(self.links(copy), {self.thinking.pk: ProficiencyLevel.EXTENDING})
 
-    def test_quest_detail__staff_see_chips_with_levels(self):
-        """ Staff see each competency as a chip with its default level, in the deck's own labels """
-        self.set_flag(True, competency_label_level_4="Exceeding")
-        quest = baker.make(Quest)
+    def test_quest_detail__lists_the_competencies_by_name(self):
+        """ The Quest Info lists the quest's competencies by name, for staff and students alike (no
+        levels), each with its category in the title """
+        quest = baker.make(Quest, published=True)
         QuestCompetency.objects.create(quest=quest, competency=self.thinking, default_level=ProficiencyLevel.EXTENDING)
+        item = '<li title="Thinking: Critical Thinking">Critical Thinking</li>'
+
+        self.assertContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), item, html=True)
+
+        self.client.force_login(self.student)
+        with patch('quest_manager.models.Quest.is_available', return_value=False):
+            self.assertContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), item, html=True)
+
+    def test_quest_detail__long_competency_names_are_cut_short(self):
+        """ A long competency name is cut to 50 characters with an ellipsis, in full in its title """
+        long_name = "Critically analyze and prioritize competing factors to meet community needs"
+        quest = baker.make(Quest)
+        QuestCompetency.objects.create(quest=quest, competency=baker.make(Competency, name=long_name, category="Ideating"))
 
         response = self.client.get(reverse('quests:quest_detail', args=[quest.pk]))
 
-        self.assertContains(response, '<span class="label label-info competency-chip">Critical Thinking: Exceeding</span>', html=True)
+        self.assertContains(response, f'<li title="Ideating: {long_name}">{long_name[:49]}\u2026</li>', html=True)
 
-    def test_quest_detail__students_see_competency_names(self):
-        """ Students see the quest's competency names, without the default levels """
-        quest = baker.make(Quest, published=True)
-        QuestCompetency.objects.create(quest=quest, competency=self.thinking)
-        self.client.force_login(self.student)
-
-        with patch('quest_manager.models.Quest.is_available', return_value=False):
-            response = self.client.get(reverse('quests:quest_detail', args=[quest.pk]))
-
-        self.assertContains(response, '<span class="label label-info competency-chip">Critical Thinking</span>', html=True)
-
-    def test_quest_detail__no_chips_when_disabled_or_none_attached(self):
+    def test_quest_detail__no_competencies_when_disabled_or_none_attached(self):
         """ No competencies line when the flag is off, nor on a quest without competencies """
         quest = baker.make(Quest)
         bare_quest = baker.make(Quest)
         QuestCompetency.objects.create(quest=quest, competency=self.thinking)
 
-        self.assertNotContains(self.client.get(reverse('quests:quest_detail', args=[bare_quest.pk])), 'competency-chip')
+        self.assertNotContains(self.client.get(reverse('quests:quest_detail', args=[bare_quest.pk])), '<li>Competencies:')
 
         self.set_flag(False)
-        self.assertNotContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), 'competency-chip')
+        self.assertNotContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), '<li>Competencies:')
