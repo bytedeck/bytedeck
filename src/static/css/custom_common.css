@@ -1575,3 +1575,39 @@ table[data-toggle="table"].bt-reveal {
     line-height: 1.4;
     margin: 0 2px 4px 0;
 }
+
+/* Competency levels on the approval forms (competencies/snippets/approval_levels.html): one
+   segmented control per competency, colour-coded once selected so the chosen levels read at a
+   glance: the lowest red, then amber, blue and green. Each text and background pair has at least
+   4.5:1 contrast (WCAG AA), so amber takes dark text. */
+.competency-approval-levels {
+    margin-bottom: 10px;
+}
+.competency-approval-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 3px 0;
+}
+.competency-approval-levels .btn.competency-level.active {
+    color: #fff;
+}
+.competency-approval-levels .btn.competency-level-1.active {
+    background-color: #c9302c;
+    border-color: #ac2925;
+}
+.competency-approval-levels .btn.competency-level-2.active {
+    background-color: #f0ad4e;
+    border-color: #eea236;
+    color: #333;
+}
+.competency-approval-levels .btn.competency-level-3.active {
+    background-color: #31708f;
+    border-color: #2b6380;
+}
+.competency-approval-levels .btn.competency-level-4.active {
+    background-color: #3c763d;
+    border-color: #326432;
+}
