@@ -1,0 +1,33 @@
+{% comment %}
+  The X beside each answer in the marking table (answer_mark.html, #2933): a click marks the
+  answer wrong, or takes the mark back, and saves it at once, highlighting the answer's row red
+  while it is marked wrong (comment_answers.html). Delegated from the document,
+  because the Approvals tab loads its tables into the page after it has loaded.
+{% endcomment %}
+<script>
+  $(document).on('click', '.answer-mark-wrong', function() {
+    var $button = $(this);
+    var wrong = $button.attr('aria-pressed') !== 'true';
+    // one save at a time: a second click before the first lands would race it
+    $button.prop('disabled', true);
+    $.ajax({
+      url: $button.data('mark-url'),
+      type: 'POST',
+      data: { csrfmiddlewaretoken: '{{ csrf_token }}', wrong: wrong },
+      success: function(json) {
+        $button.attr('aria-pressed', json.marked_wrong ? 'true' : 'false')
+               .toggleClass('btn-danger', json.marked_wrong)
+               .toggleClass('btn-default', !json.marked_wrong)
+               .attr('title', $button.data(json.marked_wrong ? 'title-marked' : 'title-unmarked'));
+        $button.closest('tr').toggleClass('danger', json.marked_wrong);
+      },
+      error: function(xhr) {
+        console.log(xhr.status + ": " + xhr.responseText);
+        alert("ERROR!\n\nSorry, the mark wasn't saved.\n\nReload the page and try again.");
+      },
+      complete: function() {
+        $button.prop('disabled', false);
+      }
+    });
+  });
+</script>

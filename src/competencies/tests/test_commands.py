@@ -102,5 +102,12 @@ class ExportCompetenciesCommandTest(ByteDeckTenantTestCase):
             call_command('export_competencies', '--format', 'csv', '--output', str(path), stdout=StringIO())
             content = path.read_text(encoding='utf-8')
 
-        self.assertTrue(content.startswith('name,category,description,source_id'))
+        self.assertTrue(content.startswith('course,category,name,description,source_id'))
         self.assertIn('Estimate reasonably', content)
+
+    def test_export_competencies__unwritable_output_path(self):
+        """ An --output path that can't be written (its directory doesn't exist) is a CommandError, not a traceback """
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'no-such-dir' / 'out.json'
+            with self.assertRaises(CommandError):
+                call_command('export_competencies', '--output', str(path), stdout=StringIO())

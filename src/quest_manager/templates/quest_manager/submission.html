@@ -121,7 +121,10 @@
           {% endif %}
           {% comment %} Each question is a list-group item, so the questions read as one connected
              list (single hairline borders between them, no inter-item gaps) rather than a stack of
-             separate padded cards. {% endcomment %}
+             separate padded cards. A quest returned with no answer marked wrong has no questions
+             to answer again (#2933): the management form above still goes with the POST, but the
+             list and the rule below it are left out. {% endcomment %}
+          {% if question_formset.forms %}
           <div class="list-group question-submission-list">
           {# the loop variable must be named `form`: the crispy HTML() layout objects inside #}
           {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
@@ -132,7 +135,8 @@
               {# A <div> (not <p>) wraps it because multi-paragraph instructions keep their <p> tags, which #}
               {# would be invalid nested inside a <p> (the browser auto-closes the outer <p> early). #}
               <div>
-                <strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
+                {# the question's own number, so after a return only the ones marked wrong come back, each under its number (#2933) #}
+                <strong>Question {{ form.question.number }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
                 {{ form.question.instructions|unwrap_p }}
               </div>
               {% crispy form %}
@@ -140,8 +144,9 @@
           {% endfor %}
           </div>
           <hr>
+          {% endif %}
         {% endif %}
-        {% if question_formset %}
+        {% if question_formset.forms %}
           {# with per-question answer fields above, the general comment box needs its own heading #}
           {# so students know it's for anything beyond their answers #}
           <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
@@ -218,6 +223,9 @@
 
 {% endblock %}
 {% block js %}
+    {% if config.enable_competencies and request.user.is_staff %}
+    <script src="{% static 'competencies/js/approval-levels.js' %}?v=1.0"></script>
+    {% endif %}
     <script>
         $(document).ready(function() {
 
@@ -697,5 +705,6 @@
     </script>
 
     {% include 'quest_manager/snippets/flag_submissions_scripts.html' %}
+    {% if request.user.is_staff %}{% include 'questions/snippets/answer_mark_scripts.html' %}{% endif %}
 
 {% endblock %}

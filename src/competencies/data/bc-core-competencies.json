@@ -6,6 +6,7 @@
     "subject": "Core Competencies",
     "grade": "K-12",
     "source_url": "https://curriculum.gov.bc.ca/competencies",
+    "course": "Core",
     "entries": [
         {
             "source_id": "bc:core:k-12:communicating",

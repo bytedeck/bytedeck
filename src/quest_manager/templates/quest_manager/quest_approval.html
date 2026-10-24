@@ -65,6 +65,9 @@ the filter looks inert: it only takes effect when the search button is pressed a
 (#2721). The form still filters with the script absent.
 {% endcomment %}
 <script src="{% static 'js/list-filter-submit.js' %}?v=1.0"></script>
+{% if config.enable_competencies %}
+<script src="{% static 'competencies/js/approval-levels.js' %}?v=1.0"></script>
+{% endif %}
 
 <script>
 $( document ).ready(function() {
@@ -85,5 +88,6 @@ $( document ).ready(function() {
 </script>
 
 {% include "quest_manager/snippets/flag_submissions_scripts.html" %}
+{% include "questions/snippets/answer_mark_scripts.html" %}
 
 {% endblock %}

@@ -1,13 +1,17 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import Http404, HttpResponse
+from django.test import RequestFactory
 from django.urls import reverse
 
 from model_bakery import baker
 
 from competencies.import_export import load_bundled_set
 from competencies.models import Competency
+from competencies.views import competencies_enabled
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
@@ -38,6 +42,15 @@ class CompetencyViewsFeatureFlagTest(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:quests'))
         self.assertNotContains(response, reverse('competencies:list'))
 
+    def test_competencies_enabled__no_siteconfig_is_404(self):
+        """ On the public schema SiteConfig.get() returns None: the flag check treats that as
+        disabled and 404s, rather than raising AttributeError (a 500) """
+        view = competencies_enabled(lambda request: HttpResponse('ok'))
+
+        with patch('competencies.views.SiteConfig.get', return_value=None):
+            with self.assertRaises(Http404):
+                view(RequestFactory().get('/competencies/'))
+
 
 class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
     """ Tests for the competencies views with the feature flag turned on. """
@@ -66,17 +79,30 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assert403('competencies:export')
 
     def test_sidebar__link_shown_to_staff(self):
-        """ With the flag on, staff see the Competencies link in the sidebar """
+        """ With the flag on, staff see the Competencies link in both menus, each under Quest Setup:
+        the sidebar's Quests menu, and the top navbar's Admin menu (which the navbar renders twice,
+        once for wide screens and once for the collapsed phone menu) """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('quests:quests'))
-        self.assertContains(response, reverse('competencies:list'))
+        self.assertContains(response, f'href="{reverse("competencies:list")}"', count=3)
 
     def test_list_view__shows_competencies(self):
-        """ The list view renders the deck's competencies for staff """
+        """ The list view renders the deck's competencies for staff, with their courses """
         self.client.force_login(self.staff)
-        baker.make(Competency, name='Think critically')
+        baker.make(Competency, name='Think critically', course='ADST 9')
         response = self.assert200('competencies:list')
         self.assertContains(response, 'Think critically')
+        self.assertContains(response, ">Course</th>")
+        self.assertContains(response, "<td>ADST 9</td>")
+
+    def test_import_form__bundled_sets_listed_by_name(self):
+        """ The bundled sets are offered alphabetically by name, so a course's grades sit together """
+        self.client.force_login(self.staff)
+        response = self.assert200('competencies:import')
+
+        labels = [label for key, label in response.context['form'].fields['bundled_set'].choices if key]
+        self.assertEqual(labels, sorted(labels, key=str.lower))
+        self.assertIn('BC Media Design 11 Curricular Competencies', labels)
 
     def test_import_flow__bundled_set(self):
         """ The full UI loop: pick a bundled set, preview it, import everything """
@@ -211,7 +237,7 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/csv')
         content = response.content.decode()
-        self.assertTrue(content.startswith('name,category,description,source_id'))
+        self.assertTrue(content.startswith('course,category,name,description,source_id'))
         self.assertIn('Exportable', content)
 
     def test_export__unknown_format_404s(self):

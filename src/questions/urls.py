@@ -18,4 +18,8 @@ urlpatterns = [
     path('answer/<int:pk>/download/', views.answer_file_download, name='answer_file_download'),
     # The file saved with a student's draft answer, removed from the submission page (#2925).
     path('answer/<int:pk>/delete-file/', views.ajax_delete_draft_answer_file, name='ajax_delete_draft_answer_file'),
+    # The same for a question's solution file, which can be of any type too (#2924).
+    path('<int:pk>/solution/download/', views.solution_file_download, name='solution_file_download'),
+    # The X beside an answer in the marking table, which marks it wrong (#2933).
+    path('answer/<int:pk>/mark/', views.ajax_mark_answer, name='ajax_mark_answer'),
 ]

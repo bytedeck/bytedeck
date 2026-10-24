@@ -4,6 +4,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from siteconfig.models import SiteConfig
+
 
 class ProficiencyLevel(models.IntegerChoices):
     """ The BC 4-point proficiency scale: https://curriculum.gov.bc.ca/
@@ -43,6 +45,15 @@ class Competency(models.Model):
         help_text="A free-text strand or grouping, e.g. \"Curricular Competency\", \"Big Idea\", or \"Core Competency\"."
     )
 
+    # db_default as well as default: during a deploy the outgoing version still inserts competencies
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and the
+    # deploy window").
+    course = models.CharField(
+        max_length=255, blank=True, default='', db_default='',
+        help_text="The course this competency comes from, e.g. \"ADST 9\", or \"Core\" for the BC Core Competencies. "
+                  "Competency pickers show it before the category, e.g. \"ADST 9: Defining: Choose a design opportunity\"."
+    )
+
     source_id = models.CharField(
         max_length=255, null=True, blank=True,
         help_text="A stable identifier into a source taxonomy such as the BC curriculum. "
@@ -59,12 +70,35 @@ class Competency(models.Model):
     objects = CompetencyQuerySet.as_manager()
 
     class Meta:
-        ordering = ['category', 'name']
+        ordering = ['course', 'category', 'name']
         verbose_name_plural = 'competencies'
 
     def __str__(self):
         """ Returns the competency's name. """
         return self.name
+
+    @property
+    def course_and_category(self):
+        """ Where the competency sits: its course and category, e.g. "Core: Communication" (either
+        part left out when blank, so possibly ''). """
+        return ": ".join(part for part in (self.course, self.category) if part)
+
+    @property
+    def qualified_name(self):
+        """ The name with its course and category in front, e.g. "Core: Communication: Collaborating",
+        so competencies from different courses can be told apart in a picker. """
+        return ": ".join(part for part in (self.course_and_category, self.name) if part)
+
+
+class QuestCompetencyManager(models.Manager):
+    """ Default manager for QuestCompetency, so related managers such as quest.quest_competencies
+    use it too. A link is nearly always shown by its competency's name, and the default ordering
+    joins the competency anyway, so it is loaded in the same query.
+    """
+
+    def get_queryset(self):
+        """ Returns the links with their competencies selected in the same query. """
+        return super().get_queryset().select_related('competency')
 
 
 class QuestCompetency(models.Model):
@@ -86,15 +120,23 @@ class QuestCompetency(models.Model):
                   "Teachers can adjust the level for individual students when approving submissions."
     )
 
+    objects = QuestCompetencyManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['quest', 'competency'], name='unique_quest_competency')
         ]
+        ordering = ['competency__course', 'competency__category', 'competency__name']
         verbose_name_plural = 'quest competencies'
 
     def __str__(self):
         """ Returns "<quest> - <competency>", identifying both ends of the link. """
         return f"{self.quest} - {self.competency}"
+
+    def get_default_level_label(self):
+        """ Returns this deck's display label for the link's default level (the custom
+        proficiency scale labels in SiteConfig, e.g. "Proficient"). """
+        return SiteConfig.get().get_competency_scale_labels()[self.default_level]
 
 
 class CompetencyAssessment(models.Model):

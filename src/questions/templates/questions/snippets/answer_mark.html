@@ -1,0 +1,27 @@
+{% comment %}
+  An answer's mark (#2933), at the right of its cell in the marking table. Expects `answer`.
+
+  Once the quest has been returned or approved, the answer shows a green check or a red X, to
+  everyone. Until then staff get the X that marks it wrong: a toggle saved as soon as it is
+  clicked (answer_mark_scripts.html), and seen only by staff. A student sees nothing before the
+  marks are set, and an answer that was never marked shows nothing at all.
+{% endcomment %}
+{% if answer.is_correct is True %}
+  <span class="answer-mark pull-right text-success" title="Correct">
+    <i class="fa fa-fw fa-lg fa-check" aria-hidden="true"></i><span class="sr-only">Correct</span>
+  </span>
+{% elif answer.is_correct is False %}
+  <span class="answer-mark pull-right text-danger" title="Marked wrong">
+    <i class="fa fa-fw fa-lg fa-times" aria-hidden="true"></i><span class="sr-only">Marked wrong</span>
+  </span>
+{% elif request.user.is_staff and answer.awaiting_mark %}
+  <button type="button"
+          class="btn btn-xs pull-right answer-mark-wrong {% if answer.marked_wrong %}btn-danger{% else %}btn-default{% endif %}"
+          data-mark-url="{% url 'questions:ajax_mark_answer' answer.id %}"
+          aria-pressed="{{ answer.marked_wrong|yesno:'true,false' }}"
+          data-title-unmarked="Mark this answer wrong. The student sees a red X on it, and is asked it again if you return the quest."
+          data-title-marked="Marked wrong. Click to take the mark back."
+          title="{% if answer.marked_wrong %}Marked wrong. Click to take the mark back.{% else %}Mark this answer wrong. The student sees a red X on it, and is asked it again if you return the quest.{% endif %}">
+    <i class="fa fa-fw fa-times" aria-hidden="true"></i><span class="sr-only">Wrong</span>
+  </button>
+{% endif %}
