@@ -9,6 +9,7 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from django_select2.forms import Select2Widget
 
+from competencies.models import Competency
 from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
 from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
@@ -454,3 +455,35 @@ class BlockForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['current_teacher'].initial = SiteConfig.get().deck_owner.pk
+
+
+class CourseForm(forms.ModelForm):
+    """ The course create and update form.
+
+    With competencies enabled for the deck, it offers the course's competency set as a choice of the
+    official course labels its imported competencies carry (e.g. "ADST 9"), so a course named its own
+    way can say which curriculum course it teaches. With the flag off the field is left off, keeping
+    whatever set the course already has.
+    """
+
+    class Meta:
+        model = Course
+        fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active', 'competency_set')
+
+    def __init__(self, *args, **kwargs):
+        """ Offer the deck's competency sets for the competency_set field, or drop it while the deck has
+        competencies disabled. """
+        super().__init__(*args, **kwargs)
+        if not SiteConfig.get().enable_competencies:
+            del self.fields['competency_set']
+            return
+        labels = set(Competency.objects.exclude(course='').values_list('course', flat=True))
+        if self.instance.competency_set:
+            # a set whose competencies are gone stays on offer, so saving the course doesn't drop it
+            labels.add(self.instance.competency_set)
+        self.fields['competency_set'] = forms.ChoiceField(
+            label="Competency set",
+            required=False,
+            choices=[('', '---------')] + [(label, label) for label in sorted(labels, key=str.lower)],
+            help_text=Course._meta.get_field('competency_set').help_text,
+        )

@@ -412,7 +412,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         response = self.client.get(reverse('library:export_quest', args=[self.local_quest.import_id]))
 
         self.assertContains(response, self.local_quest.name)
-        self.assertNotContains(response, "competency-chip")
+        self.assertNotContains(response, "<li>Competencies:")
         self.assertNotContains(response, "Unshared Competency")
 
     def test_require_export_permission__allowed_non_owner_and_staff_permission_enabled(self):
@@ -3382,7 +3382,7 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "competency-chip")
+        self.assertNotContains(response, "<li>Competencies:")
         self.assertNotContains(response, "Library Competency")
         self.assertNotContains(response, "Local-only Competency")
 

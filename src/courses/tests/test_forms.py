@@ -2,11 +2,13 @@ import datetime
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from django_select2.forms import Select2Widget
 from model_bakery import baker
 
 from badges.forms import BadgeAssertionForm
-from courses.forms import CourseStudentForm, CourseStudentStaffForm, SemesterForm
+from competencies.models import Competency
+from courses.forms import CourseForm, CourseStudentForm, CourseStudentStaffForm, SemesterForm
 from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.forms import SubmissionQuickReplyFormStudent
@@ -214,3 +216,62 @@ class XPCourseChoiceMixinTest(ByteDeckTenantTestCase):
             [str(label) for value, label in form.fields['registration'].widget.choices],
             ['Split evenly between my courses', str(self.maths), str(self.art)],
         )
+
+
+class CourseFormCompetencySetTest(ByteDeckTenantTestCase):
+    """ The course form's competency set: a choice of the deck's imported competency sets. """
+
+    def setUp(self):
+        """ Turn competencies on and give the deck competencies from two sets, plus one in none. """
+        config = SiteConfig.get()
+        config.enable_competencies = True
+        config.full_clean()
+        config.save()
+        baker.make(Competency, course='ADST 9')
+        baker.make(Competency, course='ADST 9')
+        baker.make(Competency, course='core')
+        baker.make(Competency, course='')
+        self.teacher = baker.make(get_user_model(), is_staff=True)
+
+    def test_competency_set__offers_the_decks_competency_sets(self):
+        """ The choices are each official course label the deck's competencies carry, once each,
+        alphabetically, after a blank choice """
+        choices = CourseForm().fields['competency_set'].choices
+
+        self.assertEqual(choices, [('', '---------'), ('ADST 9', 'ADST 9'), ('core', 'core')])
+
+    def test_competency_set__keeps_a_set_whose_competencies_are_gone(self):
+        """ A course's set stays on offer after its competencies are gone, so saving keeps it """
+        course = baker.make(Course, competency_set='Media Design 10')
+
+        self.assertIn(('Media Design 10', 'Media Design 10'), CourseForm(instance=course).fields['competency_set'].choices)
+
+    def test_competency_set__left_off_when_disabled(self):
+        """ With competencies off the field isn't on the form, and saving keeps the course's set """
+        course = baker.make(Course, title='Design 9', competency_set='ADST 9')
+        config = SiteConfig.get()
+        config.enable_competencies = False
+        config.full_clean()
+        config.save()
+
+        form = CourseForm(instance=course, data={'title': 'Design 9', 'xp_for_100_percent': 1000, 'active': True})
+
+        self.assertNotIn('competency_set', form.fields)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().competency_set, 'ADST 9')
+
+    def test_course_update__saves_the_competency_set(self):
+        """ A course named its own way is given a competency set on its edit page, and the course
+        list shows it """
+        course = baker.make(Course, title='Hackerspace Design')
+        self.client.force_login(self.teacher)
+
+        response = self.client.post(reverse('courses:course_update', args=[course.pk]), data={
+            'title': 'Hackerspace Design', 'xp_for_100_percent': 1000, 'uses_marks': True, 'active': True,
+            'competency_set': 'ADST 9',
+        })
+
+        self.assertRedirects(response, reverse('courses:course_list'))
+        course.refresh_from_db()
+        self.assertEqual(course.competency_set, 'ADST 9')
+        self.assertContains(self.client.get(reverse('courses:course_list')), '<td>ADST 9</td>')
