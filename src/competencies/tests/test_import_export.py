@@ -6,6 +6,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from model_bakery import baker
 
+from courses.models import Course
+
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from competencies.import_export import (
     export_competency_set,
@@ -237,7 +239,7 @@ class ParseAndValidateTest(ByteDeckTenantTestCase):
     def test_validate_competency_set__rejects_overlong_category_and_source_id(self):
         """ Every length-limited field is checked up front, so an overlong value is a validation
         error before anything is imported, not a failure part way through the import """
-        for field in ['course', 'category', 'source_id']:
+        for field in ['category', 'source_id']:
             with self.subTest(field=field), self.assertRaises(ValidationError):
                 validate_competency_set(make_set([{'name': 'Think', field: 'x' * 256}]))
 
@@ -355,16 +357,42 @@ class ImportCompetencySetTest(ByteDeckTenantTestCase):
         self.assertEqual(Competency.objects.count(), 1)
 
     def test_import__course_is_set_and_updated_but_never_cleared(self):
-        """ Importing sets a competency's course and a re-import changes it, but a re-import that
-        gives no course (a CSV without the column) leaves the course it has """
+        """ Importing links a competency to the deck's course its entry names and a re-import changes
+        it, but a re-import that links none (a CSV without the column) leaves the course it has """
+        old, new = baker.make(Course, title='Old course'), baker.make(Course, title='New course')
         import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'Think'}], course='Old course'))
-        self.assertEqual(Competency.objects.get().course, 'Old course')
+        self.assertEqual(Competency.objects.get().course, old)
 
-        import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'Think'}], course='New course'))
-        self.assertEqual(Competency.objects.get().course, 'New course')
+        import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'Think'}], course='new COURSE'))
+        self.assertEqual(Competency.objects.get().course, new)
 
         import_competency_set(parse_csv_set("name,source_id\nThink,x:1\n"))
-        self.assertEqual(Competency.objects.get().course, 'New course')
+        self.assertEqual(Competency.objects.get().course, new)
+
+    def test_import__links_each_entry_to_the_deck_course_of_its_name(self):
+        """ By default each competency is linked to the deck's course named by its entry, matched
+        case-insensitively; an entry naming no course on the deck is linked to none """
+        adst = baker.make(Course, title='ADST 9')
+        import_competency_set(make_valid_set([
+            {'source_id': 'x:1', 'name': 'Think', 'course': 'adst 9'},
+            {'source_id': 'x:2', 'name': 'Share', 'course': 'Not a course here'},
+        ]))
+
+        self.assertEqual(Competency.objects.get(source_id='x:1').course, adst)
+        self.assertIsNone(Competency.objects.get(source_id='x:2').course)
+
+    def test_import__a_chosen_course_or_none_overrides_the_entries(self):
+        """ A course passed to the import links every competency to it, whatever the entries name;
+        None links none and leaves an existing competency's course as it is """
+        named, chosen = baker.make(Course, title='ADST 9'), baker.make(Course, title='Design 9')
+        import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'Think'}], course='ADST 9'), course=chosen)
+        self.assertEqual(Competency.objects.get().course, chosen)
+
+        import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'Think'}, {'source_id': 'x:2', 'name': 'Share'}],
+                                             course='ADST 9'), course=None)
+        self.assertEqual(Competency.objects.get(source_id='x:1').course, chosen)
+        self.assertIsNone(Competency.objects.get(source_id='x:2').course)
+        self.assertFalse(named.competencies.exists())
 
     def test_import__reimport_leaves_active_flag_alone(self):
         """ A deck's decision to deactivate a competency survives re-import """
@@ -476,6 +504,15 @@ class ExportRoundTripTest(ByteDeckTenantTestCase):
 
         competency_set = export_competency_set(Competency.objects.filter(pk=retired.pk))
         self.assertEqual([e['name'] for e in competency_set['entries']], ['Retired one'])
+
+    def test_export_competency_set__gives_each_course_title(self):
+        """ An export names each competency's course by its title, blank for none """
+        baker.make(Competency, name='Linked', course=baker.make(Course, title='ADST 9'))
+        baker.make(Competency, name='Unlinked', course=None)
+
+        courses = {entry['name']: entry['course'] for entry in export_competency_set()['entries']}
+
+        self.assertEqual(courses, {'Linked': 'ADST 9', 'Unlinked': ''})
 
     def test_export__active_competencies_only(self):
         """ The default export includes active competencies and skips deactivated ones """

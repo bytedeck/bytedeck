@@ -49,7 +49,7 @@
             <tbody>
                 {% for competency in object_list %}
                     <tr>
-                        <td>{{ competency.course }}</td>
+                        <td>{{ competency.course|default_if_none:"" }}</td>
                         <td>{{ competency.category }}</td>
                         <td>{{ competency.name }}</td>
                         <td><small>{{ competency.source_id|default_if_none:"" }}</small></td>

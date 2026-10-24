@@ -22,9 +22,10 @@ that can be moved between decks (or curated in this repo as bundled curriculum d
         ]
     }
 
-Set metadata other than ``entries`` and ``course`` is informational. ``course`` is the course
-(or framework, e.g. "Core") the competencies come from, which pickers show before the category;
-an entry may give its own ``course``, and one that doesn't takes the set's. Each entry requires a
+Set metadata other than ``entries`` and ``course`` is informational. ``course`` names the course
+the competencies come from (e.g. "ADST 9"); an entry may give its own ``course``, and one that
+doesn't takes the set's. On import a competency is linked to the deck's course of that name
+(matched case-insensitively), unless the importer picks a course for the whole import. Each entry requires a
 ``name``; ``course``, ``source_id``, ``description``, and ``category`` are optional. Every field is
 text (a JSON string), and ``source_url``, when given, must be an http(s) URL. ``source_id`` is a stable
 identifier into the source taxonomy (convention for BC: ``bc:{subject}:{grade}:{slug}``)
@@ -50,6 +51,8 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models.functions import Lower
 
+from courses.models import Course
+
 from .models import Competency
 
 FORMAT_NAME = 'bytedeck-competency-set'
@@ -57,12 +60,15 @@ FORMAT_VERSION = 1
 
 CSV_FIELDS = ['course', 'category', 'name', 'description', 'source_id']
 
+# import_competency_set's default: link each competency to the deck's course named by its entry
+MATCH_COURSE_BY_NAME = 'match'
+
 # The source_url is rendered as a link in the import preview, so anything that a browser would
 # run rather than navigate to (javascript:, data:, ...) is refused.
 SOURCE_URL_SCHEMES = ('http', 'https')
 
 # The Competency fields with a max_length, checked before anything is saved.
-LENGTH_LIMITED_FIELDS = ('course', 'name', 'category', 'source_id')
+LENGTH_LIMITED_FIELDS = ('name', 'category', 'source_id')
 
 DATA_DIR = Path(__file__).resolve().parent / 'data'
 
@@ -341,7 +347,13 @@ def _match_entries(entries, lookup):
         yield entry, existing
 
 
-def import_competency_set(competency_set, selected_indexes=None):
+def courses_by_title():
+    """ The deck's courses keyed by lowercased title (titles are unique), for matching the course an
+    entry names. """
+    return {course.title.lower(): course for course in Course.objects.all()}
+
+
+def import_competency_set(competency_set, selected_indexes=None, course=MATCH_COURSE_BY_NAME):
     """ Import a validated competency set into the current deck.
 
     The import is all or nothing: it runs in one transaction, so a failure part way
@@ -355,6 +367,10 @@ def import_competency_set(competency_set, selected_indexes=None):
         competency_set (dict): a set as returned by the parse/validate functions.
         selected_indexes (list[int], optional): indexes into entries to import;
             all entries when None.
+        course (Course, None, or MATCH_COURSE_BY_NAME): the course to link every imported
+            competency to; or, by default, each to the deck's course named by its entry (none when
+            the deck has no course of that name); or None to link none. Like the source_id, an
+            existing competency's course is only ever set, never cleared.
 
     Returns:
         tuple[int, int]: (created_count, updated_count)
@@ -364,17 +380,19 @@ def import_competency_set(competency_set, selected_indexes=None):
         entries = [entries[i] for i in selected_indexes if 0 <= i < len(entries)]
 
     lookup = _build_existing_lookup(entries)
+    deck_courses = courses_by_title() if course == MATCH_COURSE_BY_NAME else {}
     created = updated = 0
     with transaction.atomic():
         for entry, existing in _match_entries(entries, lookup):
+            entry_course = deck_courses.get(entry['course'].lower()) if course == MATCH_COURSE_BY_NAME else course
             if existing:
                 existing.name = entry['name']
                 existing.description = entry['description']
                 existing.category = entry['category']
-                # like the source_id, a course is only ever filled in: an entry without one (a CSV
-                # with no course column) leaves the course a teacher or another set gave it
-                if entry['course']:
-                    existing.course = entry['course']
+                # like the source_id, a course is only ever filled in: an import that links none (a
+                # CSV with no course column, say) leaves the course a teacher or another set gave it
+                if entry_course is not None:
+                    existing.course = entry_course
                 if entry['source_id']:
                     existing.source_id = entry['source_id']
                 existing.full_clean()
@@ -382,7 +400,7 @@ def import_competency_set(competency_set, selected_indexes=None):
                 updated += 1
             else:
                 competency = Competency(
-                    course=entry['course'],
+                    course=entry_course,
                     name=entry['name'],
                     description=entry['description'],
                     category=entry['category'],
@@ -402,6 +420,7 @@ def export_competency_set(queryset=None, name=''):
     """
     if queryset is None:
         queryset = Competency.objects.active()
+    queryset = queryset.select_related('course')
     return {
         'format': FORMAT_NAME,
         'version': FORMAT_VERSION,
@@ -413,7 +432,7 @@ def export_competency_set(queryset=None, name=''):
         'course': '',
         'entries': [
             {
-                'course': competency.course,
+                'course': competency.course.title if competency.course_id else '',
                 'source_id': competency.source_id or '',
                 'name': competency.name,
                 'description': competency.description,

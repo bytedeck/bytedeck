@@ -43,13 +43,11 @@ class Competency(models.Model):
         help_text="A free-text strand or grouping, e.g. \"Curricular Competency\", \"Big Idea\", or \"Core Competency\"."
     )
 
-    # db_default as well as default: during a deploy the outgoing version still inserts competencies
-    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and the
-    # deploy window").
-    course = models.CharField(
-        max_length=255, blank=True, default='', db_default='',
-        help_text="The course this competency comes from, e.g. \"ADST 9\", or \"Core\" for the BC Core Competencies. "
-                  "Competency pickers show it before the category, e.g. \"ADST 9: Defining: Choose a design opportunity\"."
+    course = models.ForeignKey(
+        'courses.Course', null=True, blank=True, on_delete=models.SET_NULL, related_name='competencies',
+        help_text="The course this competency belongs to. Competency pickers show it before the category, e.g. "
+                  "\"ADST 9: Defining: Choose a design opportunity\". Leave it blank for competencies that span "
+                  "courses, such as the Core Competencies."
     )
 
     source_id = models.CharField(
@@ -68,7 +66,7 @@ class Competency(models.Model):
     objects = CompetencyQuerySet.as_manager()
 
     class Meta:
-        ordering = ['course', 'category', 'name']
+        ordering = ['course__title', 'category', 'name']
         verbose_name_plural = 'competencies'
 
     def __str__(self):
@@ -79,7 +77,7 @@ class Competency(models.Model):
     def course_and_category(self):
         """ Where the competency sits: its course and category, e.g. "Core: Communication" (either
         part left out when blank, so possibly ''). """
-        return ": ".join(part for part in (self.course, self.category) if part)
+        return ": ".join(part for part in (self.course.title if self.course_id else '', self.category) if part)
 
     @property
     def qualified_name(self):
@@ -90,13 +88,13 @@ class Competency(models.Model):
 
 class QuestCompetencyManager(models.Manager):
     """ Default manager for QuestCompetency, so related managers such as quest.quest_competencies
-    use it too. A link is nearly always shown by its competency's name, and the default ordering
-    joins the competency anyway, so it is loaded in the same query.
+    use it too. A link is nearly always shown by its competency's name and course, and the default
+    ordering joins both anyway, so they are loaded in the same query.
     """
 
     def get_queryset(self):
-        """ Returns the links with their competencies selected in the same query. """
-        return super().get_queryset().select_related('competency')
+        """ Returns the links with their competencies and the competencies' courses selected in the same query. """
+        return super().get_queryset().select_related('competency', 'competency__course')
 
 
 class QuestCompetency(models.Model):
@@ -124,7 +122,7 @@ class QuestCompetency(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['quest', 'competency'], name='unique_quest_competency')
         ]
-        ordering = ['competency__course', 'competency__category', 'competency__name']
+        ordering = ['competency__course__title', 'competency__category', 'competency__name']
         verbose_name_plural = 'quest competencies'
 
     def __str__(self):

@@ -1,4 +1,5 @@
 {% extends "competencies/base.html" %}
+{% load crispy_forms_tags %}
 
 {% block heading_inner %}Import Competencies: Preview{% endblock %}
 
@@ -24,6 +25,7 @@
 
     <form action="" method="post">
         {% csrf_token %}
+        {{ course_form.course|as_crispy_field }}
 
         <table class="table table-striped">
             <thead>

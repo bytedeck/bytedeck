@@ -1,14 +1,16 @@
+import importlib
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from model_bakery import baker
 
+from courses.models import Course
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel, QuestCompetency
 from quest_manager.models import Quest, QuestSubmission
@@ -53,26 +55,48 @@ class CompetencyModelTest(ByteDeckTenantTestCase):
 
     def test_qualified_name__puts_the_course_and_category_first(self):
         """ qualified_name reads "Course: Category: Name", leaving out whichever parts are blank """
+        core, adst = baker.make(Course, title='Core'), baker.make(Course, title='ADST 9')
         cases = [
-            ({'course': 'Core', 'category': 'Communication'}, 'Core: Communication', 'Core: Communication: Collaborating'),
-            ({'course': 'ADST 9', 'category': ''}, 'ADST 9', 'ADST 9: Collaborating'),
-            ({'course': '', 'category': 'Communication'}, 'Communication', 'Communication: Collaborating'),
-            ({'course': '', 'category': ''}, '', 'Collaborating'),
+            ({'course': core, 'category': 'Communication'}, 'Core: Communication', 'Core: Communication: Collaborating'),
+            ({'course': adst, 'category': ''}, 'ADST 9', 'ADST 9: Collaborating'),
+            ({'course': None, 'category': 'Communication'}, 'Communication', 'Communication: Collaborating'),
+            ({'course': None, 'category': ''}, '', 'Collaborating'),
         ]
         for fields, course_and_category, qualified_name in cases:
-            with self.subTest(**fields):
+            with self.subTest(qualified_name=qualified_name):
                 competency = Competency(name='Collaborating', **fields)
                 self.assertEqual(competency.course_and_category, course_and_category)
                 self.assertEqual(competency.qualified_name, qualified_name)
 
     def test_ordering__by_course_then_category_then_name(self):
-        """ Competencies list by course first, so each course's sit together """
+        """ Competencies list by course title first, so each course's sit together, with those in no
+        course last """
         Competency.objects.all().delete()
-        baker.make(Competency, course='Media Design 10', category='Defining', name='B')
-        baker.make(Competency, course='ADST 9', category='Making', name='A')
-        baker.make(Competency, course='ADST 9', category='Defining', name='C')
+        media, adst = baker.make(Course, title='Media Design 10'), baker.make(Course, title='ADST 9')
+        baker.make(Competency, course=None, category='Communication', name='D')
+        baker.make(Competency, course=media, category='Defining', name='B')
+        baker.make(Competency, course=adst, category='Making', name='A')
+        baker.make(Competency, course=adst, category='Defining', name='C')
 
-        self.assertEqual(list(Competency.objects.values_list('name', flat=True)), ['C', 'A', 'B'])
+        self.assertEqual(list(Competency.objects.values_list('name', flat=True)), ['C', 'A', 'B', 'D'])
+
+    def test_course_link_migration__links_text_labels_to_courses_of_the_same_title(self):
+        """ The migration that turned the course into a link to the deck's Course links each
+        competency whose old text label names a course (case-insensitively), and leaves the rest
+        unlinked; the label column is still in the database for it to read """
+        migration = importlib.import_module('competencies.migrations.0004_competency_course_link')
+        course = baker.make(Course, title='ADST 9')
+        matched = baker.make(Competency, name='Matched', course=None)
+        unmatched = baker.make(Competency, name='Unmatched', course=None)
+        with connection.cursor() as cursor:
+            cursor.execute("UPDATE competencies_competency SET course = %s WHERE id = %s", ['adst 9', matched.pk])
+            cursor.execute("UPDATE competencies_competency SET course = %s WHERE id = %s", ['Nothing by this name', unmatched.pk])
+            cursor.execute(migration.LINK_COURSES_BY_TITLE)
+
+        matched.refresh_from_db()
+        unmatched.refresh_from_db()
+        self.assertEqual(matched.course, course)
+        self.assertIsNone(unmatched.course)
 
     def test_active__excludes_deactivated(self):
         """ Competency.objects.active() includes active competencies and excludes deactivated ones """
