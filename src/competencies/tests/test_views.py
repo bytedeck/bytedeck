@@ -35,8 +35,8 @@ class CompetencyViewsFeatureFlagTest(ByteDeckTenantTestCase):
             self.assert404('competencies:export')
             self.client.logout()
 
-    def test_sidebar__link_hidden_when_disabled(self):
-        """ The sidebar shows no Competencies link to staff while the flag is off """
+    def test_admin_menu__link_hidden_when_disabled(self):
+        """ No menu shows staff a Competencies link while the flag is off """
         staff = baker.make(User, is_staff=True)
         self.client.force_login(staff)
         response = self.client.get(reverse('quests:quests'))
@@ -78,13 +78,18 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assert403('competencies:import_preview')
         self.assert403('competencies:export')
 
-    def test_sidebar__link_shown_to_staff(self):
-        """ With the flag on, staff see the Competencies link in both menus, each under Quest Setup:
-        the sidebar's Quests menu, and the top navbar's Admin menu (which the navbar renders twice,
-        once for wide screens and once for the collapsed phone menu) """
+    def test_admin_menu__link_under_course_setup(self):
+        """ With the flag on, staff find Competencies in the top navbar's Admin menu under Course Setup,
+        right after Courses, and not in the sidebar's Quests menu (the navbar renders the Admin menu
+        twice, once for wide screens and once for the collapsed phone menu) """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('quests:quests'))
-        self.assertContains(response, f'href="{reverse("competencies:list")}"', count=3)
+
+        self.assertContains(response, f'href="{reverse("competencies:list")}"', count=2)
+        self.assertRegex(
+            response.content.decode(),
+            rf'Courses</a></li>\s*<li><a href="{reverse("competencies:list")}">',
+        )
 
     def test_list_view__shows_competencies(self):
         """ The list view renders the deck's competencies for staff, with their courses """
