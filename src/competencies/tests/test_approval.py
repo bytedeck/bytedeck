@@ -217,6 +217,43 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
 
         self.assertFalse(CompetencyAssessment.objects.exists())
 
+    def approval_comment(self):
+        """ The text of the latest comment on this test's submission. """
+        return Comment.objects.filter(target_object_id=self.submission.pk).order_by('-pk').first().text
+
+    def test_approve__comment_lists_the_recorded_levels(self):
+        """ The comment that approves the submission lists each competency with the level recorded,
+        in the deck's labels, after the teacher's own text """
+        self.post_decision('approve_button', comment_text='Nice work', **{
+            competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING,
+        })
+
+        text = self.approval_comment()
+        self.assertIn('Nice work', text)
+        self.assertIn('<p>Competencies:</p>', text)
+        self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>Developing</b>', text)
+        self.assertIn('<span title="Communication: Communicating">Communicating</span>: <b>Proficient</b>', text)
+        self.assertNotIn('Retired Competency', text)
+
+    def test_approve__comment_cuts_a_long_competency_name_short(self):
+        """ A long competency name in the approving comment is cut short, in full in its title """
+        long_name = "Critically analyze and prioritize competing factors to meet community needs"
+        QuestCompetency.objects.create(quest=self.quest, competency=baker.make(Competency, name=long_name, category="Ideating"))
+
+        self.post_decision('approve_button')
+
+        self.assertIn(f'<span title="Ideating: {long_name}">{long_name[:49]}\u2026</span>', self.approval_comment())
+
+    def test_return_and_repeated_approval__comments_list_no_levels(self):
+        """ Returning records nothing, so its comment lists no levels; nor does a second Approve on a
+        submission already approved, which records nothing more """
+        self.post_decision('return_button')
+        self.assertNotIn('Competencies:', self.approval_comment())
+
+        self.post_decision('approve_button')
+        self.post_decision('approve_button')
+        self.assertNotIn('Competencies:', self.approval_comment())
+
     def test_complete__auto_approved_quest_records_defaults_without_an_assessor(self):
         """ Handing in a quest that needs no approval records its competencies at their default
         levels, system-assessed (no assessor), since no teacher approves it """

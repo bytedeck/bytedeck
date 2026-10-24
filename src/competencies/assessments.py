@@ -8,6 +8,8 @@ student's history rather than replacing it.
 """
 
 from django.contrib.contenttypes.models import ContentType
+from django.template.defaultfilters import truncatechars
+from django.utils.html import format_html, format_html_join
 
 from siteconfig.models import SiteConfig
 
@@ -25,7 +27,7 @@ def approval_links(quest):
         quest (Quest): the quest being approved.
 
     Returns:
-        list[QuestCompetency]: the links, in the default (category, name) ordering.
+        list[QuestCompetency]: the links, in the default (course, category, name) ordering.
     """
     return [link for link in quest.quest_competencies.all() if link.competency.active]
 
@@ -82,3 +84,24 @@ def record_approval_assessments(submission, assessed_by=None, data=None):
         assessment.save()
         assessments.append(assessment)
     return assessments
+
+
+def assessments_comment_html(assessments):
+    """ The competency levels an approval recorded, for the comment that approves the submission,
+    so the student reads them in the conversation alongside the approval itself (as a granted badge
+    is announced there). A long name is cut short, with the full name in its title.
+
+    Args:
+        assessments (list[CompetencyAssessment]): what record_approval_assessments returned.
+
+    Returns:
+        str: safe HTML listing each competency with the deck's label for its level, or '' for none.
+    """
+    if not assessments:
+        return ''
+    labels = SiteConfig.get().get_competency_scale_labels()
+    items = format_html_join('', '<li><span title="{}">{}</span>: <b>{}</b></li>', (
+        (assessment.competency.qualified_name, truncatechars(assessment.competency.name, 50), labels[assessment.level])
+        for assessment in assessments
+    ))
+    return format_html('<p>Competencies:</p><ul>{}</ul>', items)

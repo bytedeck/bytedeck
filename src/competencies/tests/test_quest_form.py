@@ -90,7 +90,8 @@ class QuestCompetenciesFormTest(ByteDeckTenantTestCase):
         rendered = render_crispy_form(form)
 
         self.assertEqual(field.label_from_instance(self.thinking), 'Core: Thinking: Critical Thinking')
-        self.assertIn('>Core: Thinking: Critical Thinking</option>', rendered)
+        # the full label is the option's title too, for the hover where the widget cuts it short
+        self.assertIn('title="Core: Thinking: Critical Thinking">Core: Thinking: Critical Thinking</option>', rendered)
         self.assertIn('<small class="text-muted">Core: Thinking</small>', rendered)
 
     def test_add_competency_fields__level_choices_use_the_decks_labels(self):
