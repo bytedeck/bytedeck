@@ -5,6 +5,8 @@
   Staff are marking, so they get a third column beside the student's answer: each question's
   solution, with its marker notes behind an info button (#2927). Each answer carries its mark
   (answer_mark.html, #2933): the X staff mark it wrong with, then the check or X it was given.
+  A row whose answer is marked wrong is highlighted red: for staff as soon as they press its X,
+  and for everyone once the quest is returned or approved.
   On a screen narrower than Bootstrap's sm breakpoint the columns stack, question first, then
   the answer, then the solution, each under a label of its own, since the header row is hidden
   there (css/custom_common.css).
@@ -17,12 +19,12 @@
       <th class="{% if request.user.is_staff %}col-sm-4{% else %}col-sm-5{% endif %}">Question</th>
       {# staff are marking, so the column is the student's answer to compare against; the student sees their own answer #}
       <th class="{% if request.user.is_staff %}col-sm-5{% else %}col-sm-7{% endif %}">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</th>
-      {% if request.user.is_staff %}<th class="col-sm-3">Solution</th>{% endif %}
+      {% if request.user.is_staff %}<th class="col-sm-3">Solution <small>(visible to staff only)</small></th>{% endif %}
     </tr>
   </thead>
   <tbody>
   {% for answer in answers %}
-    <tr>
+    <tr{% if answer.is_correct is False or request.user.is_staff and answer.marked_wrong and answer.awaiting_mark %} class="danger"{% endif %}>
       <td class="{% if request.user.is_staff %}col-sm-4{% else %}col-sm-5{% endif %}">
         {# number each answer inline, matching the "Question N" heading on the submission form; #}
         {# unwrap_p strips Summernote's wrapping paragraph element so the number sits right before a one-line prompt. #}
@@ -56,7 +58,7 @@
       </td>
       {% if request.user.is_staff %}
       <td class="col-sm-3">
-        <div class="question-answers-label">Solution</div>
+        <div class="question-answers-label">Solution <small>(visible to staff only)</small></div>
         {% with question=answer.question %}
           {% if question.marker_notes %}
             <span class="pull-right">{% include 'questions/snippets/marker_notes_popover.html' %}</span>

@@ -299,6 +299,20 @@ class AnswerMarkingTest(QuestionSubmissionFlowTestBase):
         self.assertNotContains(response, "data-mark-url")
         self.assertContains(response, '<span class="sr-only">Marked wrong</span>', count=1)
 
+    def test_marking_table__a_row_marked_wrong_is_highlighted(self):
+        """The row of an answer marked wrong is highlighted red: for staff as soon as they mark it,
+        and for the student only once the quest comes back."""
+        self.hand_in()
+        self.mark(self.answer(self.long_question))
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+        self.assertContains(response, '<tr class="danger">', count=1)
+        self.assertNotContains(self.student_page(), '<tr class="danger">')
+
+        self.review("return_button")
+
+        self.assertContains(self.student_page(), '<tr class="danger">', count=1)
+
     # the helpers
 
     def test_finalize_answer_marks__only_the_latest_hand_in(self):

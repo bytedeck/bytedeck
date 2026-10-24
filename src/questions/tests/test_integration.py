@@ -996,7 +996,7 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
 
     def test_display__staff_get_a_solution_column(self):
         """Markers get three columns, Question, Answer provided and Solution, with the solution
-        in a cell of its own beside the answer (#2927)."""
+        in a cell of its own beside the answer (#2927), its heading noting that students don't see it."""
         self.short_question.solution_text = "An URL like https://example.com"
         self.short_question.save()
         self.complete_with_answers()
@@ -1005,8 +1005,8 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
 
         content = response.content.decode()
-        headers = re.findall(r'<th class="col-sm-\d">([^<]*)</th>', content)
-        self.assertEqual(headers, ["Question", "Answer provided", "Solution"])
+        headers = re.findall(r'<th class="col-sm-\d">(.*?)</th>', content)
+        self.assertEqual(headers, ["Question", "Answer provided", "Solution <small>(visible to staff only)</small>"])
         solution_cell = re.search(r'<td class="col-sm-3">(.*?)</td>', content, re.S).group(1)
         self.assertIn("An URL like https://example.com", solution_cell)
         # the long answer has no solution, so its cell says so rather than standing empty

@@ -217,10 +217,13 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(outer, "middle", "bootstrap-table's own cells keep its alignment")
 
     def test_mark__the_x_marks_an_answer_wrong_and_back(self):
-        """The X beside an answer saves the mark as it is clicked, and shows it: pressed and red
-        once marked wrong, plain again once the mark is taken back (#2933)."""
+        """The X beside an answer saves the mark as it is clicked, and shows it: pressed and red,
+        with the answer's row highlighted, once marked wrong, plain again once the mark is taken
+        back (#2933)."""
         x = self.page.locator(f'.answer-mark-wrong[data-mark-url="{self.mark_path}"]')
+        row = x.locator("xpath=ancestor::tr[1]")
         self.assertEqual(x.get_attribute("aria-pressed"), "false")
+        self.assertNotIn("danger", (row.get_attribute("class") or "").split())
 
         x.click()
 
@@ -230,6 +233,7 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertIn("wrong=true", self.marks[0])
         self.assertIn("btn-danger", x.get_attribute("class"))
         self.assertIn("take the mark back", x.get_attribute("title"))
+        self.assertIn("danger", (row.get_attribute("class") or "").split())
 
         x.click()
 
@@ -238,6 +242,7 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
             timeout=10000)
         self.assertIn("wrong=false", self.marks[1])
         self.assertNotIn("btn-danger", x.get_attribute("class"))
+        self.assertNotIn("danger", (row.get_attribute("class") or "").split())
         self.assertEqual(self.dialogs, [])
 
     def test_mark__a_failed_save_says_so_and_leaves_the_x_as_it_was(self):
@@ -252,6 +257,7 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(len(self.dialogs), 1)
         self.assertIn("wasn't saved", self.dialogs[0])
         self.assertEqual(x.get_attribute("aria-pressed"), "false")
+        self.assertNotIn("danger", (x.locator("xpath=ancestor::tr[1]").get_attribute("class") or "").split())
         self.assertTrue(x.is_enabled())
 
     def test_layout__stacked_on_a_narrow_screen(self):
@@ -266,5 +272,5 @@ class MarkingAnswersRenderTest(QuestionSubmissionFlowTestBase):
         self.assertGreaterEqual(cells[1]["y"], cells[0]["y"] + cells[0]["height"] - 1)
         self.assertGreaterEqual(cells[2]["y"], cells[1]["y"] + cells[1]["height"] - 1)
         labels = self.page.locator(".question-answers tbody tr:first-child .question-answers-label")
-        self.assertEqual(labels.all_inner_texts(), ["Answer provided", "Solution"])
+        self.assertEqual(labels.all_inner_texts(), ["Answer provided", "Solution (visible to staff only)"])
         self.assertTrue(labels.first.is_visible())
