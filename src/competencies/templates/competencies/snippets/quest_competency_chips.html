@@ -1,13 +1,16 @@
 {% comment %}
-  A quest's competencies as chips, for the quest detail info list. Staff also see each one's
-  default level; students see the names, so they know what the quest gives evidence of.
+  A quest's competencies as chips, for the quest detail info list (the quest_competency_chips tag).
+  On a submission's page, a competency assessed when it was approved shows the recorded level in that
+  level's colour; otherwise staff see each one's default level and students see the names.
 {% endcomment %}
-{% with links=quest.quest_competencies.all %}
-  {% if links %}
+{% if chips %}
   <li>Competencies:
-    {% for link in links %}
-      <span class="label label-info competency-chip">{{ link.competency.name }}{% if request.user.is_staff %}: {{ link.get_default_level_label }}{% endif %}</span>
+    {% for chip in chips %}
+      {% if chip.level %}
+        <span class="label competency-chip competency-level-{{ chip.level }}" title="Level recorded when this submission was approved">{{ chip.name }}: {{ chip.label }}</span>
+      {% else %}
+        <span class="label label-info competency-chip">{{ chip.name }}{% if chip.label %}: {{ chip.label }}{% endif %}</span>
+      {% endif %}
     {% endfor %}
   </li>
-  {% endif %}
-{% endwith %}
+{% endif %}

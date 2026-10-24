@@ -217,6 +217,43 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
 
         self.assertFalse(CompetencyAssessment.objects.exists())
 
+    def recorded_chip(self, name, level, label):
+        """ The chip a submission's Quest Info shows for a competency with a recorded level. """
+        return (f'<span class="label competency-chip competency-level-{level}" '
+                f'title="Level recorded when this submission was approved">{name}: {label}</span>')
+
+    def test_submission_page__student_sees_their_recorded_levels(self):
+        """ Once approved, the student's own submission shows each competency with the level
+        recorded for them, coloured by level; a competency with nothing recorded shows its name """
+        self.post_decision('approve_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING})
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:submission', args=[self.submission.pk]))
+
+        self.assertContains(response, self.recorded_chip('Critical Thinking', 2, 'Developing'))
+        self.assertContains(response, self.recorded_chip('Communicating', 3, 'Proficient'))
+        self.assertContains(response, '<span class="label label-info competency-chip">Retired Competency</span>')
+
+    def test_submission_page__shows_the_latest_level_after_a_reapproval(self):
+        """ A submission approved, returned and approved again shows the levels from the latest approval """
+        self.post_decision('approve_button')
+        self.post_decision('return_button')
+        self.post_decision('approve_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.EMERGING})
+
+        response = self.client.get(reverse('quests:submission', args=[self.submission.pk]))
+
+        self.assertContains(response, self.recorded_chip('Critical Thinking', 1, 'Emerging'))
+        self.assertNotContains(response, self.recorded_chip('Critical Thinking', 4, 'Extending'))
+
+    def test_submission_page__before_approval_shows_names_or_default_levels(self):
+        """ Before anything is recorded, the student sees the competency names and staff see the
+        default levels, as on the quest page """
+        url = reverse('quests:submission', args=[self.submission.pk])
+        self.assertContains(self.client.get(url), '<span class="label label-info competency-chip">Critical Thinking: Extending</span>')
+
+        self.client.force_login(self.student)
+        self.assertContains(self.client.get(url), '<span class="label label-info competency-chip">Critical Thinking</span>')
+
     def test_complete__auto_approved_quest_records_defaults_without_an_assessor(self):
         """ Handing in a quest that needs no approval records its competencies at their default
         levels, system-assessed (no assessor), since no teacher approves it """
