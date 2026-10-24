@@ -21,6 +21,7 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
     Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Q, Subquery, Sum, Value, When,
+    prefetch_related_objects,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -37,6 +38,7 @@ from badges.models import BadgeAssertion
 from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
+from competencies.assessments import assessments_comment_html, record_approval_assessments
 from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
@@ -1396,6 +1398,24 @@ def quest_user_status(request, quest_id):
 #
 # #################################
 
+def lock_is_approved(submission):
+    """Lock the submission's row until the end of the transaction and return whether it is approved.
+
+    Two requests approving the same submission at once (a double-clicked Approve, a duplicate hand-in)
+    can each read it as unapproved before either saves. With the row locked, the second waits for the
+    first to commit and then reads it as approved, so only the first records what an approval records.
+    The in-memory submission isn't trusted for this: it was loaded before the lock was taken.
+
+    Args:
+        submission (QuestSubmission): the submission about to be approved. Call inside transaction.atomic().
+
+    Returns:
+        bool: whether the submission is already approved in the database.
+    """
+    # the base manager: the default one leaves out some submissions (those of archived quests, for one)
+    return QuestSubmission._base_manager.select_for_update().filter(pk=submission.pk).values_list('is_approved', flat=True).get()
+
+
 class ApproveView(NonPublicOnlyViewMixin, View):
     """ When staff approves, returns, skips, or comments on a quest submission, this view is called.
     """
@@ -1474,6 +1494,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
         takes in notification_kwargs and updates 'verb' and 'icon' keys
         returns default text incase staff submits without any comments
+
+        An approval that changes the submission to approved also records its competency levels,
+        keeping what it recorded in self.recorded_assessments for the approving comment.
         """
         blank_comment_text = ""
         if "approve_button" in self.request.POST:
@@ -1487,7 +1510,17 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
             # the answers show a check or the X a teacher gave them, approved or not (#2933)
             finalize_answer_marks(self.submission)
-            self.submission.mark_approved()
+            # The competency levels on the form (each pre-selected to its default) are recorded
+            # with the approval, in one transaction so neither is saved without the other. Only an
+            # approval that changes the submission records them, so a double-clicked Approve doesn't
+            # record a second set; a return clears is_approved, so approving after one does.
+            with transaction.atomic():
+                newly_approved = not lock_is_approved(self.submission)
+                self.submission.mark_approved()
+                if newly_approved:
+                    self.recorded_assessments = record_approval_assessments(
+                        self.submission, assessed_by=self.request.user, data=self.request.POST,
+                    )
         elif "comment_button" in self.request.POST:
             note_verb = "commented on"
             icon = (
@@ -1703,6 +1736,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
+        # the competency levels an approval records (set by handle_form_button), for its comment
+        self.recorded_assessments = []
 
         if self.form.is_valid():
             if self.has_nothing_to_send():
@@ -1718,7 +1753,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
             #
             blank_comment_text = self.handle_form_button(notification_kwargs)
-            comment_text_addition = self.handle_award()
+            comment_text_addition = self.handle_award() + assessments_comment_html(self.recorded_assessments)
 
             # handle comment text
             # if staff didnt write any text for comment use blank_comment_text
@@ -2141,12 +2176,17 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     # The award list costs a prerequisite count per badge, so it is fetched once for the page
     # and handed to every row; fetched per row, a page of 30 submissions costs 750 queries.
     award_choices = SubmissionQuickReplyForm.build_award_choices()
+    competencies_enabled = SiteConfig.get().enable_competencies
     for tab in tab_list:
         for submission in tab["submissions"]:
             submission.quick_reply_form = SubmissionQuickReplyForm(
                 award_choices=award_choices,
                 auto_id=f"id_quick_reply_{submission.id}_%s",
             )
+        # Each row's approve buttons show its quest's competency levels, so the quests' links are
+        # fetched for the whole page at once rather than once per row.
+        if competencies_enabled:
+            prefetch_related_objects(list(tab["submissions"]), "quest__quest_competencies")
 
     # Where that button's two halves go, on the tabs that list one teacher's groups by default:
     # (their own groups, every group). A quest's own past approvals are every teacher's, so it
@@ -2620,7 +2660,14 @@ def complete(request, submission_id):
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
-            submission.mark_approved()
+            # No teacher approves this quest, so its competency evidence is recorded at each
+            # link's default level with no assessor (system-assessed): once, not again for a
+            # duplicate submit of a submission this already approved.
+            with transaction.atomic():
+                newly_approved = not lock_is_approved(submission)
+                submission.mark_approved()
+                if newly_approved:
+                    record_approval_assessments(submission)
 
             # mark_approved() just set do_not_grant_xp to False (its transfer arg defaults to
             # False), so this is always true on the auto-approve path; the skip-notify branch
