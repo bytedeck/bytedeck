@@ -8,7 +8,6 @@ from model_bakery import baker
 
 from competencies.forms import COMPETENCIES_FIELD, competency_level_field_name, quest_competency_initial
 from competencies.models import Competency, ProficiencyLevel, QuestCompetency
-from courses.models import Course
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.forms import QuestForm, TAQuestForm
 from quest_manager.models import Quest
@@ -82,7 +81,7 @@ class QuestCompetenciesFormTest(ByteDeckTenantTestCase):
         """ The chips field's options read "Course: Category: Name", so like-worded competencies
         from different courses can be told apart; the level table names the course and category too """
         enable_competencies()
-        self.thinking.course = baker.make(Course, title='Core')
+        self.thinking.course = 'Core'
         self.thinking.full_clean()
         self.thinking.save()
 

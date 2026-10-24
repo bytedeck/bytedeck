@@ -6,13 +6,10 @@ from django.db.models import Q
 from crispy_forms.layout import HTML
 from django_select2.forms import Select2MultipleWidget
 
-from courses.models import Course
 from siteconfig.models import SiteConfig
 
 from .import_export import (
     CSV_FIELDS,
-    MATCH_COURSE_BY_NAME,
-    courses_by_title,
     get_bundled_set_keys,
     load_bundled_set,
     parse_uploaded_file,
@@ -118,54 +115,6 @@ class CompetencyImportForm(forms.Form):
         return cleaned_data
 
 
-class CompetencyImportCourseForm(forms.Form):
-    """ Step 2 of the import flow: the course to link the imported competencies to. By default each
-    is linked to the deck's course with the name its entry gives (a bundled set names its course, e.g.
-    "ADST 9"); a teacher whose course is named differently picks it, or picks no course.
-    """
-
-    NO_COURSE = 'none'
-
-    course = forms.ChoiceField(
-        label="Course",
-        required=False,
-        help_text="The course these competencies belong to. Quest forms show it before each competency's category.",
-    )
-
-    def __init__(self, *args, set_course='', **kwargs):
-        """ Offers matching by name (saying which course that finds), no course, and each of the deck's
-        courses.
-
-        Args:
-            set_course (str): the course the set names for its competencies, if any.
-        """
-        super().__init__(*args, **kwargs)
-        if set_course:
-            matched = courses_by_title().get(set_course.lower())
-            match_label = f'{matched.title} (the course named in the set)' if matched else \
-                f'The course named in the set, "{set_course}" (this deck has no course by that name)'
-        else:
-            match_label = "The course each competency names in the file"
-        self.fields['course'].choices = [(MATCH_COURSE_BY_NAME, match_label), (self.NO_COURSE, "No course")] + [
-            (str(course.pk), course.title) for course in Course.objects.all()
-        ]
-        self.fields['course'].initial = MATCH_COURSE_BY_NAME
-
-    def chosen_course(self):
-        """ The course choice, in the form import_competency_set takes it.
-
-        Returns:
-            Course, None, or MATCH_COURSE_BY_NAME: the chosen course, None for no course, or
-            MATCH_COURSE_BY_NAME to match each competency by name (also when nothing was posted).
-        """
-        value = self.cleaned_data['course']
-        if value in ('', MATCH_COURSE_BY_NAME):
-            return MATCH_COURSE_BY_NAME
-        if value == self.NO_COURSE:
-            return None
-        return Course.objects.get(pk=value)
-
-
 class QuestCompetenciesFormMixin:
     """ Adds a quest's competencies to a quest ModelForm, for decks with competencies enabled.
 
@@ -196,7 +145,7 @@ class QuestCompetenciesFormMixin:
 
         quest = self.instance
         links = {link.competency_id: link for link in quest.quest_competencies.all()} if quest.pk else {}
-        queryset = Competency.objects.select_related('course').filter(Q(active=True) | Q(pk__in=links))
+        queryset = Competency.objects.filter(Q(active=True) | Q(pk__in=links))
 
         self.fields[COMPETENCIES_FIELD] = CompetencyMultipleChoiceField(
             queryset=queryset,

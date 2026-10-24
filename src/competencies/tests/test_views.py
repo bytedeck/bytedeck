@@ -11,7 +11,6 @@ from model_bakery import baker
 
 from competencies.import_export import load_bundled_set
 from competencies.models import Competency
-from courses.models import Course
 from competencies.views import competencies_enabled
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
@@ -36,8 +35,8 @@ class CompetencyViewsFeatureFlagTest(ByteDeckTenantTestCase):
             self.assert404('competencies:export')
             self.client.logout()
 
-    def test_admin_menu__link_hidden_when_disabled(self):
-        """ No menu shows staff a Competencies link while the flag is off """
+    def test_sidebar__link_hidden_when_disabled(self):
+        """ The sidebar shows no Competencies link to staff while the flag is off """
         staff = baker.make(User, is_staff=True)
         self.client.force_login(staff)
         response = self.client.get(reverse('quests:quests'))
@@ -79,62 +78,22 @@ class CompetencyViewsEnabledTest(ByteDeckTenantTestCase):
         self.assert403('competencies:import_preview')
         self.assert403('competencies:export')
 
-    def test_admin_menu__link_under_course_setup(self):
-        """ With the flag on, staff find Competencies in the top navbar's Admin menu under Course Setup,
-        right after Courses, and not in the sidebar's Quests menu (the navbar renders the Admin menu
-        twice, once for wide screens and once for the collapsed phone menu) """
+    def test_sidebar__link_shown_to_staff(self):
+        """ With the flag on, staff see the Competencies link in both menus, each under Quest Setup:
+        the sidebar's Quests menu, and the top navbar's Admin menu (which the navbar renders twice,
+        once for wide screens and once for the collapsed phone menu) """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('quests:quests'))
-
-        self.assertContains(response, f'href="{reverse("competencies:list")}"', count=2)
-        self.assertRegex(
-            response.content.decode(),
-            rf'Courses</a></li>\s*<li><a href="{reverse("competencies:list")}">',
-        )
+        self.assertContains(response, f'href="{reverse("competencies:list")}"', count=3)
 
     def test_list_view__shows_competencies(self):
         """ The list view renders the deck's competencies for staff, with their courses """
         self.client.force_login(self.staff)
-        baker.make(Competency, name='Think critically', course=baker.make(Course, title='ADST 9'))
+        baker.make(Competency, name='Think critically', course='ADST 9')
         response = self.assert200('competencies:list')
         self.assertContains(response, 'Think critically')
         self.assertContains(response, ">Course</th>")
         self.assertContains(response, "<td>ADST 9</td>")
-
-    def test_import_preview__course_picker_matches_by_name(self):
-        """ The preview offers to link the set's competencies to the deck's course of the name the set
-        gives, saying when the deck has no course by that name """
-        self.client.force_login(self.staff)
-        self.client.post(reverse('competencies:import'), data={'bundled_set': 'bc-adst-9'})
-
-        self.assertContains(self.assert200('competencies:import_preview'), 'this deck has no course by that name')
-
-        baker.make(Course, title='ADST 9')
-        self.assertContains(self.assert200('competencies:import_preview'), 'ADST 9 (the course named in the set)')
-
-    def test_import_flow__links_competencies_to_the_chosen_course(self):
-        """ Importing with a course chosen links every imported competency to it; with no course,
-        to none; by default, to the deck's course of the set's name """
-        self.client.force_login(self.staff)
-        adst, mine = baker.make(Course, title='ADST 9'), baker.make(Course, title='Design and Making 9')
-
-        for choice, expected in [(str(mine.pk), mine), ('none', None), ('match', adst)]:
-            with self.subTest(choice=choice):
-                Competency.objects.all().delete()
-                self.client.post(reverse('competencies:import'), data={'bundled_set': 'bc-adst-9'})
-                self.client.post(reverse('competencies:import_preview'), data={'entries': ['0', '1'], 'course': choice})
-                self.assertEqual({competency.course for competency in Competency.objects.all()}, {expected})
-
-    def test_import_flow__unknown_course_shows_the_error(self):
-        """ A course choice that isn't on offer re-renders the preview with the error and imports nothing """
-        self.client.force_login(self.staff)
-        self.client.post(reverse('competencies:import'), data={'bundled_set': 'bc-adst-9'})
-
-        response = self.client.post(reverse('competencies:import_preview'), data={'entries': ['0'], 'course': '999999'})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Select a valid choice')
-        self.assertFalse(Competency.objects.exists())
 
     def test_import_form__bundled_sets_listed_by_name(self):
         """ The bundled sets are offered alphabetically by name, so a course's grades sit together """

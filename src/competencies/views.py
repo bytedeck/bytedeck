@@ -13,7 +13,7 @@ from siteconfig.models import SiteConfig
 
 from tenant.views import NonPublicOnlyViewMixin
 
-from .forms import CompetencyImportCourseForm, CompetencyImportForm
+from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
 from .models import Competency
 
@@ -43,10 +43,6 @@ class CompetencyListView(NonPublicOnlyViewMixin, ListView):
     """
     model = Competency
     template_name = 'competencies/list.html'
-
-    def get_queryset(self):
-        """ Returns the deck's competencies with their courses, which the list shows. """
-        return Competency.objects.select_related('course')
 
 
 @method_decorator([competencies_enabled, staff_member_required], name='dispatch')
@@ -82,13 +78,12 @@ class CompetencyImportPreviewView(NonPublicOnlyViewMixin, TemplateView):
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        """ Returns the template context with the session's competency set, its entries
-        annotated with the create/update action an import would take, and the course form.
+        """ Returns the template context with the session's competency set and its
+        entries annotated with the create/update action an import would take.
         """
         competency_set = self.request.session[IMPORT_SESSION_KEY]
         kwargs['competency_set'] = competency_set
         kwargs['entries'] = preview_entry_statuses(competency_set)
-        kwargs.setdefault('course_form', CompetencyImportCourseForm(set_course=competency_set.get('course', '')))
         return super().get_context_data(**kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -106,11 +101,7 @@ class CompetencyImportPreviewView(NonPublicOnlyViewMixin, TemplateView):
             messages.warning(request, "No competencies were selected, so nothing was imported.")
             return redirect('competencies:import_preview')
 
-        course_form = CompetencyImportCourseForm(request.POST, set_course=competency_set.get('course', ''))
-        if not course_form.is_valid():
-            return self.render_to_response(self.get_context_data(course_form=course_form))
-
-        created, updated = import_competency_set(competency_set, selected_indexes, course=course_form.chosen_course())
+        created, updated = import_competency_set(competency_set, selected_indexes)
         del request.session[IMPORT_SESSION_KEY]
 
         messages.success(request, f"Competencies imported: {created} created and {updated} updated.")
