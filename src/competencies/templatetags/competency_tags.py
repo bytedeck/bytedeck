@@ -9,6 +9,21 @@ from ..models import ProficiencyLevel
 register = template.Library()
 
 
+@register.inclusion_tag('competencies/snippets/quest_competency_list.html')
+def quest_competency_list(quest):
+    """ The competencies line of a quest's Quest Info: the competencies its approval records evidence
+    for, so a deactivated competency still linked to the quest isn't listed when approving it would
+    record no level for it. Renders nothing when there are none.
+
+    Args:
+        quest (Quest): the quest the Quest Info describes.
+
+    Returns:
+        dict: the snippet's context: 'links', the quest's links to its active competencies.
+    """
+    return {'links': approval_links(quest)}
+
+
 @register.inclusion_tag('competencies/snippets/approval_levels.html', takes_context=True)
 def competency_approval_levels(context, submission):
     """ The competency level controls for a submission's approval form: one per competency the

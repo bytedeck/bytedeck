@@ -1,16 +1,15 @@
 {% comment %}
-  A quest's competencies for its Quest Info list, by name like the rest of that list, so a student
-  knows what the quest gives evidence of. A long name is cut short; the title gives it in full, with
-  its course and category. The levels a submission earned are in the comment that approved it.
+  A quest's competencies for its Quest Info list (see the quest_competency_list tag), by name like the
+  rest of that list, so a student knows what the quest gives evidence of. A long name is cut short; the
+  title gives it in full, with its course and category. The levels a submission earned are in the
+  comment that approved it.
 {% endcomment %}
-{% with links=quest.quest_competencies.all %}
-  {% if links %}
-  <li>Competencies:
-    <ul>
-      {% for link in links %}
-      <li title="{{ link.competency.qualified_name }}">{{ link.competency.name|truncatechars:50 }}</li>
-      {% endfor %}
-    </ul>
-  </li>
-  {% endif %}
-{% endwith %}
+{% if links %}
+<li>Competencies:
+  <ul>
+    {% for link in links %}
+    <li title="{{ link.competency.qualified_name }}">{{ link.competency.name|truncatechars:50 }}</li>
+    {% endfor %}
+  </ul>
+</li>
+{% endif %}

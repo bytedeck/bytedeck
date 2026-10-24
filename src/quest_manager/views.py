@@ -1494,6 +1494,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
         takes in notification_kwargs and updates 'verb' and 'icon' keys
         returns default text incase staff submits without any comments
+
+        An approval that changes the submission to approved also records its competency levels,
+        keeping what it recorded in self.recorded_assessments for the approving comment.
         """
         blank_comment_text = ""
         if "approve_button" in self.request.POST:

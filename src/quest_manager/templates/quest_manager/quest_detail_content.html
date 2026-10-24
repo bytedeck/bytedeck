@@ -1,5 +1,5 @@
 
-{% load utility_tags %}
+{% load utility_tags competency_tags %}
 <div class="media quest-icon-description">
   <div class="media-left">
     <img class="media-object icon-lg img-rounded" src="{{ quest.get_icon_url }}" alt="icon" />
@@ -31,7 +31,7 @@
                    {% endif %}
                 {% endif %}</li>
           {# hidden on Library pages: quest competency links don't move between decks yet (#1915) #}
-          {% if config.enable_competencies and not dont_show_competencies %}{% include 'competencies/snippets/quest_competency_list.html' %}{% endif %}
+          {% if config.enable_competencies and not dont_show_competencies %}{% quest_competency_list quest %}{% endif %}
         </ul>
       </div>
       <div class="col-sm-6">

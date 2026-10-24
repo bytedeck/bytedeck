@@ -27,7 +27,7 @@ def approval_links(quest):
         quest (Quest): the quest being approved.
 
     Returns:
-        list[QuestCompetency]: the links, in the default (category, name) ordering.
+        list[QuestCompetency]: the links, in the default (course, category, name) ordering.
     """
     return [link for link in quest.quest_competencies.all() if link.competency.active]
 

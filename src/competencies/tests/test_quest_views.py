@@ -153,6 +153,21 @@ class QuestCompetencyViewsTest(ByteDeckTenantTestCase):
 
         self.assertContains(response, f'<li title="Ideating: {long_name}">{long_name[:49]}\u2026</li>', html=True)
 
+    def test_quest_detail__deactivated_competencies_are_left_out(self):
+        """ A deactivated competency still linked to the quest isn't listed, since approving the quest
+        records no level for it; with only deactivated ones, there's no competencies line at all """
+        quest = baker.make(Quest)
+        deactivated = baker.make(Competency, name="Old Standard", active=False)
+        QuestCompetency.objects.create(quest=quest, competency=self.thinking)
+        QuestCompetency.objects.create(quest=quest, competency=deactivated)
+
+        response = self.client.get(reverse('quests:quest_detail', args=[quest.pk]))
+        self.assertContains(response, '<li title="Thinking: Critical Thinking">Critical Thinking</li>', html=True)
+        self.assertNotContains(response, "Old Standard")
+
+        QuestCompetency.objects.filter(competency=self.thinking).delete()
+        self.assertNotContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), '<li>Competencies:')
+
     def test_quest_detail__no_competencies_when_disabled_or_none_attached(self):
         """ No competencies line when the flag is off, nor on a quest without competencies """
         quest = baker.make(Quest)
