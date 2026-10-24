@@ -1603,3 +1603,15 @@ table[data-toggle="table"].bt-reveal {
     background-color: #31708f;
     border-color: #2b6380;
 }
+
+/* The quest form's competency picker (QuestCompetenciesSelect2Widget): a competency's
+   "Course: Category: Competency" label is often longer than a line, so each dropdown row and each
+   chosen chip shows one line cut short with an ellipsis, and the full text is its title on hover.
+   Cut by CSS rather than in the text, so searching still matches every word. */
+#select2-id_competencies-results .select2-results__option,
+#div_id_competencies .select2-selection__choice {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

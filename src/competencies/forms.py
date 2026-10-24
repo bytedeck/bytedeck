@@ -62,10 +62,20 @@ class CompetencyMultipleChoiceField(forms.ModelMultipleChoiceField):
 class QuestCompetenciesSelect2Widget(Select2MultipleWidget):
     """ The quest form's competency chips. Its media carries the script that shows a
     default-level picker for each selected competency, so the script only loads on pages
-    where the field exists (that is, when the deck has competencies enabled). """
+    where the field exists (that is, when the deck has competencies enabled).
+
+    Each option's full "Course: Category: Competency" text is also its title, which select2 shows on
+    hover: the dropdown rows and chips are cut to one line by CSS (custom_common.css), rather than the
+    text being shortened, so a search still matches every word of it. """
 
     class Media:
         js = ('competencies/js/quest-competency-levels.js',)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        """ Returns the option for one competency, titled with its full label. """
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        option['attrs']['title'] = label
+        return option
 
 
 class CompetencyImportForm(forms.Form):
