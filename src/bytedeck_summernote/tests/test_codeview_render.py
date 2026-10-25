@@ -6,13 +6,13 @@ keeps its own copy of the text, and its save() writes that copy into the textare
 instance has been taken down. Summernote keeps the last instance it built, and its code getter,
 summernote('code'), saves that instance into the textarea while the code view is open.
 
-The widget's onBlur copied summernote('code') into the form's field. js/summernote-keep-caret.js
-keeps the focus in the editing area while the toolbar is pressed (#2734), so the editing area
-loses it only once the code view, opening, takes the focus itself. At that moment the code view
-counts as open but CodeMirror is not built yet. On the first opening there is no instance yet,
-and saving it raised a TypeError. On any later opening the instance left over from the last one
-saved the old text over the new, so the code view opened on the content as it was when it last
-closed, and closing it put that content back into the editor.
+The widget's onBlur copied summernote('code') into the form's field. The keep-caret plugin
+(static/bytedeck_summernote/plugins/keep-caret/) keeps the focus in the editing area while the
+toolbar is pressed (#2734), so the editing area loses it only once the code view, opening, takes
+the focus itself. At that moment the code view counts as open but CodeMirror is not built yet. On
+the first opening there is no instance yet, and saving it raised a TypeError. On any later opening
+the instance left over from the last one saved the old text over the new, so the code view opened
+on the content as it was when it last closed, and closing it put that content back into the editor.
 
 The page is the quest form, rendered by the app through the test client, so the widget template
 under test is the real one. Headless Chromium opens it with the app's own static files. CodeMirror
