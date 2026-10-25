@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -17,8 +18,8 @@ from tenant.views import NonPublicOnlyViewMixin
 
 from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
-from .models import Competency
-from .summaries import course_competencies, evidence_by_competency
+from .models import Competency, ProficiencyLevel
+from .summaries import LEVEL_RANGES, course_competencies, evidence_by_competency
 
 # session key holding the parsed competency set between the upload and preview steps
 IMPORT_SESSION_KEY = 'competency_import_set'
@@ -164,17 +165,35 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        """ Returns the template context: the student and 'panes', one per course, each with the
-        course, the deck's label for its average level ('' below the scale) and 'rows', each of the
-        course's competencies with its evidence and the deck's label for each assessment's level.
+        """ Returns the template context: the student and 'panes', one per course, each with:
+
+        - the course, and the deck's label for its average level ('' below the scale);
+        - 'active': whether its tab is the one open, which is the course named by the ``course`` query
+          parameter (a pane id, as the profile links with), else the first;
+        - 'level_counts', for the breakdown of its average: each level the student holds in the course,
+          as (level, label, how many competencies), and 'scale', each level with the averages that round
+          to it and whether the course's average does;
+        - 'rows', each of the course's competencies with its evidence and the deck's label for each
+          assessment's level.
         """
         labels = SiteConfig.get().get_competency_scale_labels()
         evidence = evidence_by_competency(self.student)
+        courses = course_competencies(self.student)
+        pane_ids = [course.pane_id for course in courses]
+        requested = self.request.GET.get('course')
+        active_id = requested if requested in pane_ids else next(iter(pane_ids), None)
         panes = []
-        for course in course_competencies(self.student):
+        for course in courses:
+            counts = Counter(course.course_levels)
             panes.append({
                 'course': course,
+                'active': course.pane_id == active_id,
                 'level_label': labels.get(course.level, ''),
+                'level_counts': [(level, labels[level], counts[level]) for level in ProficiencyLevel.values if counts[level]],
+                'scale': [
+                    {'level': level, 'label': labels.get(level, ''), 'range': LEVEL_RANGES[level], 'current': level == course.level}
+                    for level in LEVEL_RANGES
+                ],
                 'rows': [
                     {
                         'competency': competency,
@@ -183,5 +202,5 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                     for competency in course.competencies
                 ],
             })
-        kwargs.update({'student': self.student, 'panes': panes})
+        kwargs.update({'student': self.student, 'panes': panes, 'scale_labels': [(level, labels[level]) for level in ProficiencyLevel.values]})
         return super().get_context_data(**kwargs)

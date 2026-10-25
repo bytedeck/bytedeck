@@ -51,9 +51,9 @@ def course_competency_averages(student):
 
 @register.inclusion_tag('competencies/snippets/course_competency_average.html')
 def course_competency_average(averages, registration):
-    """ A course's competency average beside its XP on the profile, linked to the course's tab on the
-    student's competencies summary. Renders nothing for a course without a competency set, or when the
-    deck has competencies disabled.
+    """ A course's competency level beside its XP on the profile, linked to the course's tab on the
+    student's competencies summary, which explains how it is worked out. Renders nothing for a course
+    without a competency set, or when the deck has competencies disabled.
 
     Args:
         averages (dict): what course_competency_averages returned for the student.

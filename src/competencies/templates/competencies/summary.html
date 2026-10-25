@@ -5,10 +5,10 @@
 {% block content %}
 {% comment %}
   A student's competencies summary (CompetencySummaryView), laid out like Mark Calculations: a table of
-  their courses with each one's average, then a tab per course listing all of the course's
-  competencies, each with a chip for every assessment of it, oldest first. A chip links to the work it
-  was given for, and its title says what that was and when. A student with one course gets its
-  content without a tab strip over it.
+  their courses with each one's average, then a tab per course with an explanation of how its average
+  and level are worked out, and all of the course's competencies, each with a chip for every
+  assessment of it, oldest first. A chip links to the work it was given for, and its title says what
+  that was and when. A student with one course gets its content without a tab strip over it.
 {% endcomment %}
 <p>Hello {{ student.profile.get_preferred_name|default:student.username }},
   {% if not panes %}
@@ -36,7 +36,7 @@
   {% if panes|length > 1 %}
   <ul class="nav nav-tabs course-tabs" role="tablist">
     {% for pane in panes %}
-    <li role="presentation" {% if forloop.first %}class="active"{% endif %}>
+    <li role="presentation" {% if pane.active %}class="active"{% endif %}>
       <a href="#{{ pane.course.pane_id }}" role="tab" data-toggle="tab">{{ pane.course.title }}</a>
     </li>
     {% endfor %}
@@ -46,7 +46,50 @@
   <div class="tab-content course-tab-content">
     {% for pane in panes %}
     {% with course=pane.course %}
-    <div role="tabpanel" class="tab-pane {% if forloop.first %}active{% endif %}" id="{{ course.pane_id }}">
+    <div role="tabpanel" class="tab-pane {% if pane.active %}active{% endif %}" id="{{ course.pane_id }}">
+      <h3>Explanation</h3>
+      <p>Here is how your level in <strong>{{ course.title }}</strong> is worked out:</p>
+      <ul>
+        <li>
+          {{ course.label|default:"It" }} has <strong>{{ course.competencies|length }}</strong> competencies. Each counts at your
+          current level in it, which is its most recent assessment:
+          {% for level, label in scale_labels %}{{ label }} counts {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+          A competency not assessed yet counts 0.
+        </li>
+        <li>
+          {% if pane.level_counts %}
+            You have been assessed in <strong>{{ course.course_levels|length }}</strong> of them
+            ({% for level, label, count in pane.level_counts %}{{ count }} {{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}),
+            which add up to <strong>{{ course.total }}</strong>.
+          {% else %}
+            You haven't been assessed in any of them yet, so they add up to <strong>0</strong>.
+          {% endif %}
+        </li>
+        <li>
+          Your average is {{ course.total }} / {{ course.competencies|length }} = <strong>{{ course.average|floatformat:2 }}</strong> out of 4.
+        </li>
+        <li>
+          The average is rounded to the nearest level, with halves rounding up, so your level is
+          <span class="label {% if pane.level_label %}competency-level competency-level-{{ course.level }}{% else %}label-default{% endif %}">{{ pane.level_label|default:"Not yet" }}</span>:
+        </li>
+      </ul>
+      <table class="table table-condensed competency-scale">
+        <thead>
+          <tr>
+            <th>Average out of 4</th>
+            <th>Level</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for step in pane.scale %}
+          <tr{% if step.current %} class="info"{% endif %}>
+            <td>{% if step.current %}<strong>{{ step.range }}</strong>{% else %}{{ step.range }}{% endif %}</td>
+            <td><span class="label {% if step.level %}competency-level competency-level-{{ step.level }}{% else %}label-default{% endif %}">{{ step.label|default:"Not yet" }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
       <h3>{{ course.label|default:"Other" }} Competencies</h3>
       <table class="table table-condensed competency-summary">
         <thead>
@@ -82,14 +125,4 @@
     {% endfor %}
   </div>
   {% endif %}
-{% endblock %}
-
-{% block js %}
-<script type="text/javascript">
-  /* The profile links to a course's tab by its id in the URL's hash, so open that tab. */
-  $(document).ready(function() {
-    var hash = window.location.hash;
-    $('.course-tabs a[data-toggle="tab"]').filter(function() { return $(this).attr('href') === hash; }).tab('show');
-  });
-</script>
 {% endblock %}

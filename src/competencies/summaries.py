@@ -25,6 +25,16 @@ from quest_manager.models import QuestSubmission
 from .models import Competency, CompetencyAssessment
 
 
+#: The averages (out of 4) that round to each level (see CourseCompetencies.level), 0 being no level yet.
+LEVEL_RANGES = {
+    0: "under 0.5",
+    1: "0.5 to under 1.5",
+    2: "1.5 to under 2.5",
+    3: "2.5 to under 3.5",
+    4: "3.5 to 4",
+}
+
+
 @dataclass
 class CourseCompetencies:
     """ One course's competencies for a student, with the student's current level in each.
@@ -56,12 +66,22 @@ class CourseCompetencies:
         return f"course-pane-{slugify(self.label) or 'other'}"
 
     @property
+    def course_levels(self):
+        """ The student's current level in each of the course's competencies they have been assessed in. """
+        return [self.levels[competency.pk] for competency in self.competencies if competency.pk in self.levels]
+
+    @property
+    def total(self):
+        """ The sum of the student's current levels across the course's competencies (unassessed ones adding 0). """
+        return sum(self.course_levels)
+
+    @property
     def average(self):
         """ The mean of the student's current level in each of the course's competencies, out of 4,
         counting a competency not assessed yet as 0 (and 0 for a course with no competencies). """
         if not self.competencies:
             return 0
-        return sum(self.levels.get(competency.pk, 0) for competency in self.competencies) / len(self.competencies)
+        return self.total / len(self.competencies)
 
     @property
     def level(self):

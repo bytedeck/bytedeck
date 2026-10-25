@@ -100,6 +100,8 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         self.assertEqual((adst.label, adst.registration, adst.title), ("ADST 9", self.registration, "Digital Hackerspace"))
         self.assertEqual(adst.pane_id, f"course-pane-{self.registration.pk}")
         self.assertEqual(adst.competencies, [self.defining, self.ideating, self.making])
+        self.assertCountEqual(adst.course_levels, [ProficiencyLevel.EXTENDING, ProficiencyLevel.PROFICIENT])
+        self.assertEqual(adst.total, 7)
         self.assertAlmostEqual(adst.average, 7 / 3)
         self.assertEqual(adst.level, ProficiencyLevel.DEVELOPING)
 
@@ -241,9 +243,9 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
     """ Tests for the competency averages in the XP panel of a student's profile, and its summary button. """
 
     def test_profile__each_course_shows_its_competency_average(self):
-        """ Beside each course's name in the XP panel is its competency average, out of 4 and as the deck's
-        label in the level's colour, linked to the course's tab on the summary; a course without a set has
-        none, and sets outside the student's courses aren't shown here """
+        """ Beside each course's name in the XP panel is its competency level, as the deck's label in the
+        level's colour (with no number out of 4), linking to the course on the competencies page; a course
+        without a set has none, and sets outside the student's courses aren't shown here """
         baker.make(CourseStudent, user=self.student, course=baker.make(Course, title="Study Hall"), semester=self.semester)
         self.assess(self.defining, ProficiencyLevel.EXTENDING, minutes_ago=5)
         self.assess(self.making, ProficiencyLevel.PROFICIENT, minutes_ago=10)
@@ -255,21 +257,21 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         content = response.content.decode()
         self.assertRegex(content, (
             r'(?s)<div>\s*Digital Hackerspace\s*'
-            rf'<a href="{self.summary_url()}#course-pane-{self.registration.pk}" class="course-competency-average"\s*'
-            r'title="Competencies: the average current level across this course\'s 3 competencies, counting any not assessed yet as 0">\s*'
-            r'<small>2.3 / 4</small>\s*<span class="label competency-level competency-level-2">Developing</span>\s*</a>\s*</div>'
+            rf'<a href="{self.summary_url()}\?course=course-pane-{self.registration.pk}"\s*'
+            r'class="course-competency-average label competency-level competency-level-2"\s*'
+            r'title="Competencies: see how this level in Digital Hackerspace is worked out">Developing</a>\s*</div>'
         ))
         self.assertRegex(content, r'<div>\s*Study Hall\s*</div>')
-        self.assertEqual(content.count('class="course-competency-average"'), 1)
+        self.assertEqual(content.count('class="course-competency-average'), 1)
+        self.assertNotContains(response, ' / 4')
 
     def test_profile__a_course_below_the_scale_is_not_yet(self):
-        """ A course averaging under half a level shows its average and "Not yet", in grey """
+        """ A course averaging under half a level shows "Not yet", in grey """
         self.client.force_login(self.student)
 
         response = self.client.get(self.profile_url())
 
-        self.assertContains(response, '<small>0.0 / 4</small>')
-        self.assertContains(response, '<span class="label label-default">Not yet</span>', html=True)
+        self.assertRegex(response.content.decode(), r'class="course-competency-average label label-default"\s*title="[^"]+">Not yet</a>')
 
     def test_profile__summary_button_beside_mark_calculations(self):
         """ The profile's buttons include one to the student's competencies summary, after Mark Calculations """
@@ -300,7 +302,7 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         with CaptureQueriesContext(connection) as more:
             response = self.client.get(self.profile_url())
 
-        self.assertContains(response, '<small>2.3 / 4</small>')
+        self.assertContains(response, 'class="course-competency-average label competency-level competency-level-2"')
         self.assertEqual(own_query_count(more), own_query_count(one))
 
     def test_profile__nothing_when_disabled(self):
@@ -353,7 +355,7 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'.*?<ul class="nav nav-tabs course-tabs" role="tablist">.*?<li role="presentation" class="active">\s*'
             rf'<a href="#{pane}" role="tab" data-toggle="tab">Digital Hackerspace</a>'
             r'.*?<a href="#course-pane-core" role="tab" data-toggle="tab">Core</a>'
-            rf'.*?<div role="tabpanel" class="tab-pane active" id="{pane}">\s*<h3>ADST 9 Competencies</h3>'
+            rf'.*?<div role="tabpanel" class="tab-pane active" id="{pane}">\s*<h3>Explanation</h3>.*?<h3>ADST 9 Competencies</h3>'
             r'.*?<tr class="info"><th colspan="2">Applied Design - Defining</th></tr>\s*<tr>\s*'
             r'<td title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</td>\s*'
             r'<td class="competency-summary-evidence">\s*'
@@ -362,13 +364,67 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'<a href="{prototype.get_absolute_url()}" class="label competency-level competency-level-4"\s*'
             r'title="Prototype, [^"]+">Nailed It</a>'
             r'.*?Generate potential ideas</td>\s*<td class="competency-summary-evidence">\s*<span class="text-muted">Not yet</span>'
-            r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Core Competencies</h3>'
+            r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Explanation</h3>.*?<h3>Core Competencies</h3>'
             r'.*?competency-level-3"\s*title="Prototype, [^"]+">Got It</a>'
         ))
         # the chip's date as the template's date filter renders it: the stored (backdated) stamp, in the deck's time zone
         latest.refresh_from_db()
         self.assertIn(f'title="Prototype, {date_filter(timezone.localtime(latest.timestamp))}"', content)
         self.assertNotContains(response, "Retired competency")
+
+    def test_summary__each_course_explains_how_its_level_is_worked_out(self):
+        """ At the top of each course's tab: how many competencies it has and what each level counts, the
+        student's levels in it and their total, the average out of 4, and the level it rounds to, with the
+        averages that round to each level and the student's highlighted """
+        self.assess(self.defining, ProficiencyLevel.EXTENDING, minutes_ago=5)
+        self.assess(self.making, ProficiencyLevel.EXTENDING, minutes_ago=5)
+        self.assess(self.ideating, ProficiencyLevel.DEVELOPING, minutes_ago=5)
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.summary_url())
+
+        content = response.content.decode()
+        self.assertContains(response, "Here is how your level in <strong>Digital Hackerspace</strong> is worked out:")
+        self.assertRegex(content, (
+            r'(?s)ADST 9 has <strong>3</strong> competencies\. Each counts at your\s*current level in it, which is its most recent assessment:\s*'
+            r'Emerging counts 1, Developing counts 2, Got It counts 3, Nailed It counts 4\.\s*A competency not assessed yet counts 0\.'
+            r'.*?You have been assessed in <strong>3</strong> of them\s*\(1 Developing, 2 Nailed It\),\s*which add up to <strong>10</strong>\.'
+            r'.*?Your average is 10 / 3 = <strong>3.33</strong> out of 4\.'
+            r'.*?so your level is\s*<span class="label competency-level competency-level-3">Got It</span>'
+            r'.*?<tr>\s*<td>1.5 to under 2.5</td>'
+            r'.*?<tr class="info">\s*<td><strong>2.5 to under 3.5</strong></td>\s*'
+            r'<td><span class="label competency-level competency-level-3">Got It</span></td>'
+            r'.*?<td>3.5 to 4</td>\s*<td><span class="label competency-level competency-level-4">Nailed It</span></td>'
+        ))
+
+    def test_summary__explanation_before_any_assessment(self):
+        """ A course with nothing assessed yet explains that everything adds up to 0, which is "Not yet" """
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.summary_url())
+
+        content = response.content.decode()
+        self.assertRegex(content, r"You haven't been assessed in any of them yet, so they add up to <strong>0</strong>\.")
+        self.assertContains(response, "Your average is 0 / 3 = <strong>0.00</strong> out of 4.")
+        self.assertRegex(content, (
+            r'<tr class="info">\s*<td><strong>under 0.5</strong></td>\s*<td><span class="label label-default">Not yet</span></td>'
+        ))
+
+    def test_summary__the_course_in_the_url_opens_its_tab(self):
+        """ A course named in the URL, as the profile links, has its tab open; an unknown one opens the first """
+        self.assess(self.collaborating, ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        self.client.force_login(self.student)
+        first = f"course-pane-{self.registration.pk}"
+
+        response = self.client.get(self.summary_url(), {'course': 'course-pane-core'})
+
+        self.assertContains(response, '<li role="presentation" class="active">\n      <a href="#course-pane-core"')
+        self.assertContains(response, '<div role="tabpanel" class="tab-pane active" id="course-pane-core">')
+        self.assertContains(response, f'<div role="tabpanel" class="tab-pane " id="{first}">')
+
+        response = self.client.get(self.summary_url(), {'course': 'nonsense'})
+
+        self.assertContains(response, f'<div role="tabpanel" class="tab-pane active" id="{first}">')
 
     def test_summary__one_course_has_no_tabs(self):
         """ A student with one course gets its competencies without a tab strip over them """
