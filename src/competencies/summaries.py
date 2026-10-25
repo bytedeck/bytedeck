@@ -58,7 +58,9 @@ class CourseCompetencies:
     @property
     def average(self):
         """ The mean of the student's current level in each of the course's competencies, out of 4,
-        counting a competency not assessed yet as 0. """
+        counting a competency not assessed yet as 0 (and 0 for a course with no competencies). """
+        if not self.competencies:
+            return 0
         return sum(self.levels.get(competency.pk, 0) for competency in self.competencies) / len(self.competencies)
 
     @property

@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import connection
+from django.template.defaultfilters import date as date_filter
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -166,6 +167,11 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(len(summaries), 2)
         self.assertEqual(own_query_count(queries), 3)
+
+    def test_average__a_course_with_no_competencies_is_zero(self):
+        """ A course with no competencies averages 0, rather than dividing by zero """
+        self.assertEqual(CourseCompetencies("Empty").average, 0)
+        self.assertEqual(CourseCompetencies("Empty").level, 0)
 
     def test_level__rounds_to_the_nearest_level_halves_up(self):
         """ The average becomes a point on the scale by rounding, halves up; below a half it is no level """
@@ -359,7 +365,9 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Core Competencies</h3>'
             r'.*?competency-level-3"\s*title="Prototype, [^"]+">Got It</a>'
         ))
-        self.assertIn(f'title="Prototype, {latest.timestamp:%b}', content)
+        # the chip's date as the template's date filter renders it: the stored (backdated) stamp, in the deck's time zone
+        latest.refresh_from_db()
+        self.assertIn(f'title="Prototype, {date_filter(timezone.localtime(latest.timestamp))}"', content)
         self.assertNotContains(response, "Retired competency")
 
     def test_summary__one_course_has_no_tabs(self):
