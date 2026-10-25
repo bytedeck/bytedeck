@@ -9,4 +9,5 @@ urlpatterns = [
     path('import/', views.CompetencyImportView.as_view(), name='import'),
     path('import/preview/', views.CompetencyImportPreviewView.as_view(), name='import_preview'),
     path('export/', views.CompetencyExportView.as_view(), name='export'),
+    path('summary/<int:user_pk>/', views.CompetencySummaryView.as_view(), name='summary'),
 ]

@@ -5,6 +5,7 @@ from siteconfig.models import SiteConfig
 from ..assessments import approval_links, posted_level
 from ..forms import competency_level_field_name
 from ..models import ProficiencyLevel
+from ..summaries import course_competencies
 
 register = template.Library()
 
@@ -22,6 +23,46 @@ def quest_competency_list(quest):
         dict: the snippet's context: 'links', the quest's links to its active competencies.
     """
     return {'links': approval_links(quest)}
+
+
+@register.simple_tag
+def course_competency_averages(student):
+    """ The student's competency average in each of their current courses that has a competency set
+    (see competencies.summaries), for the profile to show beside each course's XP: worked out once for
+    the page, in the same few queries however many courses and competencies there are.
+
+    Args:
+        student (User): the student whose profile it is.
+
+    Returns:
+        dict: registration pk to a dict of the course's CourseCompetencies and the deck's label for its
+        average level ('' below the scale). Empty when the deck has competencies disabled.
+    """
+    config = SiteConfig.get()
+    if config is None or not config.enable_competencies:
+        return {}
+
+    labels = config.get_competency_scale_labels()
+    return {
+        course.registration.pk: {'course': course, 'level_label': labels.get(course.level, '')}
+        for course in course_competencies(student) if course.registration is not None
+    }
+
+
+@register.inclusion_tag('competencies/snippets/course_competency_average.html')
+def course_competency_average(averages, registration):
+    """ A course's competency level beside its XP on the profile, linked to the course's tab on the
+    student's competencies summary, which explains how it is worked out. Renders nothing for a course
+    without a competency set, or when the deck has competencies disabled.
+
+    Args:
+        averages (dict): what course_competency_averages returned for the student.
+        registration (CourseStudent): the course registration the XP bar is for.
+
+    Returns:
+        dict: the snippet's context: 'average', the course's entry in averages, or None.
+    """
+    return {'average': averages.get(registration.pk)}
 
 
 @register.inclusion_tag('competencies/snippets/approval_levels.html', takes_context=True)

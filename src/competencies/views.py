@@ -1,8 +1,11 @@
 import json
+from collections import Counter
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.views.generic import FormView, ListView, TemplateView
@@ -15,7 +18,8 @@ from tenant.views import NonPublicOnlyViewMixin
 
 from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
-from .models import Competency
+from .models import Competency, ProficiencyLevel
+from .summaries import LEVEL_RANGES, course_competencies, evidence_by_competency, level_codes
 
 # session key holding the parsed competency set between the upload and preview steps
 IMPORT_SESSION_KEY = 'competency_import_set'
@@ -136,3 +140,80 @@ class CompetencyExportView(NonPublicOnlyViewMixin, TemplateView):
         else:
             raise Http404
         return response
+
+
+@method_decorator([competencies_enabled, login_required], name='dispatch')
+class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
+    """ A student's competencies summary, linked from beside Mark Calculations on their profile and
+    laid out like it: a table of their courses (see competencies.summaries) with each one's average,
+    then a tab per course (when there is more than one) listing all of the course's competencies, each
+    with a chip for every assessment of it, oldest first, linking to the work it was given for.
+    Students see their own; staff see anyone's.
+    """
+    template_name = 'competencies/summary.html'
+
+    def get(self, request, *args, **kwargs):
+        """ Renders the summary for the student in the URL.
+
+        Raises:
+            Http404: if there's no such user, or it's someone else and the requesting user isn't
+                staff (so another student's summary isn't even confirmed to exist).
+        """
+        self.student = get_object_or_404(get_user_model(), pk=kwargs['user_pk'])
+        if self.student != request.user and not request.user.is_staff:
+            raise Http404
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """ Returns the template context: the student and 'panes', one per course, each with:
+
+        - the course, and the deck's label for its average level ('' below the scale);
+        - 'active': whether its tab is the one open, which is the course named by the ``course`` query
+          parameter (a pane id, as the profile links with), else the first;
+        - 'level_counts', for the breakdown of its average: each level the student holds in the course,
+          as (level, label, how many competencies), and 'scale', each level with its label and code, the
+          averages that round to it and whether the course's average does;
+        - 'rows', each of the course's competencies with its evidence and the deck's label and code for
+          each assessment's level.
+
+        Also 'scale': each level of the Proficiency Scale as (level, label, code), for the explanation.
+        """
+        labels = SiteConfig.get().get_competency_scale_labels()
+        codes = level_codes(labels)
+        evidence = evidence_by_competency(self.student)
+        courses = course_competencies(self.student)
+        pane_ids = [course.pane_id for course in courses]
+        requested = self.request.GET.get('course')
+        active_id = requested if requested in pane_ids else next(iter(pane_ids), None)
+        panes = []
+        for course in courses:
+            counts = Counter(course.course_levels)
+            panes.append({
+                'course': course,
+                'active': course.pane_id == active_id,
+                'level_label': labels.get(course.level, ''),
+                'level_counts': [(level, labels[level], counts[level]) for level in ProficiencyLevel.values if counts[level]],
+                'scale': [
+                    {
+                        'level': level, 'label': labels.get(level, ''), 'code': codes.get(level, ''),
+                        'range': LEVEL_RANGES[level], 'current': level == course.level,
+                    }
+                    for level in LEVEL_RANGES
+                ],
+                'rows': [
+                    {
+                        'competency': competency,
+                        'evidence': [
+                            {'item': item, 'label': labels[item.assessment.level], 'code': codes[item.assessment.level]}
+                            for item in evidence.get(competency.pk, [])
+                        ],
+                    }
+                    for competency in course.competencies
+                ],
+            })
+        kwargs.update({
+            'student': self.student,
+            'panes': panes,
+            'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
+        })
+        return super().get_context_data(**kwargs)
