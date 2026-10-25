@@ -10,6 +10,7 @@ already has evidence for.
 """
 
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import groupby
@@ -22,7 +23,35 @@ from django.utils.text import slugify
 from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
 
-from .models import Competency, CompetencyAssessment
+from .models import Competency, CompetencyAssessment, ProficiencyLevel
+
+
+#: The three-letter code shown for each level on a chip where many share a row (see level_codes).
+DEFAULT_LEVEL_CODES = {
+    ProficiencyLevel.EMERGING: "EMG",
+    ProficiencyLevel.DEVELOPING: "DEV",
+    ProficiencyLevel.PROFICIENT: "PRF",
+    ProficiencyLevel.EXTENDING: "EXT",
+}
+
+
+def level_codes(labels):
+    """ A three-letter code for each level of the deck's Proficiency Scale, for chips where many share a
+    row: the level's default code (EMG, DEV, PRF, EXT) while the deck uses the level's default label,
+    else the first three letters or digits of the deck's own label, uppercased (or the default code
+    when its label has none), so the code still matches what the deck calls the level.
+
+    Args:
+        labels (dict[int, str]): the deck's label for each level (SiteConfig.get_competency_scale_labels).
+
+    Returns:
+        dict[int, str]: each level's code.
+    """
+    codes = {}
+    for level, label in labels.items():
+        own = re.sub(r'[\W_]', '', label)[:3].upper()
+        codes[level] = own if label != ProficiencyLevel(level).label and own else DEFAULT_LEVEL_CODES[level]
+    return codes
 
 
 #: The averages (out of 4) that round to each level (see CourseCompetencies.level), 0 being no level yet.

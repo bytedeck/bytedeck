@@ -1608,10 +1608,18 @@ table[data-toggle="table"].bt-reveal {
     border-color: #2b6380;
 }
 
-/* A course's competency level beside its name in the XP panel of a student's profile
+/* A course's current level of proficiency beside its name in the XP panel of a student's profile
    (competencies/snippets/course_competency_average.html). */
 .course-competency-average {
     margin-left: 6px;
+}
+
+/* A level's three-letter code (EMG, DEV, PRF, EXT, or n/a) as a label, all at one width so a row of
+   them lines up and many fit on the page (a student's competencies summary). */
+.label.competency-code {
+    display: inline-block;
+    width: 3.4em;
+    text-align: center;
 }
 
 /* The averages that round to each competency level, in a course's explanation on a student's
@@ -1630,7 +1638,6 @@ table[data-toggle="table"].bt-reveal {
     width: 45%;
 }
 .competency-summary-evidence .label {
-    display: inline-block;
     margin: 1px 2px 1px 0;
 }
 

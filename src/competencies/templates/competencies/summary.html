@@ -5,32 +5,42 @@
 {% block content %}
 {% comment %}
   A student's competencies summary (CompetencySummaryView), laid out like Mark Calculations: a table of
-  their courses with each one's average, then a tab per course with an explanation of how its average
-  and level are worked out, and all of the course's competencies, each with a chip for every
-  assessment of it, oldest first. A chip links to the work it was given for, and its title says what
-  that was and when. A student with one course gets its content without a tab strip over it.
+  their courses with each one's current level of proficiency, then a tab per course with an explanation
+  of how that level is worked out, and all of the course's competencies, each with a chip for every
+  assessment of it, oldest first. The chips show three-letter codes at one fixed width, so many fit on a
+  row; a chip links to the work it was given for, and its title says what that was, when, and the
+  level in full. "n/a" stands for not yet assessed. A student with one course gets its content without
+  a tab strip over it.
 {% endcomment %}
 <p>Hello {{ student.profile.get_preferred_name|default:student.username }},
   {% if not panes %}
     there are no competencies to show yet: they appear here once you are in a course that has a
     competency set, or once you are assessed on one.</p>
   {% else %}
-    here is where you are with your competencies. A course's average is your current level in each
-    of its competencies, counting any not assessed yet as 0.</p>
+    here is where you are with your competencies. Each course's explanation below shows how its
+    current level of proficiency is worked out.</p>
 
   <table class="table">
-    {% for pane in panes %}
-    {% with course=pane.course %}
-    <tr>
-      <td>{% if course.registration %}{{ course.registration.block }} Block{% endif %}</td>
-      <td>{{ course.title }}{% if course.registration and course.title != course.label %} <small class="text-muted">({{ course.label }})</small>{% endif %}</td>
-      <td>
-        <strong>{{ course.average|floatformat:1 }} / 4</strong>
-        <span class="label {% if pane.level_label %}competency-level competency-level-{{ course.level }}{% else %}label-default{% endif %}">{{ pane.level_label|default:"Not yet" }}</span>
-      </td>
-    </tr>
-    {% endwith %}
-    {% endfor %}
+    <thead>
+      <tr>
+        <th>Block</th>
+        <th>Course</th>
+        <th>Average</th>
+        <th>Current level of proficiency</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pane in panes %}
+      {% with course=pane.course %}
+      <tr>
+        <td>{% if course.registration %}{{ course.registration.block }}{% endif %}</td>
+        <td>{{ course.title }}{% if course.registration and course.title != course.label %} <small class="text-muted">({{ course.label }})</small>{% endif %}</td>
+        <td>{{ course.average|floatformat:2 }} / 4</td>
+        <td>{% include "competencies/snippets/level_label.html" with level=course.level label=pane.level_label %}</td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
   </table>
 
   {% if panes|length > 1 %}
@@ -48,13 +58,13 @@
     {% with course=pane.course %}
     <div role="tabpanel" class="tab-pane {% if pane.active %}active{% endif %}" id="{{ course.pane_id }}">
       <h3>Explanation</h3>
-      <p>Here is how your level in <strong>{{ course.title }}</strong> is worked out:</p>
+      <p>Here is how your current level of proficiency in <strong>{{ course.title }}</strong> is worked out:</p>
       <ul>
         <li>
           {{ course.label|default:"It" }} has <strong>{{ course.competencies|length }}</strong> competencies. Each counts at your
-          current level in it, which is its most recent assessment:
-          {% for level, label in scale_labels %}{{ label }} counts {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}.
-          A competency not assessed yet counts 0.
+          current level in it, which is its most recent assessment, on the Proficiency Scale:
+          {% for level, label, code in scale %}{{ label }} ({{ code }}) counts {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+          A competency not yet assessed (n/a) counts 0.
         </li>
         <li>
           {% if pane.level_counts %}
@@ -69,22 +79,28 @@
           Your average is {{ course.total }} / {{ course.competencies|length }} = <strong>{{ course.average|floatformat:2 }}</strong> out of 4.
         </li>
         <li>
-          The average is rounded to the nearest level, with halves rounding up, so your level is
-          <span class="label {% if pane.level_label %}competency-level competency-level-{{ course.level }}{% else %}label-default{% endif %}">{{ pane.level_label|default:"Not yet" }}</span>:
+          The average is rounded to the nearest point on the Proficiency Scale, with halves rounding up, so your
+          current level of proficiency is: {% include "competencies/snippets/level_label.html" with level=course.level label=pane.level_label %}
         </li>
       </ul>
       <table class="table table-condensed competency-scale">
         <thead>
           <tr>
             <th>Average out of 4</th>
-            <th>Level</th>
+            <th>Proficiency Scale</th>
           </tr>
         </thead>
         <tbody>
           {% for step in pane.scale %}
           <tr{% if step.current %} class="info"{% endif %}>
             <td>{% if step.current %}<strong>{{ step.range }}</strong>{% else %}{{ step.range }}{% endif %}</td>
-            <td><span class="label {% if step.level %}competency-level competency-level-{{ step.level }}{% else %}label-default{% endif %}">{{ step.label|default:"Not yet" }}</span></td>
+            <td>
+              {% if step.level %}
+                <span class="label competency-code competency-level competency-level-{{ step.level }}">{{ step.code }}</span> {{ step.label }}
+              {% else %}
+                <span class="label competency-code label-default">n/a</span> Not yet assessed
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -108,11 +124,11 @@
               <td class="competency-summary-evidence">
                 {% for evidence in row.evidence %}
                   {% with item=evidence.item %}
-                  {% if item.url %}<a href="{{ item.url }}" {% else %}<span {% endif %}class="label competency-level competency-level-{{ item.assessment.level }}"
-                    title="{{ item.description }}, {{ item.assessment.timestamp|date }}">{{ evidence.label }}{% if item.url %}</a>{% else %}</span>{% endif %}
+                  {% if item.url %}<a href="{{ item.url }}" {% else %}<span {% endif %}class="label competency-code competency-level competency-level-{{ item.assessment.level }}"
+                    title="{{ evidence.label }}: {{ item.description }}, {{ item.assessment.timestamp|date }}">{{ evidence.code }}{% if item.url %}</a>{% else %}</span>{% endif %}
                   {% endwith %}
                 {% empty %}
-                  <span class="text-muted">Not yet</span>
+                  <span class="text-muted" title="Not yet assessed">n/a</span>
                 {% endfor %}
               </td>
             </tr>
