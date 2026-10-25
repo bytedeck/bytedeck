@@ -25,6 +25,12 @@
           role="button"><i class="fa fa-line-chart"></i></a>
       {% endif %}
 
+      {% if config.enable_competencies and not object.user.is_staff %}
+        <a class="btn btn-default" title="View the Competencies Summary"
+          href="{% url 'competencies:summary' object.user.id %}"
+          role="button"><i class="fa fa-graduation-cap"></i></a>
+      {% endif %}
+
       {% if request.user == object.user %}
         <a class= "btn btn-success" title="View your Portfolio"
           href="{% url 'portfolios:current_user' %}"

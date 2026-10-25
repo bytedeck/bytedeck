@@ -3,8 +3,6 @@ import json
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.prefetch import GenericPrefetch
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
@@ -13,15 +11,14 @@ from django.views.generic import FormView, ListView, TemplateView
 
 from hackerspace_online.decorators import staff_member_required
 
-from quest_manager.models import QuestSubmission
-
 from siteconfig.models import SiteConfig
 
 from tenant.views import NonPublicOnlyViewMixin
 
 from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
-from .models import Competency, CompetencyAssessment
+from .models import Competency
+from .summaries import course_competencies, evidence_by_competency
 
 # session key holding the parsed competency set between the upload and preview steps
 IMPORT_SESSION_KEY = 'competency_import_set'
@@ -145,56 +142,45 @@ class CompetencyExportView(NonPublicOnlyViewMixin, TemplateView):
 
 
 @method_decorator([competencies_enabled, login_required], name='dispatch')
-class CompetencyEvidenceView(NonPublicOnlyViewMixin, TemplateView):
-    """ The evidence behind a student's level in one competency, which their profile's Competencies
-    panel links to: every assessment of it, most recent first, with the quest it came from, its
-    level and who assessed it. Students see their own evidence; staff see anyone's.
+class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
+    """ A student's competencies summary, linked from beside Mark Calculations on their profile: for
+    each of their courses (see competencies.summaries), its average and a grid of its competencies,
+    each with a chip for every assessment of it, oldest first, linking to the work it was given for.
+    Students see their own; staff see anyone's.
     """
-    template_name = 'competencies/evidence.html'
+    template_name = 'competencies/summary.html'
 
     def get(self, request, *args, **kwargs):
-        """ Renders the page for the student and competency in the URL.
+        """ Renders the summary for the student in the URL.
 
         Raises:
-            Http404: if either doesn't exist, or the student is someone else and the requesting
-                user isn't staff (so another student's evidence isn't even confirmed to exist).
+            Http404: if there's no such user, or it's someone else and the requesting user isn't
+                staff (so another student's summary isn't even confirmed to exist).
         """
         self.student = get_object_or_404(get_user_model(), pk=kwargs['user_pk'])
         if self.student != request.user and not request.user.is_staff:
             raise Http404
-        self.competency = get_object_or_404(Competency, pk=kwargs['competency_pk'])
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        """ Returns the template context: the student, the competency, their current assessment of
-        it with the deck's label, and 'rows', one per assessment with its label and where it came
-        from: 'from_quest' when its source is a quest submission, and 'submission', that submission
-        while it still exists. Evidence from no source, or from another kind of source, is neither.
-
-        Each assessment's submission and quest are prefetched, through the base manager so that
-        submissions of quests since archived or unpublished still name their quest.
+        """ Returns the template context: the student and 'courses', each with the course, the deck's
+        label for its average level ('' below the scale) and 'rows', each competency with its evidence
+        and the deck's label for each assessment's level.
         """
         labels = SiteConfig.get().get_competency_scale_labels()
-        submission_type_id = ContentType.objects.get_for_model(QuestSubmission).pk
-        evidence = CompetencyAssessment.objects.filter(user=self.student, competency=self.competency)
-        current = evidence.current().first()
-        assessments = evidence.select_related('assessed_by__profile').prefetch_related(
-            GenericPrefetch('source_object', [QuestSubmission._base_manager.select_related('quest')]),
-        )
-        rows = []
-        for assessment in assessments:
-            from_quest = assessment.source_content_type_id == submission_type_id
-            rows.append({
-                'assessment': assessment,
-                'label': labels[assessment.level],
-                'from_quest': from_quest,
-                'submission': assessment.source_object if from_quest else None,
+        evidence = evidence_by_competency(self.student)
+        courses = []
+        for course in course_competencies(self.student):
+            courses.append({
+                'course': course,
+                'level_label': labels.get(course.level, ''),
+                'rows': [
+                    {
+                        'competency': competency,
+                        'evidence': [{'item': item, 'label': labels[item.assessment.level]} for item in evidence.get(competency.pk, [])],
+                    }
+                    for competency in course.competencies
+                ],
             })
-        kwargs.update({
-            'student': self.student,
-            'competency': self.competency,
-            'current': current,
-            'current_label': labels[current.level] if current else '',
-            'rows': rows,
-        })
+        kwargs.update({'student': self.student, 'courses': courses})
         return super().get_context_data(**kwargs)

@@ -4,7 +4,8 @@ from siteconfig.models import SiteConfig
 
 from ..assessments import approval_links, posted_level
 from ..forms import competency_level_field_name
-from ..models import CompetencyAssessment, ProficiencyLevel
+from ..models import ProficiencyLevel
+from ..summaries import course_competencies
 
 register = template.Library()
 
@@ -26,28 +27,26 @@ def quest_competency_list(quest):
 
 @register.inclusion_tag('competencies/snippets/profile_competencies.html')
 def profile_competencies(student):
-    """ The Competencies panel of a student's profile: each competency they have evidence for, at
-    its current level (see CompetencyAssessmentQuerySet.current) in the deck's label, in course,
-    category and name order. Renders nothing when the deck has competencies disabled.
+    """ The Competencies panel of a student's profile: one row per course (see competencies.summaries),
+    with the student's average level across the course's competencies, out of 4 and as a point on the
+    deck's scale, linked to that course on their competencies summary. Renders nothing when the deck
+    has competencies disabled.
 
-    The levels come from one query, however many competencies the student has.
+    It takes the same few queries however many courses and competencies there are.
 
     Args:
         student (User): the student whose profile it is.
 
     Returns:
-        dict: the snippet's context: 'enabled', the student, and 'rows', each with the competency,
-        its current level and the deck's label for it.
+        dict: the snippet's context: 'enabled', the student, and 'rows', each with the course and the
+        deck's label for its average level ('' below the scale).
     """
     config = SiteConfig.get()
     if config is None or not config.enable_competencies:
         return {'enabled': False}
 
     labels = config.get_competency_scale_labels()
-    current = CompetencyAssessment.objects.filter(user=student).current().select_related('competency').order_by(
-        'competency__course', 'competency__category', 'competency__name',
-    )
-    rows = [{'competency': assessment.competency, 'level': assessment.level, 'label': labels[assessment.level]} for assessment in current]
+    rows = [{'course': course, 'level_label': labels.get(course.level, '')} for course in course_competencies(student)]
     return {'enabled': True, 'student': student, 'rows': rows}
 
 

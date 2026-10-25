@@ -1,0 +1,63 @@
+{% extends "competencies/base.html" %}
+{% load filters %}
+
+{% block heading_inner %}{{ student.profile.get_preferred_name|default:student.username|add_possessive }} Competencies{% endblock %}
+
+{% block content %}
+{% comment %}
+  A student's competencies summary (CompetencySummaryView): for each course, its average, then a grid
+  of its competencies with a chip for every assessment of each, oldest first. A chip links to the work
+  it was given for, and its title says what that was and when.
+{% endcomment %}
+<p>
+  For <a href="{{ student.profile.get_absolute_url }}">{{ student.profile.teacher_name }}</a>: each competency with a chip for
+  every time it was assessed, oldest first. Select a chip to see the work it was given for.
+</p>
+
+{% for row in courses %}
+{% with course=row.course %}
+<div class="panel panel-primary" id="course-{{ course.label|slugify|default:'other' }}">
+  <div class="panel-heading competency-level-row">
+    <h3 class="panel-title competency-level-row-name">
+      {{ course.label|default:"Other competencies" }}{% if course.course_titles %} <small>({{ course.course_titles|join:", " }})</small>{% endif %}
+    </h3>
+    <span class="competency-level-row-level" title="The average current level across this course's {{ course.competencies|length }} competencies, counting any not assessed yet as 0">
+      {{ course.average|floatformat:1 }} / 4
+      <span class="label {% if row.level_label %}competency-level competency-level-{{ course.level }}{% else %}label-default{% endif %}">{{ row.level_label|default:"Not yet" }}</span>
+    </span>
+  </div>
+  <table class="table table-condensed competency-summary">
+    <thead>
+      <tr>
+        <th class="competency-summary-name">Competency</th>
+        <th>Assessments</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% regroup row.rows by competency.category as categories %}
+      {% for category in categories %}
+        {% if category.grouper %}<tr class="info"><th colspan="2">{{ category.grouper }}</th></tr>{% endif %}
+        {% for competency_row in category.list %}
+        <tr>
+          <td title="{{ competency_row.competency.qualified_name }}">{{ competency_row.competency.name }}</td>
+          <td class="competency-summary-evidence">
+            {% for evidence in competency_row.evidence %}
+              {% with item=evidence.item %}
+              {% if item.url %}<a href="{{ item.url }}" {% else %}<span {% endif %}class="label competency-level competency-level-{{ item.assessment.level }}"
+                title="{{ item.description }}, {{ item.assessment.timestamp|date }}">{{ evidence.label }}{% if item.url %}</a>{% else %}</span>{% endif %}
+              {% endwith %}
+            {% empty %}
+              <span class="text-muted">Not yet</span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endwith %}
+{% empty %}
+<p>None yet: a course's competencies show here once the student is in a course with a competency set, or once they are assessed.</p>
+{% endfor %}
+{% endblock %}
