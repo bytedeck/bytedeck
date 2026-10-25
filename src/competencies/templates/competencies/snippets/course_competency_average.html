@@ -1,0 +1,15 @@
+{% comment %}
+  A course's competency average beside its XP bar on the student's profile (the
+  course_competency_average tag): the student's average level across all of the course's competencies,
+  counting any not assessed yet as 0, out of 4 and as a point on the deck's scale. It links to the
+  course's tab on their competencies summary. A level is never turned into XP or a percentage.
+{% endcomment %}
+{% if average %}
+{% with course=average.course %}
+<a href="{% url 'competencies:summary' course.registration.user_id %}#{{ course.pane_id }}" class="course-competency-average"
+  title="Competencies: the average current level across this course's {{ course.competencies|length }} competencies, counting any not assessed yet as 0">
+  <small>{{ course.average|floatformat:1 }} / 4</small>
+  <span class="label {% if average.level_label %}competency-level competency-level-{{ course.level }}{% else %}label-default{% endif %}">{{ average.level_label|default:"Not yet" }}</span>
+</a>
+{% endwith %}
+{% endif %}

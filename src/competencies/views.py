@@ -143,9 +143,10 @@ class CompetencyExportView(NonPublicOnlyViewMixin, TemplateView):
 
 @method_decorator([competencies_enabled, login_required], name='dispatch')
 class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
-    """ A student's competencies summary, linked from beside Mark Calculations on their profile: for
-    each of their courses (see competencies.summaries), its average and a grid of its competencies,
-    each with a chip for every assessment of it, oldest first, linking to the work it was given for.
+    """ A student's competencies summary, linked from beside Mark Calculations on their profile and
+    laid out like it: a table of their courses (see competencies.summaries) with each one's average,
+    then a tab per course (when there is more than one) listing all of the course's competencies, each
+    with a chip for every assessment of it, oldest first, linking to the work it was given for.
     Students see their own; staff see anyone's.
     """
     template_name = 'competencies/summary.html'
@@ -163,15 +164,15 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        """ Returns the template context: the student and 'courses', each with the course, the deck's
-        label for its average level ('' below the scale) and 'rows', each competency with its evidence
-        and the deck's label for each assessment's level.
+        """ Returns the template context: the student and 'panes', one per course, each with the
+        course, the deck's label for its average level ('' below the scale) and 'rows', each of the
+        course's competencies with its evidence and the deck's label for each assessment's level.
         """
         labels = SiteConfig.get().get_competency_scale_labels()
         evidence = evidence_by_competency(self.student)
-        courses = []
+        panes = []
         for course in course_competencies(self.student):
-            courses.append({
+            panes.append({
                 'course': course,
                 'level_label': labels.get(course.level, ''),
                 'rows': [
@@ -182,5 +183,5 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                     for competency in course.competencies
                 ],
             })
-        kwargs.update({'student': self.student, 'courses': courses})
+        kwargs.update({'student': self.student, 'panes': panes})
         return super().get_context_data(**kwargs)

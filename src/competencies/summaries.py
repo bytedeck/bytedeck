@@ -2,9 +2,9 @@
 assessment of every competency on their competencies summary page.
 
 A course's competencies are those carrying its official course label (Competency.course). The courses
-shown for a student are the competency sets of the courses they are registered in this semester
-(Course.competency_set), whether or not they have been assessed in them yet, plus any other course
-label they have evidence in (e.g. the BC Core Competencies, which no course chooses as its set).
+shown for a student are the courses they are registered in this semester that have chosen a
+competency set (Course.competency_set), whether or not they have been assessed in them yet, plus any
+other set they have evidence in (e.g. the BC Core Competencies, which no course chooses as its set).
 Within a course, the competencies counted are its active ones, plus any deactivated ones the student
 already has evidence for.
 """
@@ -17,6 +17,7 @@ from itertools import groupby
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.prefetch import GenericPrefetch
 from django.db.models import Q
+from django.utils.text import slugify
 
 from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
@@ -30,15 +31,29 @@ class CourseCompetencies:
 
     Attributes:
         label (str): the official course label, e.g. "ADST 9" ('' for competencies with none).
-        course_titles (list[str]): the titles of the student's current courses that chose this set,
-            leaving out one titled the same as the set (which would only repeat the label).
+        registration (CourseStudent or None): the student's registration in a course that chose this
+            set, or None for a set they have evidence in outside their courses.
         competencies (list[Competency]): the course's competencies, in category and name order.
         levels (dict[int, int]): competency pk to the student's current level, for those assessed.
     """
     label: str
-    course_titles: list = field(default_factory=list)
+    registration: object = None
     competencies: list = field(default_factory=list)
     levels: dict = field(default_factory=dict)
+
+    @property
+    def title(self):
+        """ The course's name: the title of the student's course, else the set's label. """
+        if self.registration is not None:
+            return self.registration.course.title
+        return self.label or "Other competencies"
+
+    @property
+    def pane_id(self):
+        """ The HTML id of the course's tab on the competencies summary, which the profile links to. """
+        if self.registration is not None:
+            return f"course-pane-{self.registration.pk}"
+        return f"course-pane-{slugify(self.label) or 'other'}"
 
     @property
     def average(self):
@@ -54,7 +69,8 @@ class CourseCompetencies:
 
 
 def course_competencies(student):
-    """ The student's competencies, course by course (see the module docstring for which courses).
+    """ The student's competencies, course by course: first each of their current courses that has a
+    competency set, then each other set they have evidence in, by label.
 
     Current levels come from the roll-up (CompetencyAssessmentQuerySet.current). It takes three
     queries, however many courses and competencies there are.
@@ -63,30 +79,26 @@ def course_competencies(student):
         student (User): the student.
 
     Returns:
-        list[CourseCompetencies]: one per course with at least one competency, in course label order.
+        list[CourseCompetencies]: one per course whose set has at least one competency.
     """
     current = CompetencyAssessment.objects.filter(user=student).current().select_related('competency')
     levels = {assessment.competency_id: assessment.level for assessment in current}
-    labels = {assessment.competency.course for assessment in current}
-
-    titles = defaultdict(list)
-    for registration in CourseStudent.objects.current_courses(student).select_related('course').order_by('course__title'):
-        course = registration.course
-        if course.competency_set:
-            labels.add(course.competency_set)
-            if course.title != course.competency_set:
-                titles[course.competency_set].append(course.title)
+    registrations = [
+        registration for registration in CourseStudent.objects.current_courses(student).select_related('course', 'block')
+        if registration.course.competency_set
+    ]
+    registered_labels = {registration.course.competency_set for registration in registrations}
+    labels = registered_labels | {assessment.competency.course for assessment in current}
 
     competencies = Competency.objects.filter(course__in=labels).filter(Q(active=True) | Q(pk__in=list(levels)))
-    return [
-        CourseCompetencies(
-            label=label,
-            course_titles=titles.get(label, []),
-            competencies=list(group),
-            levels=levels,
-        )
-        for label, group in groupby(competencies, key=lambda competency: competency.course)
+    by_label = {label: list(group) for label, group in groupby(competencies, key=lambda competency: competency.course)}
+
+    courses = [
+        CourseCompetencies(registration.course.competency_set, registration, by_label[registration.course.competency_set], levels)
+        for registration in registrations if registration.course.competency_set in by_label
     ]
+    courses += [CourseCompetencies(label, None, by_label[label], levels) for label in by_label if label not in registered_labels]
+    return courses
 
 
 @dataclass

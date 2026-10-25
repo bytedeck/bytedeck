@@ -11,7 +11,7 @@ from model_bakery import baker
 from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel
 from competencies.summaries import CourseCompetencies, course_competencies, evidence_by_competency
 from competencies.tests.test_approval import set_competencies_flag
-from courses.models import Course, CourseStudent, Semester
+from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -32,9 +32,9 @@ def own_query_count(queries):
 
 
 class StudentCompetenciesMixin:
-    """ A teacher, and a student registered this semester in "Digital Hackerspace", whose competency set
-    is ADST 9 (three active competencies and a deactivated one), on a deck with competencies enabled,
-    which also has a Core competency. """
+    """ A teacher, and a student registered this semester in "Digital Hackerspace" (block A), whose
+    competency set is ADST 9 (three active competencies and a deactivated one), on a deck with
+    competencies enabled, which also has a Core competency. """
 
     def setUp(self):
         """ Creates the users, the course and registration, and the competencies. """
@@ -45,7 +45,9 @@ class StudentCompetenciesMixin:
         self.semester.status = Semester.Status.OPEN
         self.semester.save()
         self.course = baker.make(Course, title="Digital Hackerspace", competency_set="ADST 9")
-        baker.make(CourseStudent, user=self.student, course=self.course, semester=self.semester)
+        self.registration = baker.make(
+            CourseStudent, user=self.student, course=self.course, semester=self.semester, block=baker.make(Block, name="A"),
+        )
 
         self.defining = baker.make(Competency, course="ADST 9", category="Applied Design - Defining", name="Choose a design opportunity")
         self.ideating = baker.make(Competency, course="ADST 9", category="Applied Design - Ideating", name="Generate potential ideas")
@@ -86,16 +88,16 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
     """ Tests for competencies.summaries.course_competencies and CourseCompetencies. """
 
     def test_course_competencies__a_course_averages_every_competency_counting_unassessed_as_zero(self):
-        """ The student's course's set averages the current level of each of its active competencies,
-        with 0 for one not assessed yet: Extending (the latest of two), nothing, and Proficient make 7/3 """
+        """ The student's course averages the current level of each of its set's active competencies, with
+        0 for one not assessed yet: Extending (the latest of two), nothing, and Proficient make 7/3 """
         self.assess(self.defining, ProficiencyLevel.DEVELOPING, minutes_ago=30)
         self.assess(self.defining, ProficiencyLevel.EXTENDING, minutes_ago=5)
         self.assess(self.making, ProficiencyLevel.PROFICIENT, minutes_ago=10)
 
         [adst] = course_competencies(self.student)
 
-        self.assertEqual(adst.label, "ADST 9")
-        self.assertEqual(adst.course_titles, ["Digital Hackerspace"])
+        self.assertEqual((adst.label, adst.registration, adst.title), ("ADST 9", self.registration, "Digital Hackerspace"))
+        self.assertEqual(adst.pane_id, f"course-pane-{self.registration.pk}")
         self.assertEqual(adst.competencies, [self.defining, self.ideating, self.making])
         self.assertAlmostEqual(adst.average, 7 / 3)
         self.assertEqual(adst.level, ProficiencyLevel.DEVELOPING)
@@ -107,18 +109,27 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         self.assertEqual(adst.average, 0)
         self.assertEqual(adst.level, 0)
 
-    def test_course_competencies__other_courses_join_once_assessed(self):
-        """ A course label the student isn't registered for joins once they have evidence in it, in label
-        order, with no course titles; a course with no competencies at all is left out """
-        self.course.competency_set = "Vanished Set"
-        self.course.save()
+    def test_course_competencies__the_students_courses_come_first_then_other_sets_with_evidence(self):
+        """ After the student's courses come the other sets they have evidence in, by label, named by
+        their label (or "Other competencies" for none) """
         self.assess(self.collaborating, ProficiencyLevel.EXTENDING, minutes_ago=5)
-        self.assess(self.ideating, ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        self.assess(baker.make(Competency, course="ADST 8", name="Older"), ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        self.assess(baker.make(Competency, course="", name="Homemade"), ProficiencyLevel.PROFICIENT, minutes_ago=5)
 
         courses = course_competencies(self.student)
 
-        self.assertEqual([(course.label, course.course_titles) for course in courses], [("ADST 9", []), ("Core", [])])
-        self.assertEqual(courses[1].average, ProficiencyLevel.EXTENDING)
+        self.assertEqual([(course.title, course.registration) for course in courses], [
+            ("Digital Hackerspace", self.registration), ("Other competencies", None), ("ADST 8", None), ("Core", None),
+        ])
+        self.assertEqual([course.pane_id for course in courses[1:]], ["course-pane-other", "course-pane-adst-8", "course-pane-core"])
+        self.assertEqual(courses[3].average, ProficiencyLevel.EXTENDING)
+
+    def test_course_competencies__a_set_with_no_competencies_is_left_out(self):
+        """ A course whose set has no competencies on the deck has nothing to show, so it is left out """
+        self.course.competency_set = "Vanished Set"
+        self.course.save()
+
+        self.assertEqual(course_competencies(self.student), [])
 
     def test_course_competencies__a_deactivated_competency_counts_once_assessed(self):
         """ A deactivated competency is left out of its course, unless the student already has evidence for it """
@@ -129,20 +140,20 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         self.assertIn(self.retired, adst.competencies)
         self.assertEqual(adst.average, 3 / 4)
 
-    def test_course_competencies__a_course_titled_as_its_set_isnt_repeated(self):
-        """ A course titled the same as its competency set adds no title, since it would only repeat the label """
-        same_name = baker.make(Course, title="ADST 9", competency_set="ADST 9")
-        baker.make(CourseStudent, user=self.student, course=same_name, semester=self.semester)
+    def test_course_competencies__two_courses_with_the_same_set_each_show(self):
+        """ Each of the student's courses with a set shows, even two that chose the same set """
+        other = baker.make(CourseStudent, user=self.student, course=baker.make(Course, title="ADST 9 Honours", competency_set="ADST 9"),
+                           semester=self.semester)
 
-        [adst] = course_competencies(self.student)
+        registrations = [course.registration for course in course_competencies(self.student)]
 
-        self.assertEqual(adst.course_titles, ["Digital Hackerspace"])
+        self.assertCountEqual(registrations, [self.registration, other])
 
     def test_course_competencies__a_course_without_a_set_adds_nothing(self):
         """ A course the student is in that hasn't chosen a competency set adds no course """
         baker.make(CourseStudent, user=self.student, course=baker.make(Course, title="Study Hall"), semester=self.semester)
 
-        self.assertEqual([course.label for course in course_competencies(self.student)], ["ADST 9"])
+        self.assertEqual([course.title for course in course_competencies(self.student)], ["Digital Hackerspace"])
 
     def test_course_competencies__three_queries(self):
         """ It takes three queries however many courses and competencies there are """
@@ -151,9 +162,9 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         with CaptureQueriesContext(connection) as queries:
             courses = course_competencies(self.student)
-            averages = [course.average for course in courses]
+            summaries = [(course.title, course.average) for course in courses]
 
-        self.assertEqual(len(averages), 2)
+        self.assertEqual(len(summaries), 2)
         self.assertEqual(own_query_count(queries), 3)
 
     def test_level__rounds_to_the_nearest_level_halves_up(self):
@@ -221,11 +232,13 @@ class EvidenceByCompetencyTest(StudentCompetenciesMixin, ByteDeckTenantTestCase)
 
 
 class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
-    """ Tests for the Competencies panel and button on a student's profile. """
+    """ Tests for the competency averages in the XP panel of a student's profile, and its summary button. """
 
-    def test_profile__a_row_per_course_with_its_average(self):
-        """ Each course shows its average out of 4 and as the deck's label in the level's colour, with the
-        student's course title, linked to the course on the competencies summary """
+    def test_profile__each_course_shows_its_competency_average(self):
+        """ Beside each course's name in the XP panel is its competency average, out of 4 and as the deck's
+        label in the level's colour, linked to the course's tab on the summary; a course without a set has
+        none, and sets outside the student's courses aren't shown here """
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course, title="Study Hall"), semester=self.semester)
         self.assess(self.defining, ProficiencyLevel.EXTENDING, minutes_ago=5)
         self.assess(self.making, ProficiencyLevel.PROFICIENT, minutes_ago=10)
         self.assess(self.collaborating, ProficiencyLevel.EXTENDING, minutes_ago=10)
@@ -233,16 +246,15 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(self.profile_url())
 
-        self.assertContains(response, '<h3 class="panel-title">Competencies</h3>')
-        self.assertRegex(response.content.decode(), (
-            rf'(?s)<a href="{self.summary_url()}#course-adst-9" class="list-group-item competency-level-row"\s*'
-            r'title="The average current level across this course\'s 3 competencies, counting any not assessed yet as 0">\s*'
-            r'<span class="competency-level-row-name">ADST 9 <small class="text-muted">\(Digital Hackerspace\)</small></span>\s*'
-            r'<span class="competency-level-row-level">\s*<small class="text-muted">2.3 / 4</small>\s*'
-            r'<span class="label competency-level competency-level-2">Developing</span>'
-            rf'.*<a href="{self.summary_url()}#course-core".*?Core</span>.*?4.0 / 4</small>\s*'
-            r'<span class="label competency-level competency-level-4">Nailed It</span>'
+        content = response.content.decode()
+        self.assertRegex(content, (
+            r'(?s)<div>\s*Digital Hackerspace\s*'
+            rf'<a href="{self.summary_url()}#course-pane-{self.registration.pk}" class="course-competency-average"\s*'
+            r'title="Competencies: the average current level across this course\'s 3 competencies, counting any not assessed yet as 0">\s*'
+            r'<small>2.3 / 4</small>\s*<span class="label competency-level competency-level-2">Developing</span>\s*</a>\s*</div>'
         ))
+        self.assertRegex(content, r'<div>\s*Study Hall\s*</div>')
+        self.assertEqual(content.count('class="course-competency-average"'), 1)
 
     def test_profile__a_course_below_the_scale_is_not_yet(self):
         """ A course averaging under half a level shows its average and "Not yet", in grey """
@@ -250,27 +262,8 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(self.profile_url())
 
-        self.assertContains(response, '<small class="text-muted">0.0 / 4</small>')
+        self.assertContains(response, '<small>0.0 / 4</small>')
         self.assertContains(response, '<span class="label label-default">Not yet</span>', html=True)
-
-    def test_profile__competencies_without_a_course_label(self):
-        """ Competencies with no course label are grouped as "Other competencies" """
-        self.assess(baker.make(Competency, course="", name="Homemade"), ProficiencyLevel.PROFICIENT, minutes_ago=5)
-        self.client.force_login(self.student)
-
-        response = self.client.get(self.profile_url())
-
-        self.assertContains(response, f'href="{self.summary_url()}#course-other"')
-        self.assertContains(response, '<span class="competency-level-row-name">Other competencies</span>', html=True)
-
-    def test_profile__empty_state(self):
-        """ A student in no course with a competency set, and with no evidence, gets the panel saying so """
-        CourseStudent.objects.all().delete()
-        self.client.force_login(self.student)
-
-        response = self.client.get(self.profile_url())
-
-        self.assertContains(response, '<div class="list-group-item">None yet.</div>', html=True)
 
     def test_profile__summary_button_beside_mark_calculations(self):
         """ The profile's buttons include one to the student's competencies summary, after Mark Calculations """
@@ -286,8 +279,9 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
             rf'href="{self.summary_url()}"'
         ))
 
-    def test_profile__levels_take_the_same_queries_however_many_competencies(self):
-        """ The panel adds no query per competency or course """
+    def test_profile__averages_take_the_same_queries_however_many_competencies(self):
+        """ The averages add no query per competency assessed (course_competencies takes the same three
+        queries however many courses there are, as its own test shows) """
         self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=1)
         self.client.force_login(self.teacher)
         self.client.get(self.profile_url())  # warm up per-request caches, such as the deck's SiteConfig
@@ -295,16 +289,16 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         with CaptureQueriesContext(connection) as one:
             self.client.get(self.profile_url())
 
-        for competency in (self.making, self.collaborating, baker.make(Competency, course="Media Design 10")):
+        for competency in (self.making, self.ideating, self.collaborating):
             self.assess(competency, ProficiencyLevel.DEVELOPING, minutes_ago=1)
         with CaptureQueriesContext(connection) as more:
             response = self.client.get(self.profile_url())
 
-        self.assertEqual(response.content.decode().count('class="list-group-item competency-level-row"'), 3)
+        self.assertContains(response, '<small>2.3 / 4</small>')
         self.assertEqual(own_query_count(more), own_query_count(one))
 
     def test_profile__nothing_when_disabled(self):
-        """ With the flag off the profile has neither the panel nor the summary button """
+        """ With the flag off the profile has neither the averages nor the summary button """
         self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=1)
         set_competencies_flag(False)
         self.client.force_login(self.student)
@@ -312,27 +306,27 @@ class ProfileCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         response = self.client.get(self.profile_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, '<h3 class="panel-title">Competencies</h3>')
+        self.assertNotContains(response, 'course-competency-average')
         self.assertNotContains(response, self.summary_url())
 
-    def test_profile__nothing_on_a_staff_profile(self):
-        """ Teachers aren't assessed, so their own profile has neither the panel nor the summary button """
+    def test_profile__no_button_on_a_staff_profile(self):
+        """ Teachers aren't assessed, so their own profile has no summary button """
         self.client.force_login(self.teacher)
 
         response = self.client.get(self.profile_url(self.teacher))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, '<h3 class="panel-title">Competencies</h3>')
         self.assertNotContains(response, self.summary_url(self.teacher))
 
 
 class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
     """ Tests for CompetencySummaryView, a student's competencies summary. """
 
-    def test_summary__each_course_with_a_chip_per_assessment(self):
-        """ Each course shows its average, then its competencies by category, each with a chip per
-        assessment, oldest first, in the deck's labels and colours, linking to the submission and titled
-        with the quest and date; a competency not assessed yet says so """
+    def test_summary__a_table_of_courses_then_a_tab_each_listing_every_competency(self):
+        """ Like Mark Calculations: a table of the student's courses (then other sets with evidence) with
+        each one's average, then a tab per course listing all its competencies by category, each with a
+        chip per assessment, oldest first, linking to the submission and titled with the quest and date,
+        or "Not yet" """
         brainstorm = self.submission("Brainstorm")
         prototype = self.submission("Prototype")
         self.assess(self.defining, ProficiencyLevel.DEVELOPING, minutes_ago=60 * 24 * 3, source=brainstorm)
@@ -342,12 +336,18 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
 
         response = self.client.get(self.summary_url())
 
-        self.assertContains(response, '<i class="fa fa-graduation-cap pull-right"></i>Grace&#x27;s Competencies</h1>')
-        self.assertContains(response, f'For <a href="{self.student.profile.get_absolute_url()}">Grace Hopper</a>')
+        self.assertContains(response, '<i class="fa fa-graduation-cap pull-right"></i>Competencies for Grace Hopper</h1>')
+        self.assertContains(response, "Hello Grace,")
         content = response.content.decode()
+        pane = f"course-pane-{self.registration.pk}"
         self.assertRegex(content, (
-            r'(?s)<div class="panel panel-primary" id="course-adst-9">.*?ADST 9 <small>\(Digital Hackerspace\)</small>.*?1.3 / 4\s*'
-            r'<span class="label competency-level competency-level-1">Emerging</span>'
+            r'(?s)<td>A Block</td>\s*<td>Digital Hackerspace <small class="text-muted">\(ADST 9\)</small></td>\s*<td>\s*'
+            r'<strong>1.3 / 4</strong>\s*<span class="label competency-level competency-level-1">Emerging</span>'
+            r'.*?<td></td>\s*<td>Core</td>\s*<td>\s*<strong>3.0 / 4</strong>\s*<span class="label competency-level competency-level-3">Got It</span>'
+            rf'.*?<ul class="nav nav-tabs course-tabs" role="tablist">.*?<li role="presentation" class="active">\s*'
+            rf'<a href="#{pane}" role="tab" data-toggle="tab">Digital Hackerspace</a>'
+            r'.*?<a href="#course-pane-core" role="tab" data-toggle="tab">Core</a>'
+            rf'.*?<div role="tabpanel" class="tab-pane active" id="{pane}">\s*<h3>ADST 9 Competencies</h3>'
             r'.*?<tr class="info"><th colspan="2">Applied Design - Defining</th></tr>\s*<tr>\s*'
             r'<td title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</td>\s*'
             r'<td class="competency-summary-evidence">\s*'
@@ -356,19 +356,30 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'<a href="{prototype.get_absolute_url()}" class="label competency-level competency-level-4"\s*'
             r'title="Prototype, [^"]+">Nailed It</a>'
             r'.*?Generate potential ideas</td>\s*<td class="competency-summary-evidence">\s*<span class="text-muted">Not yet</span>'
-            r'.*?<div class="panel panel-primary" id="course-core">.*?competency-level-3"\s*title="Prototype, [^"]+">Got It</a>'
+            r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Core Competencies</h3>'
+            r'.*?competency-level-3"\s*title="Prototype, [^"]+">Got It</a>'
         ))
         self.assertIn(f'title="Prototype, {latest.timestamp:%b}', content)
         self.assertNotContains(response, "Retired competency")
 
+    def test_summary__one_course_has_no_tabs(self):
+        """ A student with one course gets its competencies without a tab strip over them """
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.summary_url())
+
+        self.assertContains(response, f'<div role="tabpanel" class="tab-pane active" id="course-pane-{self.registration.pk}">')
+        self.assertNotContains(response, 'nav-tabs')
+
     def test_summary__the_student_sees_their_own_with_links(self):
-        """ A student sees their own summary, with each chip linking to their submission """
+        """ A student sees their own summary, titled without their name, with each chip linking to their submission """
         submission = self.submission("Brainstorm")
         self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=5, source=submission)
         self.client.force_login(self.student)
 
         response = self.client.get(self.summary_url())
 
+        self.assertContains(response, '<i class="fa fa-graduation-cap pull-right"></i>Competencies</h1>')
         self.assertContains(response, f'<a href="{submission.get_absolute_url()}" class="label competency-level competency-level-3"')
 
     def test_summary__evidence_without_a_link_is_a_plain_chip(self):
@@ -389,7 +400,10 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
         CourseStudent.objects.all().delete()
         self.client.force_login(self.student)
 
-        self.assertContains(self.client.get(self.summary_url()), "None yet: a course's competencies show here")
+        response = self.client.get(self.summary_url())
+
+        self.assertContains(response, "there are no competencies to show yet")
+        self.assertNotContains(response, "course-tab-content")
 
     def test_summary__queries_dont_grow_with_the_evidence(self):
         """ The page's queries stay the same however many assessments there are """
