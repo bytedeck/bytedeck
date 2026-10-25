@@ -115,3 +115,6 @@ target/
 
 # redis persistence file dropped by a locally-run redis-server
 dump.rdb
+
+# the user guide's build output (mkdocs build)
+/site/

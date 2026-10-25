@@ -1,0 +1,66 @@
+# The ByteDeck user guide: a static site built from docs/ with MkDocs and the Material theme,
+# published to GitHub Pages by .github/workflows/docs.yml. Preview it locally with
+#   pip install -r docs/requirements.txt && mkdocs serve --dev-addr 127.0.0.1:8100
+site_name: ByteDeck User Guide
+site_description: How to run your own ByteDeck deck, from your first sign-in to the advanced features.
+site_url: https://bytedeck.github.io/bytedeck/
+repo_url: https://github.com/bytedeck/bytedeck
+repo_name: bytedeck/bytedeck
+edit_uri: edit/develop/docs/
+
+# docs/plans/ holds developer planning notes, not part of the guide
+exclude_docs: |
+  plans/
+  requirements.txt
+
+theme:
+  name: material
+  logo: images/logo.png
+  favicon: images/favicon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.action.edit
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Quick start:
+      - quick-start/index.md
+      - Get your deck: quick-start/get-your-deck.md
+      - Set up your deck: quick-start/set-up-your-deck.md
+      - Invite your students: quick-start/invite-students.md
+      - Your first quests: quick-start/first-quests.md
+      - Review submissions: quick-start/review-submissions.md
