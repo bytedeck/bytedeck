@@ -316,8 +316,10 @@ class CompetencyAssessmentCurrentTest(ByteDeckTenantTestCase):
 
     def test_current__ties_go_to_the_one_recorded_last(self):
         """ Two assessments stamped the same moment resolve to the one recorded last """
-        self.assess(self.thinking, ProficiencyLevel.DEVELOPING, minutes_ago=5)
+        earlier = self.assess(self.thinking, ProficiencyLevel.DEVELOPING, minutes_ago=5)
         later = self.assess(self.thinking, ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        # each assess() reads the clock separately, so give the two the very same stamp
+        CompetencyAssessment.objects.filter(pk__in=[earlier.pk, later.pk]).update(timestamp=timezone.now() - timedelta(minutes=5))
 
         self.assertEqual(list(CompetencyAssessment.objects.filter(user=self.student).current()), [later])
 
