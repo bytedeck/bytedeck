@@ -132,6 +132,25 @@ class QuestCompetency(models.Model):
         return f"{self.quest} - {self.competency}"
 
 
+class CompetencyAssessmentQuerySet(models.QuerySet):
+    """ Custom queryset for CompetencyAssessment. """
+
+    def current(self):
+        """ The roll-up of the evidence: for each student and competency in this queryset, the
+        assessment that stands as their current level, which is the most recent one (ties on the
+        timestamp go to the one recorded last). Everything that shows a current level reads it
+        through here, so a different roll-up strategy changes only this method.
+
+        It is one query: the latest assessment per student and competency is picked by a Postgres
+        ``DISTINCT ON`` subquery, so it serves one student's profile or a whole class alike.
+
+        Returns:
+            QuerySet: the current assessments, at most one per student and competency.
+        """
+        latest = self.order_by('user_id', 'competency_id', '-timestamp', '-pk').distinct('user_id', 'competency_id')
+        return self.filter(pk__in=latest.values('pk'))
+
+
 class CompetencyAssessment(models.Model):
     """ The atomic evidence record: a single assessment of a student on a single competency,
     at a specific level, from a specific source (a QuestSubmission in v1; the generic FK allows
@@ -170,6 +189,8 @@ class CompetencyAssessment(models.Model):
     note = models.TextField(blank=True)
 
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    objects = CompetencyAssessmentQuerySet.as_manager()
 
     class Meta:
         ordering = ['-timestamp']

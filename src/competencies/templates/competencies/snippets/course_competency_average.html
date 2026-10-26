@@ -1,0 +1,17 @@
+{% comment %}
+  A course's current level of proficiency beside its XP bar on the student's profile (the
+  course_competency_average tag): the student's average across all of the course's competencies,
+  counting any not yet assessed as 0, as a point on the deck's Proficiency Scale, or "n/a" (not yet
+  assessed) below it. The label links to the course on their competencies page, which explains how it
+  is worked out. A level is never turned into XP or a percentage.
+{% endcomment %}
+{% if average %}
+{% with course=average.course %}
+<span class="course-competency-average">
+  <small class="text-muted">Current level of proficiency:</small>
+  <a href="{% url 'competencies:summary' course.registration.user_id %}?course={{ course.pane_id }}"
+    class="label {% if average.level_label %}competency-level competency-level-{{ course.level }}{% else %}label-default{% endif %}"
+    title="{% if not average.level_label %}Not yet assessed. {% endif %}See how your current level of proficiency in {{ course.title }} is worked out">{{ average.level_label|default:"n/a" }}</a>
+</span>
+{% endwith %}
+{% endif %}

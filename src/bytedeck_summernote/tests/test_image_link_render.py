@@ -1,9 +1,10 @@
 """Tests for linking an image in the editor, the link wrapping the image itself (#2909).
 
 Summernote's Insert Link dialog builds its link from the selected text, so with an image selected the
-link used to come out as new text beside the image. js/summernote-image-link.js links the selected
-image instead, from the toolbar's Link button and from Link in the image's menu, and opens the same
-dialog on the image's own link to edit. The image's menu shows a linked image's URL and has Unlink.
+link used to come out as new text beside the image. The image-link plugin
+(static/bytedeck_summernote/plugins/image-link/) links the selected image instead, from the
+toolbar's Link button and from Link in the image's menu, and opens the same dialog on the image's
+own link to edit. The image's menu shows a linked image's URL and has Unlink.
 
 The announcement form is rendered by the app itself, through the test client, and opened in
 headless Chromium with the app's own static files, scripts included, so the editor runs with the
@@ -39,7 +40,7 @@ PAGE_ORIGIN = "http://deck.test"
 #: The image the tests link.
 IMAGE = '<img src="/static/img/banner.png" style="width: 200px;">'
 
-IMAGE_LINK_JS = os.path.join(settings.STATIC_URL, 'js/summernote-image-link.js')
+IMAGE_LINK_JS = os.path.join(settings.STATIC_URL, 'bytedeck_summernote/plugins/image-link/summernote-image-link.js')
 
 
 class ImageLinkConfigTest(SimpleTestCase):
@@ -49,7 +50,7 @@ class ImageLinkConfigTest(SimpleTestCase):
         """Both the iframe widget and the inplace widget load the plugin."""
         self.assertIn(IMAGE_LINK_JS, settings.SUMMERNOTE_CONFIG['js'])
         self.assertIn(IMAGE_LINK_JS, settings.SUMMERNOTE_CONFIG['js_for_inplace'])
-        self.assertIsNotNone(finders.find('js/summernote-image-link.js'))
+        self.assertIsNotNone(finders.find('bytedeck_summernote/plugins/image-link/summernote-image-link.js'))
 
     def test_summernote_config__image_menu_has_link_and_unlink(self):
         """The image's menu has Link and Unlink."""

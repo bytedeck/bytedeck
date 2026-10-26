@@ -1566,12 +1566,12 @@ table[data-toggle="table"].bt-reveal {
     color: tomato;
 }
 
-/* Competency levels on the approval forms (competencies/snippets/approval_levels.html): one
-   segmented control per competency, colour-coded once selected so the chosen levels read at a
-   glance, in Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning),
-   Proficient green (success) and Extending blue (info). The shades are darker than Bootstrap's
-   buttons so each text and background pair has at least 4.5:1 contrast (WCAG AA), and yellow takes
-   dark text. */
+/* Competency levels, colour-coded so they read at a glance: the selected level of each segmented
+   control on the approval forms (competencies/snippets/approval_levels.html), and the level labels
+   on a student's profile and evidence pages (span.label.competency-level-N). The colours follow
+   Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning), Proficient green
+   (success) and Extending blue (info). The shades are darker than Bootstrap's buttons so each text
+   and background pair has at least 4.5:1 contrast (WCAG AA), and yellow takes dark text. */
 .competency-approval-levels {
     margin-bottom: 10px;
 }
@@ -1586,22 +1586,59 @@ table[data-toggle="table"].bt-reveal {
 .competency-approval-levels .btn.competency-level.active {
     color: #fff;
 }
-.competency-approval-levels .btn.competency-level-1.active {
+.competency-approval-levels .btn.competency-level-1.active,
+.label.competency-level-1 {
     background-color: #c9302c;
     border-color: #ac2925;
 }
-.competency-approval-levels .btn.competency-level-2.active {
+.competency-approval-levels .btn.competency-level-2.active,
+.label.competency-level-2 {
     background-color: #f0ad4e;
     border-color: #eea236;
     color: #333;
 }
-.competency-approval-levels .btn.competency-level-3.active {
+.competency-approval-levels .btn.competency-level-3.active,
+.label.competency-level-3 {
     background-color: #3c763d;
     border-color: #326432;
 }
-.competency-approval-levels .btn.competency-level-4.active {
+.competency-approval-levels .btn.competency-level-4.active,
+.label.competency-level-4 {
     background-color: #31708f;
     border-color: #2b6380;
+}
+
+/* A course's current level of proficiency beside its name in the XP panel of a student's profile
+   (competencies/snippets/course_competency_average.html). */
+.course-competency-average {
+    margin-left: 6px;
+}
+
+/* A level's three-letter code (EMG, DEV, PRF, EXT, or n/a) as a label, all at one width so a row of
+   them lines up and many fit on the page (a student's competencies summary). */
+.label.competency-code {
+    display: inline-block;
+    width: 3.4em;
+    text-align: center;
+}
+
+/* The averages that round to each competency level, in a course's explanation on a student's
+   competencies summary: only as wide as its two short columns need. */
+.table.competency-scale {
+    width: auto;
+}
+.competency-scale th,
+.competency-scale td {
+    padding-right: 30px;
+}
+
+/* A student's competencies summary (competencies/summary.html): a grid of a course's competencies,
+   each with a chip for every assessment of it, wrapping onto more lines as the chips build up. */
+.competency-summary .competency-summary-name {
+    width: 45%;
+}
+.competency-summary-evidence .label {
+    margin: 1px 2px 1px 0;
 }
 
 /* The quest form's competency picker (QuestCompetenciesSelect2Widget): a competency's

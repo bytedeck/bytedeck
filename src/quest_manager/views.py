@@ -45,6 +45,7 @@ from questions.models import QuestionSubmission, QuestionType
 from questions.utils import (
     discard_draft_question_submissions,
     finalize_answer_marks,
+    render_answer_file,
     save_draft_file_answers,
     sync_draft_question_submissions,
 )
@@ -3047,8 +3048,9 @@ def ajax_save_draft(request):
 
     Returns a JSON object: `result` ("Draft saved" or "No changes"), and, when the POST
     carried files, `saved_answer_files` (file field name to the stored file's bare name),
-    `saved_attachments` (the accepted upload names), and `file_errors` (field name to the
-    validation message for a rejected file).
+    `answer_files_html` (file field name to the answer's saved file as its control lists it,
+    #2925), `saved_attachments` (the accepted upload names), and `file_errors` (field name to
+    the validation message for a rejected file).
     """
     if request.POST:
         response_data = {
@@ -3173,6 +3175,7 @@ def ajax_save_draft(request):
         # the page can clear those inputs and show the outcome without a reload.
         if request.FILES:
             saved_answer_files = {}
+            answer_files_html = {}
             saved_attachments = []
             file_errors = {}
 
@@ -3207,6 +3210,9 @@ def ajax_save_draft(request):
                     elif answer_form.instance.pk and answer_form.instance.response_file:
                         # the bare file name: the stored value is a whole media path
                         saved_answer_files[field_name] = posixpath.basename(str(answer_form.instance.response_file))
+                        # and the file as the answer's control lists it, with the button that
+                        # removes it, for the page to show in place of the one it replaced
+                        answer_files_html[field_name] = render_answer_file(answer_form.instance)
 
             if request.FILES.getlist("attachments"):
                 # the same form the submit builds, so the same size and count rules apply
@@ -3220,6 +3226,7 @@ def ajax_save_draft(request):
             if saved_answer_files or saved_attachments:
                 response_data["result"] = "Draft saved"
             response_data["saved_answer_files"] = saved_answer_files
+            response_data["answer_files_html"] = answer_files_html
             response_data["saved_attachments"] = saved_attachments
             response_data["file_errors"] = file_errors
             if saved_attachments:

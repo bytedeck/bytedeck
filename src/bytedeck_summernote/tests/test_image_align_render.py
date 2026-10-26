@@ -1,9 +1,10 @@
 """Tests for aligning an image in the editor on a line of its own, at the left, center or right (#2910).
 
 The float buttons in the image's menu let text wrap around an image. The paragraph's own alignment
-can't move a Responsive image, which Bootstrap's img-responsive makes a block, so
-js/summernote-image-align.js adds Align left, Align center and Align right to the image's menu,
-as classes on the image: Bootstrap's center-block, and img-align-right from css/custom_common.css.
+can't move a Responsive image, which Bootstrap's img-responsive makes a block, so the image-align
+plugin (static/bytedeck_summernote/plugins/image-align/) adds Align left, Align center and Align
+right to the image's menu, as classes on the image: Bootstrap's center-block, and img-align-right
+from css/custom_common.css.
 An image is either aligned or floated, never both. On a phone, a floated image stops floating
 and sits on a line of its own, as a floated figure does (#2918).
 
@@ -41,7 +42,7 @@ PAGE_ORIGIN = "http://deck.test"
 #: A Responsive image, as the editor inserts one, narrower than the editor.
 IMAGE = '<img class="img-responsive" src="/static/img/banner.png" style="width: 200px;">'
 
-IMAGE_ALIGN_JS = os.path.join(settings.STATIC_URL, 'js/summernote-image-align.js')
+IMAGE_ALIGN_JS = os.path.join(settings.STATIC_URL, 'bytedeck_summernote/plugins/image-align/summernote-image-align.js')
 
 
 class ImageAlignConfigTest(SimpleTestCase):
@@ -51,7 +52,7 @@ class ImageAlignConfigTest(SimpleTestCase):
         """Both the iframe widget and the inplace widget load the plugin."""
         self.assertIn(IMAGE_ALIGN_JS, settings.SUMMERNOTE_CONFIG['js'])
         self.assertIn(IMAGE_ALIGN_JS, settings.SUMMERNOTE_CONFIG['js_for_inplace'])
-        self.assertIsNotNone(finders.find('js/summernote-image-align.js'))
+        self.assertIsNotNone(finders.find('bytedeck_summernote/plugins/image-align/summernote-image-align.js'))
 
     def test_summernote_config__image_menu_has_the_alignments(self):
         """The image's menu has Align left, Align center and Align right, after the float buttons."""

@@ -1,12 +1,13 @@
 """Tests for the editor's Edit image button, which changes the picture an image shows (#2907) and
 its description (#2911).
 
-The button sits in the menu over a clicked image (js/summernote-image-source.js). Its dialog shows
-the image's URL to edit, or takes a new file, which goes up through the editor's own image upload
-(uploadImages in bytedeck_summernote/widget_common.html), and shows its description (alt text) to
-edit. Only the image's src and alt change, so its size, float, shapes and other attributes stay. A
-height left by dragging the image's corner goes with a new picture, so a picture of a different
-shape keeps its proportions.
+The button sits in the menu over a clicked image (the image-source plugin, in
+static/bytedeck_summernote/plugins/image-source/). Its dialog shows the image's URL to edit, or
+takes a new file, which goes up through the editor's own image upload (uploadImages in
+bytedeck_summernote/widget_common.html), and shows its description (alt text) to edit. Only the
+image's src and alt change, so its size, float, shapes and other attributes stay. A height left by
+dragging the image's corner goes with a new picture, so a picture of a different shape keeps its
+proportions.
 
 The announcement form is rendered by the app itself, through the test client, and opened in
 headless Chromium with the app's own static files, scripts included, so the editor runs with the
@@ -45,7 +46,7 @@ PAGE_ORIGIN = "http://deck.test"
 OLD_URL = "/static/img/banner.png"
 NEW_URL = "/static/img/icon.png"
 
-IMAGE_SOURCE_JS = os.path.join(settings.STATIC_URL, 'js/summernote-image-source.js')
+IMAGE_SOURCE_JS = os.path.join(settings.STATIC_URL, 'bytedeck_summernote/plugins/image-source/summernote-image-source.js')
 
 
 class ImageSourceConfigTest(SimpleTestCase):
@@ -55,7 +56,7 @@ class ImageSourceConfigTest(SimpleTestCase):
         """Both the iframe widget and the inplace widget load the plugin."""
         self.assertIn(IMAGE_SOURCE_JS, settings.SUMMERNOTE_CONFIG['js'])
         self.assertIn(IMAGE_SOURCE_JS, settings.SUMMERNOTE_CONFIG['js_for_inplace'])
-        self.assertIsNotNone(finders.find('js/summernote-image-source.js'))
+        self.assertIsNotNone(finders.find('bytedeck_summernote/plugins/image-source/summernote-image-source.js'))
 
     def test_summernote_config__image_menu_has_the_edit_image_button(self):
         """The image's menu shows the button, beside Image Shapes."""
@@ -237,19 +238,20 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
 
     def test_image_source__enter_with_no_url_changes_nothing(self):
-        """With the URL emptied, or only spaces, the button is off, and Enter in either field
-        leaves the image's picture as it was."""
-        for url in ('', '   '):
-            with self.subTest(url=url):
-                self._write(f'<img src="{OLD_URL}">')
-                self._open_dialog().fill(url)
-                self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
+        """With the URL emptied, or only spaces, the button is off, and Enter in the URL field or
+        the description field leaves the image's picture as it was."""
+        for field in ('.note-image-source-url', '.note-image-source-alt'):
+            for url in ('', '   '):
+                with self.subTest(field=field, url=url):
+                    self._write(f'<img src="{OLD_URL}">')
+                    self._open_dialog().fill(url)
+                    self.assertTrue(self.page.locator('.note-image-source-btn').is_disabled())
 
-                self.page.locator('.note-image-source-alt').press('Enter')
+                    self.page.locator(field).press('Enter')
 
-                self.assertEqual(self._image('src'), OLD_URL)
-                self.page.keyboard.press('Escape')
-                self.page.wait_for_function("() => !$('.modal:has(.note-image-source-url)').is(':visible')")
+                    self.assertEqual(self._image('src'), OLD_URL)
+                    self.page.keyboard.press('Escape')
+                    self.page.wait_for_function("() => !$('.modal:has(.note-image-source-url)').is(':visible')")
 
     def test_image_source__uploads_a_new_picture(self):
         """A file chosen in the dialog is uploaded through the editor's own upload, and the image

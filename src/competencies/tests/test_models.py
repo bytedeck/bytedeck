@@ -3,8 +3,9 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from model_bakery import baker
@@ -278,3 +279,68 @@ class CompetencyAssessmentModelTest(ByteDeckTenantTestCase):
         CompetencyAssessment.objects.filter(pk=first.pk).update(timestamp=timezone.now() - timedelta(minutes=5))
 
         self.assertEqual(list(CompetencyAssessment.objects.all()), [second, first])
+
+
+class CompetencyAssessmentCurrentTest(ByteDeckTenantTestCase):
+    """ Tests for CompetencyAssessmentQuerySet.current(), the roll-up of a student's evidence into
+    their current level per competency. """
+
+    def setUp(self):
+        """ Creates two students and two competencies to assess them on. """
+        self.student = baker.make(User)
+        self.other_student = baker.make(User)
+        self.thinking = baker.make(Competency, name="Critical Thinking")
+        self.communicating = baker.make(Competency, name="Communicating")
+
+    def assess(self, competency, level, minutes_ago, user=None):
+        """ Records an assessment stamped the given number of minutes ago (auto_now_add stamps it
+        now, so the stamp is set afterwards).
+
+        Returns:
+            CompetencyAssessment: the saved assessment.
+        """
+        assessment = CompetencyAssessment.objects.create(user=user or self.student, competency=competency, level=level)
+        CompetencyAssessment.objects.filter(pk=assessment.pk).update(timestamp=timezone.now() - timedelta(minutes=minutes_ago))
+        return assessment
+
+    def test_current__most_recent_per_competency(self):
+        """ Each competency's current assessment is its most recent one, whatever order they were recorded in """
+        latest_thinking = self.assess(self.thinking, ProficiencyLevel.DEVELOPING, minutes_ago=5)
+        self.assess(self.thinking, ProficiencyLevel.EXTENDING, minutes_ago=30)
+        self.assess(self.communicating, ProficiencyLevel.EMERGING, minutes_ago=20)
+        latest_communicating = self.assess(self.communicating, ProficiencyLevel.PROFICIENT, minutes_ago=10)
+
+        current = CompetencyAssessment.objects.filter(user=self.student).current()
+
+        self.assertCountEqual(current, [latest_thinking, latest_communicating])
+
+    def test_current__ties_go_to_the_one_recorded_last(self):
+        """ Two assessments stamped the same moment resolve to the one recorded last """
+        earlier = self.assess(self.thinking, ProficiencyLevel.DEVELOPING, minutes_ago=5)
+        later = self.assess(self.thinking, ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        # each assess() reads the clock separately, so give the two the very same stamp
+        CompetencyAssessment.objects.filter(pk__in=[earlier.pk, later.pk]).update(timestamp=timezone.now() - timedelta(minutes=5))
+
+        self.assertEqual(list(CompetencyAssessment.objects.filter(user=self.student).current()), [later])
+
+    def test_current__each_student_separately(self):
+        """ Over several students, each gets their own current assessment per competency """
+        mine = self.assess(self.thinking, ProficiencyLevel.DEVELOPING, minutes_ago=10)
+        theirs = self.assess(self.thinking, ProficiencyLevel.EXTENDING, minutes_ago=5, user=self.other_student)
+
+        self.assertCountEqual(CompetencyAssessment.objects.current(), [mine, theirs])
+        self.assertEqual(list(CompetencyAssessment.objects.filter(user=self.student).current()), [mine])
+
+    def test_current__one_query(self):
+        """ The current levels and their competencies load in a single query, however many competencies there are """
+        for _ in range(3):
+            self.assess(baker.make(Competency), ProficiencyLevel.PROFICIENT, minutes_ago=1)
+        self.assess(self.thinking, ProficiencyLevel.DEVELOPING, minutes_ago=1)
+
+        with CaptureQueriesContext(connection) as queries:
+            current = CompetencyAssessment.objects.filter(user=self.student).current().select_related('competency')
+            names = [assessment.competency.name for assessment in current]
+
+        # django-tenants sets the schema's search path on each cursor, which isn't a query of ours
+        self.assertEqual(len([query for query in queries.captured_queries if not query['sql'].startswith('SET search_path')]), 1)
+        self.assertEqual(len(names), 4)
