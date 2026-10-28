@@ -1640,6 +1640,50 @@ table[data-toggle="table"].bt-reveal {
 .competency-summary-evidence .label {
     margin: 1px 2px 1px 0;
 }
+/* A competency's row that a link opened (a cell of the staff competency matrix): clear of the fixed
+   navbar, and outlined so it stands out from the rows around it. */
+.competency-summary tr[id] {
+    scroll-margin-top: 70px;
+}
+.competency-summary tr:target {
+    outline: 2px solid #f0ad4e;
+    outline-offset: -2px;
+}
+
+/* The staff competency matrix (competencies/matrix.html): a course's students by its competencies.
+   The competency names stand on end over their narrow columns (cut short, in full in the title),
+   under their categories, and each cell holds one fixed-width level code. */
+.competency-matrix-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.competency-matrix-key .label {
+    margin-right: 2px;
+}
+.competency-matrix th.competency-matrix-category {
+    text-align: center;
+    font-size: 90%;
+}
+.competency-matrix th.competency-matrix-name {
+    vertical-align: bottom;
+    padding: 4px 2px;
+}
+.competency-matrix th.competency-matrix-name div {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    max-height: 14em;
+    margin: 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: normal;
+}
+.competency-matrix td.competency-matrix-cell {
+    text-align: center;
+    vertical-align: middle;
+}
 
 /* The quest form's competency picker (QuestCompetenciesSelect2Widget): a competency's
    "Course: Category: Competency" label is often longer than a line, so each dropdown row and each

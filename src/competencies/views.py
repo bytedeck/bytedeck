@@ -1,5 +1,7 @@
+import csv
 import json
 from collections import Counter
+from itertools import groupby
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -10,6 +12,7 @@ from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.views.generic import FormView, ListView, TemplateView
 
+from courses.models import Block, Course, CourseStudent
 from hackerspace_online.decorators import staff_member_required
 
 from siteconfig.models import SiteConfig
@@ -19,7 +22,7 @@ from tenant.views import NonPublicOnlyViewMixin
 from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
 from .models import Competency, ProficiencyLevel
-from .summaries import LEVEL_RANGES, course_competencies, evidence_by_competency, level_codes
+from .summaries import LEVEL_RANGES, course_competencies, course_matrix, evidence_by_competency, level_codes
 
 # session key holding the parsed competency set between the upload and preview steps
 IMPORT_SESSION_KEY = 'competency_import_set'
@@ -217,3 +220,107 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
             'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
         })
         return super().get_context_data(**kwargs)
+
+
+@method_decorator([competencies_enabled, staff_member_required], name='dispatch')
+class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
+    """ The staff competency matrix: a course's students (optionally in one block) by the competencies of
+    the course's set, each cell the student's current level, from the same roll-up as each student's own
+    competencies page, which each cell links to. ``?format=csv`` downloads the matrix with the levels'
+    labels, for report cards.
+
+    The course and block are chosen by the ``course`` and ``block`` query parameters (pks); an unknown
+    or missing course is the first course with a competency set, and an unknown or missing block is all
+    of them.
+    """
+    template_name = 'competencies/matrix.html'
+
+    def get(self, request, *args, **kwargs):
+        """ Renders the matrix, or with ``?format=csv`` returns it as a CSV download. """
+        context = self.get_context_data(**kwargs)
+        if request.GET.get('format') == 'csv' and context['course'] is not None:
+            return self.csv_response(context)
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        """ Returns the template context:
+
+        - 'courses', the active courses with a competency set, and 'course', the one shown (None when
+          there are none);
+        - 'blocks', the blocks with students in that course this semester, and 'selected_block', the one
+          shown (None for all), named so because templates already use ``block`` for ``{{ block.super }}``;
+        - 'columns', the course's competencies, and 'categories', each category with how many of them
+          it spans, for the header;
+        - 'rows', one per student, each with their CourseCompetencies, the deck's label for their
+          current level of proficiency, and a cell per column: its competency, and the student's level
+          in it with its code and label (None and '' when not yet assessed);
+        - 'scale', each level of the Proficiency Scale as (level, label, code), for the key.
+        """
+        labels = SiteConfig.get().get_competency_scale_labels()
+        codes = level_codes(labels)
+        courses = list(Course.objects.filter(active=True).exclude(competency_set=''))
+        course = next((course for course in courses if str(course.pk) == self.request.GET.get('course')), next(iter(courses), None))
+
+        blocks, block, columns, rows = [], None, [], []
+        if course is not None:
+            registrations = CourseStudent.objects.get_queryset().in_open_semesters().get_students_only().filter(course=course)
+            blocks = list(Block.objects.filter(pk__in=registrations.values('block')))
+            block = next((block for block in blocks if str(block.pk) == self.request.GET.get('block')), None)
+            columns, matrix = course_matrix(course, block)
+            for row in matrix:
+                rows.append({
+                    'course': row,
+                    'level_label': labels.get(row.level, ''),
+                    'cells': [
+                        {
+                            'competency': column,
+                            'level': row.levels.get(column.pk),
+                            'code': codes.get(row.levels.get(column.pk), ''),
+                            'label': labels.get(row.levels.get(column.pk), ''),
+                        }
+                        for column in columns
+                    ],
+                })
+
+        kwargs.update({
+            'courses': courses,
+            'course': course,
+            'blocks': blocks,
+            'selected_block': block,
+            'columns': columns,
+            'categories': [(category, len(list(group))) for category, group in groupby(columns, key=lambda column: column.category)],
+            'rows': rows,
+            'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
+        })
+        return super().get_context_data(**kwargs)
+
+    def csv_response(self, context):
+        """ The matrix as a CSV download: a row per student with their name, username, block, average
+        and current level of proficiency, then their level in each competency (headed "Category:
+        Competency"), by the deck's labels ("n/a" where not yet assessed).
+
+        Args:
+            context (dict): what get_context_data returned, with a course.
+
+        Returns:
+            HttpResponse: the CSV file, named after the course (and block).
+        """
+        response = HttpResponse(content_type='text/csv')
+        name = slugify(f"{context['course'].title} {context['selected_block'] or ''} competencies")
+        response['Content-Disposition'] = f'attachment; filename="{name}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            ['Student', 'Username', SiteConfig.get().custom_name_for_group, 'Average', 'Current level of proficiency']
+            # the course is the file's own, so each column is named by category and competency
+            + [': '.join(part for part in (column.category, column.name) if part) for column in context['columns']]
+        )
+        for row in context['rows']:
+            registration = row['course'].registration
+            writer.writerow(
+                [
+                    registration.user.profile.teacher_name(), registration.user.username, registration.block,
+                    f"{row['course'].average:.2f}", row['level_label'] or 'n/a',
+                ]
+                + [cell['label'] or 'n/a' for cell in row['cells']]
+            )
+        return response

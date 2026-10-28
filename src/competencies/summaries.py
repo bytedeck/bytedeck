@@ -152,6 +152,53 @@ def course_competencies(student):
     return courses
 
 
+def course_matrix(course, block=None):
+    """ A course's students by its competencies, for the staff competency matrix: each student
+    registered in the course in an open semester (students only, not staff or test accounts, and only
+    active users), optionally in one block, by last name, with their current level in each competency
+    of the course's set.
+
+    Each row is the same CourseCompetencies the student's own competencies page shows for the course,
+    so its average and current level of proficiency match it: the set's active competencies, plus any
+    deactivated ones that student has evidence for. The columns are the set's active competencies plus
+    any deactivated ones some row has evidence for.
+
+    It takes three queries, however many students and competencies there are.
+
+    Args:
+        course (Course): the course, which has a competency set.
+        block (Block or None): only the students in this block, or None for all of them.
+
+    Returns:
+        tuple: the columns (list[Competency], in category and name order) and the rows
+        (list[CourseCompetencies], one per registration).
+    """
+    registrations = CourseStudent.objects.get_queryset().in_open_semesters().get_students_only().filter(course=course, user__is_active=True)
+    if block is not None:
+        registrations = registrations.filter(block=block)
+    registrations = list(registrations.select_related('user__profile', 'block').order_by('user__last_name', 'user__first_name', 'user__username'))
+
+    levels = defaultdict(dict)
+    current = CompetencyAssessment.objects.filter(
+        user_id__in=[registration.user_id for registration in registrations], competency__course=course.competency_set,
+    ).current()
+    for user_id, competency_id, level in current.values_list('user_id', 'competency_id', 'level'):
+        levels[user_id][competency_id] = level
+    assessed = {competency_id for student_levels in levels.values() for competency_id in student_levels}
+
+    columns = list(Competency.objects.filter(course=course.competency_set).filter(Q(active=True) | Q(pk__in=assessed)))
+    rows = [
+        CourseCompetencies(
+            course.competency_set,
+            registration,
+            [competency for competency in columns if competency.active or competency.pk in levels[registration.user_id]],
+            levels[registration.user_id],
+        )
+        for registration in registrations
+    ]
+    return columns, rows
+
+
 @dataclass
 class Evidence:
     """ One assessment as evidence: where it came from, as a description and a link when it has one.
