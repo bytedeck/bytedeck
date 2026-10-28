@@ -82,7 +82,8 @@ class ApprovalTestMixin:
 
 class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
     """ Approving a submission records its quest's competency evidence (ApproveView and the
-    auto-approval in the complete view); returning, commenting and skipping record nothing. """
+    auto-approval in the complete view), and commenting on an approved one records the levels
+    changed; returning, skipping and commenting on an unapproved one record nothing. """
 
     def setUp(self):
         """ Turn competencies on and sign the teacher in. """
@@ -159,25 +160,101 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         })
 
     def test_return_comment_and_skip__record_nothing(self):
-        """ Returning, commenting on or skipping a submission records no competency evidence """
+        """ Returning, commenting on or skipping a submission that isn't approved records no
+        competency evidence """
         self.post_decision('return_button')
-        self.post_decision('comment_button', comment_text='Keep going')
+        self.post_decision('comment_button', comment_text='Keep going', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.EMERGING})
         self.post_decision('skip_button')
 
         self.assertFalse(CompetencyAssessment.objects.exists())
 
-    def test_approve__again_after_a_return_adds_new_assessments(self):
-        """ A submission approved, returned and approved again records a second set of assessments
-        rather than replacing the first: the history is kept """
+    def test_approve__again_after_a_return_replaces_the_levels(self):
+        """ A submission approved, returned and approved again keeps only its latest level in each
+        competency: the new approval replaces the earlier one for that quest """
         self.post_decision('approve_button')
         self.post_decision('return_button')
         self.post_decision('approve_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.PROFICIENT})
 
-        self.assertEqual(
-            sorted(CompetencyAssessment.objects.filter(competency=self.thinking).values_list('level', flat=True)),
-            [ProficiencyLevel.PROFICIENT, ProficiencyLevel.EXTENDING],
-        )
-        self.assertEqual(CompetencyAssessment.objects.count(), 4)
+        self.assertEqual(self.recorded(self.submission), {
+            self.thinking: ProficiencyLevel.PROFICIENT,
+            self.communicating: ProficiencyLevel.PROFICIENT,
+        })
+        self.assertEqual(CompetencyAssessment.objects.count(), 2)
+
+    def test_approve__again_starts_on_the_earlier_levels(self):
+        """ Approving again with no levels posted (a quick approval) keeps the levels the submission
+        already had, rather than resetting them to the defaults """
+        self.post_decision('approve_button', **{competency_level_field_name(self.communicating.pk): ProficiencyLevel.EMERGING})
+        self.post_decision('return_button')
+        self.post_decision('approve_button')
+
+        newest = CompetencyAssessment.objects.filter(competency=self.communicating).order_by('-timestamp', '-pk').first()
+        self.assertEqual(newest.level, ProficiencyLevel.EMERGING)
+
+    def test_comment__on_an_approved_submission_records_the_changed_levels(self):
+        """ Commenting on an approved submission re-rates it: each level the teacher changed replaces
+        the one it had (as the student's newest evidence), the others stay, and the comment lists only
+        the changed ones (#2955) """
+        self.post_decision('approve_button')
+        unchanged = CompetencyAssessment.objects.get(competency=self.communicating)
+
+        response = self.post_decision('comment_button', comment_text='On reflection', **{
+            competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING,
+            competency_level_field_name(self.communicating.pk): ProficiencyLevel.PROFICIENT,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.recorded(self.submission), {
+            self.thinking: ProficiencyLevel.DEVELOPING,
+            self.communicating: ProficiencyLevel.PROFICIENT,
+        })
+        self.assertEqual(CompetencyAssessment.objects.count(), 2)
+        self.assertEqual(CompetencyAssessment.objects.get(competency=self.communicating), unchanged)
+        rerated = CompetencyAssessment.objects.get(competency=self.thinking)
+        self.assertEqual(rerated.assessed_by, self.teacher)
+        self.assertEqual(list(CompetencyAssessment.objects.filter(user=self.student).current().order_by('-timestamp', '-pk'))[0], rerated)
+        text = self.approval_comment()
+        self.assertIn('On reflection', text)
+        self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>Developing</b>', text)
+        self.assertNotIn('Communicating', text)
+
+    def test_comment__with_the_levels_unchanged_records_nothing(self):
+        """ A comment that leaves every level as it was records nothing and lists no levels """
+        self.post_decision('approve_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING})
+        before = set(CompetencyAssessment.objects.values_list('pk', flat=True))
+
+        self.post_decision('comment_button', comment_text='Thanks', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.DEVELOPING})
+
+        self.assertEqual(set(CompetencyAssessment.objects.values_list('pk', flat=True)), before)
+        self.assertNotIn('Competencies:', self.approval_comment())
+
+    def test_comment__a_changed_level_alone_is_something_to_send(self):
+        """ A comment with no text whose only content is a changed level is sent, as the levels alone;
+        with nothing changed either, it is refused as before """
+        self.post_decision('approve_button')
+        comments = Comment.objects.count()
+
+        response = self.post_decision('comment_button')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Write a comment or attach a file, then press Comment.")
+        self.assertEqual(Comment.objects.count(), comments)
+
+        response = self.post_decision('comment_button', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.PROFICIENT})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.approval_comment().split('<ul>')[0], '<p>Competencies:</p>')
+        self.assertEqual(self.recorded(self.submission)[self.thinking], ProficiencyLevel.PROFICIENT)
+
+    def test_comment__a_return_committing_first_leaves_the_levels(self):
+        """ When the submission is returned after this request loaded it as approved, the locked recheck
+        sees the return and the comment records no levels """
+        self.post_decision('approve_button')
+        stale = QuestSubmission.objects.get(pk=self.submission.pk)  # loaded while still approved
+        self.post_decision('return_button')  # the other request gets there first
+
+        with patch('quest_manager.views.ApproveView.get_submission', return_value=stale):
+            self.post_decision('comment_button', comment_text='Hmm', **{competency_level_field_name(self.thinking.pk): ProficiencyLevel.EMERGING})
+
+        self.assertEqual(self.recorded(self.submission)[self.thinking], ProficiencyLevel.EXTENDING)
 
     def test_approve__a_repeated_approval_records_nothing_more(self):
         """ A second Approve on a submission that is already approved (a double-click) doesn't
@@ -367,13 +444,10 @@ class ApprovalLevelsWidgetTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         """ The full submission page's staff form carries the level controls """
         self.assertShowsLevels(self.client.get(reverse('quests:submission', args=[self.submission.pk])))
 
-    def test_levels__absent_when_disabled_without_competencies_or_approved(self):
-        """ No controls with the flag off, for a quest without competencies, or once approved """
+    def test_levels__absent_when_disabled_or_without_competencies(self):
+        """ No controls with the flag off, nor for a quest without competencies """
         bare = self.make_submission(quest=baker.make(Quest))
-        approved = self.make_submission(is_approved=True)
-        for submission in (bare, approved):
-            with self.subTest(submission=submission.pk):
-                self.assertNotContains(self.client.get(reverse('quests:submission', args=[submission.pk])), 'competency-approval-levels')
+        self.assertNotContains(self.client.get(reverse('quests:submission', args=[bare.pk])), 'competency-approval-levels')
 
         set_competencies_flag(False)
         for url in (reverse('quests:submitted_all'), reverse('quests:submission', args=[self.submission.pk])):
@@ -381,3 +455,32 @@ class ApprovalLevelsWidgetTest(ApprovalTestMixin, ByteDeckTenantTestCase):
                 response = self.client.get(url)
                 self.assertNotContains(response, 'competency-approval-levels')
                 self.assertNotContains(response, 'competencies/js/approval-levels.js')
+
+    def test_levels__on_an_approved_submission_start_on_its_levels(self):
+        """ An approved submission's form still has the controls, so a comment can re-rate it: they
+        start on the levels it has, say a comment records the changes, and drop the nudge about
+        returning it (#2955) """
+        thinking_field = competency_level_field_name(self.thinking.pk)
+        self.client.post(reverse('quests:approve', args=[self.submission.pk]), data={
+            'approve_button': True, 'comment_text': '', thinking_field: ProficiencyLevel.DEVELOPING,
+        })
+
+        response = self.client.get(reverse('quests:submission', args=[self.submission.pk]))
+
+        self.assertContains(response, 'class="competency-approval-levels"')
+        self.assertContains(response, '(any you change are recorded when you comment)')
+        self.assertContains(response, f'<input type="radio" name="{thinking_field}" value="2" autocomplete="off" checked>')
+        self.assertContains(response, f'<input type="radio" name="{thinking_field}" value="4" autocomplete="off">')
+        self.assertNotContains(response, "usually means the quest isn't complete yet")
+
+    def test_approved_tab__fetches_the_submissions_levels_for_the_whole_page(self):
+        """ The approved tab's rows start on each submission's levels, fetched for the page at once """
+        self.client.post(reverse('quests:approve', args=[self.submission.pk]), data={'approve_button': True, 'comment_text': ''})
+
+        response = self.client.get(reverse('quests:approved_all'))
+
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        submission = next(s for s in tab['submissions'] if s.pk == self.submission.pk)
+        self.assertEqual(submission.competency_levels, {
+            self.thinking.pk: ProficiencyLevel.EXTENDING, self.communicating.pk: ProficiencyLevel.PROFICIENT,
+        })

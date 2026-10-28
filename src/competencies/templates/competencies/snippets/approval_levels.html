@@ -1,15 +1,16 @@
 {% comment %}
   A submission's competency levels on its approval form (the competency_approval_levels tag):
-  one segmented control per competency the quest gives evidence of, pre-selected to the link's
-  default level (or the level posted, on a form re-rendered with errors), so approving with the
-  defaults takes no extra clicks. Approving records the
-  selected levels; returning or commenting records nothing. The nudge shows while any competency
-  is set to the lowest level: rendered that way when a default starts there, and kept in step by
-  approval-levels.js as levels change.
+  one segmented control per competency the quest gives evidence of, pre-selected to the
+  submission's current level or else the link's default (or the level posted, on a form re-rendered
+  with errors), so approving with the defaults takes no extra clicks. Approving records the selected
+  levels. On an approved submission, commenting records the levels changed, so a teacher can re-rate
+  a quest; returning records nothing. The nudge, while the submission awaits approval, shows while
+  any competency is set to the lowest level: rendered that way when a level starts there, and kept
+  in step by approval-levels.js as levels change.
 {% endcomment %}
 {% if rows %}
 <div class="competency-approval-levels">
-  <p class="competency-approval-levels-heading"><strong>Competencies</strong> <small class="text-muted">(recorded when you approve)</small></p>
+  <p class="competency-approval-levels-heading"><strong>Competencies</strong> <small class="text-muted">({% if approved %}any you change are recorded when you comment{% else %}recorded when you approve{% endif %})</small></p>
   {% for row in rows %}
   <div class="competency-approval-row">
     <span class="competency-approval-name">{{ row.competency.name }}</span>
@@ -22,9 +23,11 @@
     </div>
   </div>
   {% endfor %}
+  {% if not approved %}
   <p class="help-block text-warning competency-lowest-nudge{% if not starts_on_lowest %} hidden{% endif %}" role="status">
     <i class="fa fa-exclamation-triangle fa-fw"></i>
     {{ lowest_label }} usually means the quest isn't complete yet: return it for revision instead? You can still approve it.
   </p>
+  {% endif %}
 </div>
 {% endif %}
