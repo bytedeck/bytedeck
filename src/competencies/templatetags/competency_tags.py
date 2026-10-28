@@ -2,7 +2,7 @@ from django import template
 
 from siteconfig.models import SiteConfig
 
-from ..assessments import approval_links, posted_level
+from ..assessments import approval_links, posted_level, starting_level, submission_levels
 from ..forms import competency_level_field_name
 from ..models import ProficiencyLevel
 from ..summaries import course_competencies
@@ -68,13 +68,16 @@ def course_competency_average(averages, registration):
 @register.inclusion_tag('competencies/snippets/approval_levels.html', takes_context=True)
 def competency_approval_levels(context, submission):
     """ The competency level controls for a submission's approval form: one per competency the
-    quest gives evidence of, labelled with the deck's proficiency scale. Each starts on the link's
-    default level, or, when the page is re-rendered for a posted form that didn't validate, on the
-    level the teacher posted, so resubmitting it records their choice rather than the default.
-    Renders nothing when the deck has competencies disabled or the quest has no active competencies.
+    quest gives evidence of, labelled with the deck's proficiency scale. Approving records them; on an
+    approved submission, commenting records the ones changed. Each starts on the submission's current
+    level (from an earlier approval) or else the link's default, or, when the page is re-rendered for
+    a posted form that didn't validate, on the level the teacher posted, so resubmitting it records
+    their choice. Renders nothing when the deck has competencies disabled or the quest has no active
+    competencies.
 
-    Reads ``submission.quest.quest_competencies``, so a page with many submissions should prefetch
-    ``quest__quest_competencies``.
+    Reads ``submission.quest.quest_competencies`` and the submission's current levels, so a page with
+    many submissions should prefetch ``quest__quest_competencies`` and call
+    competencies.assessments.prefetch_submission_levels.
 
     Args:
         context (Context): the template context, for the request whose POST holds any posted levels.
@@ -82,8 +85,9 @@ def competency_approval_levels(context, submission):
 
     Returns:
         dict: the snippet's context: 'rows', each with the competency, the posted field's name and
-        its (level, label, selected) choices; the deck's label for the lowest level; and whether any
-        row starts on it (so the nudge shows from the first render, not only once a level changes).
+        its (level, label, selected) choices; whether the submission is approved; the deck's label
+        for the lowest level; and whether any row starts on it (so the nudge shows from the first
+        render, not only once a level changes).
     """
     config = SiteConfig.get()
     if config is None or not config.enable_competencies:
@@ -92,13 +96,20 @@ def competency_approval_levels(context, submission):
     request = context.get('request')
     data = request.POST if request is not None and request.method == 'POST' else None
     labels = config.get_competency_scale_labels()
+    links = approval_links(submission.quest)
+    current = submission_levels(submission) if links else {}
     rows = []
-    for link in approval_links(submission.quest):
-        chosen = posted_level(data, link)
+    for link in links:
+        chosen = posted_level(data, link, starting_level(link, current))
         rows.append({
             'competency': link.competency,
             'field_name': competency_level_field_name(link.competency_id),
             'levels': [(level, labels[level], level == chosen) for level in ProficiencyLevel.values],
         })
     starts_on_lowest = any(selected for row in rows for level, _label, selected in row['levels'] if level == ProficiencyLevel.EMERGING)
-    return {'rows': rows, 'lowest_label': labels[ProficiencyLevel.EMERGING], 'starts_on_lowest': starts_on_lowest}
+    return {
+        'rows': rows,
+        'approved': submission.is_approved,
+        'lowest_label': labels[ProficiencyLevel.EMERGING],
+        'starts_on_lowest': starts_on_lowest,
+    }

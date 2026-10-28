@@ -119,7 +119,7 @@
           {% for category in categories %}
             {% if category.grouper %}<tr class="info"><th colspan="2">{{ category.grouper }}</th></tr>{% endif %}
             {% for row in category.list %}
-            <tr>
+            <tr id="{{ course.pane_id }}-competency-{{ row.competency.pk }}">
               <td title="{{ row.competency.qualified_name }}">{{ row.competency.name }}</td>
               <td class="competency-summary-evidence">
                 {% for evidence in row.evidence %}

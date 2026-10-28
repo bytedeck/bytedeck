@@ -1,0 +1,87 @@
+{% extends "competencies/base.html" %}
+{% load utility_tags %}
+
+{% block head_title %}Competency Matrix | {% endblock %}
+
+{% block heading_inner %}Competency Matrix{% endblock %}
+
+{% block content %}
+{% comment %}
+  The staff competency matrix (CompetencyMatrixView): a course's students, optionally in one block, by
+  the competencies of the course's set. Each cell is the student's current level in the competency as
+  its three-letter code at one fixed width, so a whole set fits across, and links to that competency on
+  the student's competencies page; the competency names stand on end over their columns, under their
+  categories. The matrix downloads as a CSV of the levels' labels.
+{% endcomment %}
+{% if not courses %}
+  <p>No course has a competency set yet. Choose one on a course's edit page (<a href="{% url 'courses:course_list' %}">Courses</a>)
+    to see its students by competency here.</p>
+{% else %}
+  <div class="competency-matrix-filters">
+    <div class="btn-group" role="group" aria-label="Course">
+      {% for option in courses %}
+      <a href="?course={{ option.pk }}" role="button" class="btn btn-{% if option == course %}primary{% else %}default{% endif %}">{{ option.title }}</a>
+      {% endfor %}
+    </div>
+    <div class="btn-group" role="group" aria-label="{% group_name %}">
+      <a href="?course={{ course.pk }}" role="button" class="btn btn-{% if not selected_block %}primary{% else %}default{% endif %}">All {% group_name %}s</a>
+      {% for option in blocks %}
+      <a href="?course={{ course.pk }}&amp;block={{ option.pk }}" role="button" class="btn btn-{% if option == selected_block %}primary{% else %}default{% endif %}">{{ option }}</a>
+      {% endfor %}
+    </div>
+    <a href="?course={{ course.pk }}{% if selected_block %}&amp;block={{ selected_block.pk }}{% endif %}&amp;format=csv" role="button" class="btn btn-default"
+      title="Download this matrix as a spreadsheet, with each level's full label"><i class="fa fa-download"></i>&nbsp;Download CSV</a>
+  </div>
+
+  <p>
+    <strong>{{ course.title }}</strong>{% if course.title != course.competency_set %} ({{ course.competency_set }}){% endif %}:
+    each student's current level in each of its {{ columns|length }} competencies, which is their most recent
+    assessment of it. Select a level to see that student's assessments of the competency.
+  </p>
+  <p class="competency-matrix-key">
+    Proficiency Scale:
+    {% for level, label, code in scale %}<span class="label competency-code competency-level competency-level-{{ level }}">{{ code }}</span> {{ label }}&ensp;{% endfor %}
+    <span class="label competency-code label-default">n/a</span> Not yet assessed
+  </p>
+
+  {% if rows %}
+  <div class="table-responsive">
+    <table class="table table-condensed table-bordered competency-matrix">
+      <thead>
+        <tr>
+          <th rowspan="2">Student</th>
+          <th rowspan="2">{% group_name %}</th>
+          <th rowspan="2">Current level of proficiency</th>
+          {% for category, span in categories %}<th colspan="{{ span }}" class="competency-matrix-category">{{ category }}</th>{% endfor %}
+        </tr>
+        <tr>
+          {% for column in columns %}<th class="competency-matrix-name" title="{{ column.qualified_name }}"><div>{{ column.name }}</div></th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% with course_row=row.course registration=row.course.registration %}
+        <tr>
+          <td><a href="{{ registration.user.profile.get_absolute_url }}">{{ registration.user.profile.teacher_name }}</a></td>
+          <td>{{ registration.block }}</td>
+          <td>
+            <a href="{% url 'competencies:summary' registration.user_id %}?course={{ course_row.pane_id }}"
+              title="{{ course_row.average|floatformat:2 }} / 4">{% include "competencies/snippets/level_label.html" with level=course_row.level label=row.level_label %}</a>
+          </td>
+          {% for cell in row.cells %}
+          <td class="competency-matrix-cell">
+            {% if cell.level %}<a href="{% url 'competencies:summary' registration.user_id %}?course={{ course_row.pane_id }}#{{ course_row.pane_id }}-competency-{{ cell.competency.pk }}"
+              class="label competency-code competency-level competency-level-{{ cell.level }}" title="{{ cell.label }}: {{ cell.competency.name }}">{{ cell.code }}</a>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p>No students are in {{ course.title }}{% if selected_block %} in {{ selected_block }}{% endif %} this semester.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}
