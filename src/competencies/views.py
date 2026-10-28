@@ -28,6 +28,26 @@ from .summaries import LEVEL_RANGES, course_competencies, course_matrix, evidenc
 IMPORT_SESSION_KEY = 'competency_import_set'
 
 
+#: What a spreadsheet takes a cell beginning with to be a formula (or the start of one).
+SPREADSHEET_FORMULA_STARTS = ('=', '+', '-', '@', '\t', '\r')
+
+
+def csv_safe(value):
+    """ A CSV cell's value as text a spreadsheet won't run as a formula: one starting with =, +, -,
+    @, a tab or a carriage return gets a leading single quote. A downloaded CSV is opened in a
+    spreadsheet, and its text comes from people (a student's own name, an imported competency set),
+    so a value like "=HYPERLINK(...)" would otherwise run when staff open it.
+
+    Args:
+        value (object): the cell's value.
+
+    Returns:
+        str: the text to write.
+    """
+    text = '' if value is None else str(value)
+    return f"'{text}" if text.startswith(SPREADSHEET_FORMULA_STARTS) else text
+
+
 def competencies_enabled(f):
     """ Raises 404 unless this deck has competencies enabled: the feature flag gates
     all user-visible parts of the feature. Must be applied outermost (before any
@@ -297,7 +317,8 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
     def csv_response(self, context):
         """ The matrix as a CSV download: a row per student with their name, username, block, average
         and current level of proficiency, then their level in each competency (headed "Category:
-        Competency"), by the deck's labels ("n/a" where not yet assessed).
+        Competency"), by the deck's labels ("n/a" where not yet assessed). Every cell is made safe
+        to open in a spreadsheet (csv_safe).
 
         Args:
             context (dict): what get_context_data returned, with a course.
@@ -309,18 +330,18 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
         name = slugify(f"{context['course'].title} {context['selected_block'] or ''} competencies")
         response['Content-Disposition'] = f'attachment; filename="{name}.csv"'
         writer = csv.writer(response)
-        writer.writerow(
+        writer.writerow([csv_safe(cell) for cell in (
             ['Student', 'Username', SiteConfig.get().custom_name_for_group, 'Average', 'Current level of proficiency']
             # the course is the file's own, so each column is named by category and competency
             + [': '.join(part for part in (column.category, column.name) if part) for column in context['columns']]
-        )
+        )])
         for row in context['rows']:
             registration = row['course'].registration
-            writer.writerow(
+            writer.writerow([csv_safe(cell) for cell in (
                 [
                     registration.user.profile.teacher_name(), registration.user.username, registration.block,
                     f"{row['course'].average:.2f}", row['level_label'] or 'n/a',
                 ]
                 + [cell['label'] or 'n/a' for cell in row['cells']]
-            )
+            )])
         return response

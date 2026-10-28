@@ -12,6 +12,7 @@ from competencies.models import Competency, CompetencyAssessment, ProficiencyLev
 from competencies.summaries import course_competencies, course_matrix
 from competencies.tests.test_approval import set_competencies_flag
 from competencies.tests.test_profile_views import own_query_count
+from competencies.views import csv_safe
 from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
@@ -259,6 +260,38 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(response['Content-Disposition'], 'attachment; filename="digital-hackerspace-competencies.csv"')
         self.assertEqual(list(csv.reader(io.StringIO(response.content.decode())))[1], ['Ann Adams', 'adams', 'B', '0.00', 'n/a', 'n/a', 'n/a'])
+
+    def test_matrix__csv_text_never_runs_as_a_formula(self):
+        """ Text that a spreadsheet would run as a formula (a student's own name, a username, a group, an
+        imported competency) is written with a leading quote, so opening the CSV runs nothing """
+        self.zed.first_name = '=HYPERLINK("http://example.com","Zoe")'
+        self.zed.save()
+        self.zed.username = '+zed'
+        self.zed.save()
+        self.block_a.name = '@A'
+        self.block_a.save()
+        self.defining.category = ''
+        self.defining.name = '-1+2'
+        self.defining.save()
+        self.making.name = '\tTabbed'
+        self.making.save()
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(self.matrix_url(course=self.course.pk, block=self.block_a.pk, format='csv'))
+
+        header, zed = list(csv.reader(io.StringIO(response.content.decode())))
+        self.assertEqual(header[5:], ["'-1+2", 'Making: \tTabbed'])
+        self.assertEqual(zed[:4], ['\'=HYPERLINK("http://example.com","Zoe") Zed', "'+zed", "'@A", '0.00'])
+
+    def test_csv_safe__quotes_only_formula_starts(self):
+        """ Only text starting as a spreadsheet formula does gets the quote; None is empty """
+        cases = [
+            ('=1+1', "'=1+1"), ('+1', "'+1"), ('-1', "'-1"), ('@SUM(A1)', "'@SUM(A1)"), ('\tx', "'\tx"), ('\rx', "'\rx"),
+            ('Zoe Zed', 'Zoe Zed'), ('1.50', '1.50'), ('a=b', 'a=b'), ('', ''), (None, ''),
+        ]
+        for value, expected in cases:
+            with self.subTest(value=value):
+                self.assertEqual(csv_safe(value), expected)
 
     def test_matrix__queries_dont_grow_with_the_class(self):
         """ The page takes the same queries however many students and assessments there are """
