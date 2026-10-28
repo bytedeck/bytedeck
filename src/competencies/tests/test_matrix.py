@@ -273,6 +273,7 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
         self.defining.category = ''
         self.defining.name = '-1+2'
         self.defining.save()
+        self.making.category = ''
         self.making.name = '\tTabbed'
         self.making.save()
         self.client.force_login(self.teacher)
@@ -280,7 +281,7 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
         response = self.client.get(self.matrix_url(course=self.course.pk, block=self.block_a.pk, format='csv'))
 
         header, zed = list(csv.reader(io.StringIO(response.content.decode())))
-        self.assertEqual(header[5:], ["'-1+2", 'Making: \tTabbed'])
+        self.assertCountEqual(header[5:], ["'-1+2", "'\tTabbed"])
         self.assertEqual(zed[:4], ['\'=HYPERLINK("http://example.com","Zoe") Zed', "'+zed", "'@A", '0.00'])
 
     def test_csv_safe__quotes_only_formula_starts(self):
