@@ -244,6 +244,22 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.approval_comment().split('<ul>')[0], '<p>Competencies:</p>')
         self.assertEqual(self.recorded(self.submission)[self.thinking], ProficiencyLevel.PROFICIENT)
 
+    def test_comment__with_the_flag_off_records_no_levels(self):
+        """ With competencies turned off after a submission was approved, a level posted with a comment
+        is ignored: nothing is recorded, and a level alone is not something to send """
+        self.post_decision('approve_button')
+        before = set(CompetencyAssessment.objects.values_list('pk', flat=True))
+        set_competencies_flag(False)
+        changed = {competency_level_field_name(self.thinking.pk): ProficiencyLevel.EMERGING}
+
+        response = self.post_decision('comment_button', **changed)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Write a comment or attach a file, then press Comment.")
+
+        self.post_decision('comment_button', comment_text='Later', **changed)
+        self.assertEqual(set(CompetencyAssessment.objects.values_list('pk', flat=True)), before)
+        self.assertNotIn('Competencies:', self.approval_comment())
+
     def test_comment__a_return_committing_first_leaves_the_levels(self):
         """ When the submission is returned after this request loaded it as approved, the locked recheck
         sees the return and the comment records no levels """
