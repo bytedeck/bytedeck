@@ -1575,13 +1575,28 @@ table[data-toggle="table"].bt-reveal {
 .competency-approval-levels {
     margin-bottom: 10px;
 }
+/* Each competency's row: its name, wrapping in the room left beside its level buttons, which keep a
+   column of their own on the right (#2952). Below Bootstrap's sm breakpoint a long name would have
+   too little room beside them to read, so there the buttons go under the name, still at the right,
+   in line with the buttons of the rows whose names fit beside them. */
 .competency-approval-row {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
     gap: 4px 12px;
     padding: 3px 0;
+}
+.competency-approval-name {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.competency-approval-row > .btn-group {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+@media (max-width: 767px) {
+    .competency-approval-row {
+        flex-wrap: wrap;
+    }
 }
 .competency-approval-levels .btn.competency-level.active {
     color: #fff;
