@@ -18,7 +18,7 @@ from django.db import transaction
 from announcements.models import Announcement
 from badges.models import BadgeAssertion
 from comments.models import Comment
-from competencies.models import CompetencyAssessment
+from competencies.models import CompetencyAssessment, CompetencyOverride
 from courses.models import Block, CourseStudent, Semester
 from notifications.models import Notification, UserNotificationOptionSet
 from portfolios.models import Artwork, Portfolio
@@ -44,6 +44,8 @@ SIMPLE_REASSIGNMENTS = (
     (Comment, 'user'),
     (CompetencyAssessment, 'user'),
     (CompetencyAssessment, 'assessed_by'),
+    (CompetencyOverride, 'user'),
+    (CompetencyOverride, 'set_by'),
     (LogEntry, 'user'),
     (Notification, 'recipient'),
     (Quest, 'editor'),
@@ -72,7 +74,7 @@ class Command(BaseCommand):
     help = (
         "Merge one user account into another within a deck. Everything the source account owns "
         "(quest submissions, badges, course registrations, comments, notifications, competency "
-        "assessments, portfolio artwork) moves to the target account, and the source account is then deleted. "
+        "assessments and levels set, portfolio artwork) moves to the target account, and the source account is then deleted. "
         "Run it per deck: manage.py tenant_command merge_users --schema=<deck> <source> <target>"
     )
 
