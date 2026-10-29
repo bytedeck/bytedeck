@@ -1,0 +1,29 @@
+{% comment %}
+  A student's self-assessment on their submission form (the competency_self_assessment tag), when the
+  quest asks for one: one segmented control per competency, starting on "Skip" (or the level chosen on
+  an earlier hand-in, or the level posted, on a form re-rendered with errors). Handing the quest in
+  records the levels chosen, as assessments by the student themself, which are shown beside the
+  teacher's levels and never counted in them.
+{% endcomment %}
+{% if rows %}
+<div class="competency-approval-levels competency-self-assessment">
+  <p class="competency-approval-levels-heading"><strong>Your self-assessment</strong>
+    <small class="text-muted">(optional: the level you think your work shows in each competency. Your teacher sees it beside
+      their own, and it doesn't count toward your level.)</small></p>
+  {% for row in rows %}
+  <div class="competency-approval-row">
+    <span class="competency-approval-name">{{ row.competency.name }}</span>
+    <div class="btn-group btn-group-xs" data-toggle="buttons" role="group" aria-label="{{ row.competency.name }}: your self-assessment">
+      <label class="btn btn-default{% if row.skipped %} active{% endif %}">
+        <input type="radio" name="{{ row.field_name }}" value="" autocomplete="off"{% if row.skipped %} checked{% endif %}>Skip
+      </label>
+      {% for level, label, selected in row.levels %}
+      <label class="btn btn-default competency-level competency-level-{{ level }}{% if selected %} active{% endif %}">
+        <input type="radio" name="{{ row.field_name }}" value="{{ level }}" autocomplete="off"{% if selected %} checked{% endif %}>{{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

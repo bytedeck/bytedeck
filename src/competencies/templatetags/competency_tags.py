@@ -2,8 +2,10 @@ from django import template
 
 from siteconfig.models import SiteConfig
 
-from ..assessments import approval_links, posted_level, starting_level, submission_levels
-from ..forms import competency_level_field_name
+from ..assessments import (
+    approval_links, posted_level, posted_self_level, self_assessment_links, starting_level, submission_levels, submission_self_levels,
+)
+from ..forms import competency_level_field_name, self_assessment_field_name
 from ..models import ProficiencyLevel
 from ..summaries import course_competencies
 
@@ -113,3 +115,39 @@ def competency_approval_levels(context, submission):
         'lowest_label': labels[ProficiencyLevel.EMERGING],
         'starts_on_lowest': starts_on_lowest,
     }
+
+
+@register.inclusion_tag('competencies/snippets/self_assessment.html', takes_context=True)
+def competency_self_assessment(context, submission):
+    """ The student's self-assessment controls on their submission form, when the quest asks for one:
+    one per competency the quest gives evidence of, labelled with the deck's proficiency scale, with
+    "Skip" first since a self-assessment is optional. Each starts on the level the student chose on an
+    earlier hand-in of the submission (one returned to them), or else on "Skip", or, when the page is
+    re-rendered for a posted form that didn't validate, on the level they posted. Renders nothing when
+    the deck has competencies disabled or the quest doesn't ask for a self-assessment.
+
+    Args:
+        context (Context): the template context, for the request.
+        submission (QuestSubmission): the student's submission.
+
+    Returns:
+        dict: the snippet's context: 'rows', each with the competency, its field name, the levels as
+        (level, label, selected), and 'skipped' when none is selected.
+    """
+    links = self_assessment_links(submission)
+    if not links:
+        return {'rows': []}
+    labels = SiteConfig.get().get_competency_scale_labels()
+    request = context.get('request')
+    posted = request.POST if request is not None and request.method == 'POST' else None
+    earlier = submission_self_levels(submission) if posted is None else {}
+    rows = []
+    for link in links:
+        chosen = posted_self_level(posted, link) if posted is not None else earlier.get(link.competency_id)
+        rows.append({
+            'competency': link.competency,
+            'field_name': self_assessment_field_name(link.competency_id),
+            'levels': [(level, labels[level], level == chosen) for level in ProficiencyLevel.values],
+            'skipped': chosen is None,
+        })
+    return {'rows': rows}

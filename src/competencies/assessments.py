@@ -10,6 +10,11 @@ submission records the levels the teacher changed on the form.
 A level recorded for a submission replaces the one it had for that competency, so each quest
 counts only its latest rating; the comment that recorded each rating keeps the record of what was
 given, and when.
+
+A quest can also ask its students for a self-assessment (Quest.competency_self_assessment): on
+handing it in, the student may choose a level in each of its competencies, recorded as an assessment
+by the student themself. A submission holds at most one self-assessment per competency, its latest,
+kept apart from the teacher's level, which it never replaces or counts toward.
 """
 
 from collections import defaultdict
@@ -20,7 +25,7 @@ from django.utils.html import format_html, format_html_join
 
 from siteconfig.models import SiteConfig
 
-from .forms import competency_level_field_name
+from .forms import competency_level_field_name, self_assessment_field_name
 from .models import CompetencyAssessment, ProficiencyLevel
 
 
@@ -39,20 +44,24 @@ def approval_links(quest):
     return [link for link in quest.quest_competencies.all() if link.competency.active]
 
 
-def _levels_by_submission(submissions):
-    """ The current levels of each of the submissions, in one query.
+def _levels_by_submission(submissions, self_assessed=False):
+    """ The current levels of each of the submissions, in one query: the teacher's, or the student's
+    self-assessment.
 
     Args:
         submissions (list[QuestSubmission]): the submissions, at least one.
+        self_assessed (bool): the student's self-assessments rather than the teacher's levels.
 
     Returns:
         dict[int, dict[int, int]]: submission pk to its current level by competency pk.
     """
     levels = defaultdict(dict)
-    rows = CompetencyAssessment.objects.filter(
+    assessments = CompetencyAssessment.objects.filter(
         source_content_type=ContentType.objects.get_for_model(submissions[0]),
         source_object_id__in=[submission.pk for submission in submissions],
-    ).order_by('timestamp', 'pk').values_list('source_object_id', 'competency_id', 'level')
+    )
+    assessments = assessments.self_assessments() if self_assessed else assessments.teacher_evidence()
+    rows = assessments.order_by('timestamp', 'pk').values_list('source_object_id', 'competency_id', 'level')
     # oldest first, so a later level for a competency replaces an earlier one
     for submission_id, competency_id, level in rows:
         levels[submission_id][competency_id] = level
@@ -60,8 +69,9 @@ def _levels_by_submission(submissions):
 
 
 def prefetch_submission_levels(submissions):
-    """ Fetch the current levels of many submissions at once, for a page that shows the level
-    controls for each (see submission_levels).
+    """ Fetch the current levels of many submissions at once, and their students' self-assessments,
+    for a page that shows the level controls for each (see submission_levels and
+    submission_self_levels).
 
     Args:
         submissions (iterable of QuestSubmission): the submissions.
@@ -70,8 +80,10 @@ def prefetch_submission_levels(submissions):
     if not submissions:
         return
     levels = _levels_by_submission(submissions)
+    self_levels = _levels_by_submission(submissions, self_assessed=True)
     for submission in submissions:
         submission.competency_levels = levels.get(submission.pk, {})
+        submission.competency_self_levels = self_levels.get(submission.pk, {})
 
 
 def submission_levels(submission):
@@ -88,6 +100,22 @@ def submission_levels(submission):
     if prefetched is not None:
         return prefetched
     return _levels_by_submission([submission]).get(submission.pk, {})
+
+
+def submission_self_levels(submission):
+    """ The student's self-assessment of the submission in each competency they self-assessed (their
+    latest of each), from prefetch_submission_levels when the page fetched them.
+
+    Args:
+        submission (QuestSubmission): the submission.
+
+    Returns:
+        dict[int, int]: competency pk to level.
+    """
+    prefetched = getattr(submission, 'competency_self_levels', None)
+    if prefetched is not None:
+        return prefetched
+    return _levels_by_submission([submission], self_assessed=True).get(submission.pk, {})
 
 
 def starting_level(link, current):
@@ -147,7 +175,7 @@ def record_level(submission, link, level, assessed_by):
         CompetencyAssessment: the assessment created.
     """
     source_content_type = ContentType.objects.get_for_model(submission)
-    CompetencyAssessment.objects.filter(
+    CompetencyAssessment.objects.teacher_evidence().filter(
         source_content_type=source_content_type, source_object_id=submission.pk, competency=link.competency,
     ).delete()
     assessment = CompetencyAssessment(
@@ -223,6 +251,100 @@ def record_level_changes(submission, assessed_by, data):
         list[CompetencyAssessment]: the assessments created, one per changed competency.
     """
     return [record_level(submission, link, level, assessed_by) for link, level in level_changes(submission, data)]
+
+
+def self_assessment_links(submission):
+    """ The quest's competency links its student is asked to self-assess on handing it in: the ones an
+    approval records evidence for, when the deck has competencies enabled and the quest asks for a
+    self-assessment.
+
+    Args:
+        submission (QuestSubmission): the submission being handed in.
+
+    Returns:
+        list[QuestCompetency]: the links (empty when no self-assessment is asked for).
+    """
+    if not competencies_enabled() or not submission.quest.competency_self_assessment:
+        return []
+    return approval_links(submission.quest)
+
+
+def posted_self_level(data, link):
+    """ The level the student chose for their self-assessment in a link's competency. Choosing one is
+    optional, so a competency left on "Skip" (or posted anything but a level) has none.
+
+    Args:
+        data (QueryDict): the submission form's POST data.
+        link (QuestCompetency): the quest's link to the competency.
+
+    Returns:
+        int or None: a ProficiencyLevel value, or None.
+    """
+    try:
+        level = int(data.get(self_assessment_field_name(link.competency_id)))
+    except (TypeError, ValueError):
+        return None
+    return level if level in ProficiencyLevel.values else None
+
+
+def posted_self_assessments(submission, data):
+    """ The levels the student chose for their self-assessment on handing the submission in.
+
+    Args:
+        submission (QuestSubmission): the submission being handed in.
+        data (QueryDict): the submission form's POST data.
+
+    Returns:
+        list[tuple[QuestCompetency, int]]: each self-assessed link with the level chosen (those left
+        on "Skip" are left out).
+    """
+    chosen = [(link, posted_self_level(data, link)) for link in self_assessment_links(submission)]
+    return [(link, level) for link, level in chosen if level is not None]
+
+
+def record_self_assessments(submission, chosen):
+    """ Record the student's self-assessment of the submission, each level replacing the one they gave
+    the competency on an earlier hand-in of it, and leaving the teacher's levels alone.
+
+    Args:
+        submission (QuestSubmission): the submission handed in; its student assessed themself.
+        chosen (list[tuple[QuestCompetency, int]]): what posted_self_assessments returned.
+
+    Returns:
+        list[CompetencyAssessment]: the self-assessments created.
+    """
+    source_content_type = ContentType.objects.get_for_model(submission)
+    recorded = []
+    for link, level in chosen:
+        CompetencyAssessment.objects.self_assessments().filter(
+            source_content_type=source_content_type, source_object_id=submission.pk, competency=link.competency,
+        ).delete()
+        assessment = CompetencyAssessment(
+            user=submission.user,
+            competency=link.competency,
+            level=level,
+            source_content_type=source_content_type,
+            source_object_id=submission.pk,
+            assessed_by=submission.user,
+        )
+        assessment.full_clean()
+        assessment.save()
+        recorded.append(assessment)
+    return recorded
+
+
+def describe_self_assessments(chosen):
+    """ The student's self-assessment, one line per competency, for the comment they hand the quest in
+    with, as the other choices they make on the form are listed there. A long name is cut short.
+
+    Args:
+        chosen (list[tuple[QuestCompetency, int]]): what posted_self_assessments returned.
+
+    Returns:
+        list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity: Proficient".
+    """
+    labels = SiteConfig.get().get_competency_scale_labels()
+    return [f"Self-assessment of {truncatechars(link.competency.name, 50)}: {labels[level]}" for link, level in chosen]
 
 
 def assessments_comment_html(assessments):

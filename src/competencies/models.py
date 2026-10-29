@@ -140,10 +140,25 @@ class QuestCompetency(models.Model):
         return f"{self.quest} - {self.competency}"
 
 
+class CompetencyAssessmentQuerySet(models.QuerySet):
+    """ Custom queryset for CompetencyAssessment, telling a teacher's evidence from a student's
+    self-assessment (a student's assessment of themself, assessed_by being the student). """
+
+    def teacher_evidence(self):
+        """ The assessments that are evidence of a student's level: everything but their
+        self-assessments (including system-assessed ones, with no assessor). """
+        return self.exclude(assessed_by=models.F('user'))
+
+    def self_assessments(self):
+        """ The students' assessments of themselves. """
+        return self.filter(assessed_by=models.F('user'))
+
+
 class CompetencyAssessment(models.Model):
     """ The atomic evidence record: a single assessment of a student on a single competency,
     at a specific level, from a specific source (a QuestSubmission in v1; the generic FK allows
-    badges, portfolios, self-assessments, etc. to produce evidence later).
+    badges, portfolios, etc. to produce evidence later). A student's self-assessment is one too,
+    assessed by the student themself, and is shown beside the evidence but never counted in it.
 
     Evidence is intended to outlive its source: deleting a Quest (which cascades to its
     submissions) must NOT delete assessments. The generic FK simply dangles (source_object
@@ -172,12 +187,15 @@ class CompetencyAssessment(models.Model):
     assessed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='competency_assessments_given',
-        help_text="The staff user who made this assessment. Null means self- or system-assessed."
+        help_text="The staff user who made this assessment, or the student themself for a self-assessment "
+                  "(which is never counted in their level). Null means system-assessed."
     )
 
     note = models.TextField(blank=True)
 
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    objects = CompetencyAssessmentQuerySet.as_manager()
 
     class Meta:
         ordering = ['-timestamp']

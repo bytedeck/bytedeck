@@ -819,6 +819,15 @@ class Quest(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMix
                                                    help_text="Allows student to view and submit this quest without "
                                                              "having joined a course.  E.g. for quests you might "
                                                              "still want available to past students.")
+    # db_default as well as default: during a deploy the outgoing version still inserts quests
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and the
+    # deploy window").
+    competency_self_assessment = models.BooleanField(
+        default=False, db_default=False, verbose_name="Ask for a self-assessment",
+        help_text="When handing in this quest, students may choose the level they think their work shows in "
+                  "each of its competencies. You see their self-assessment beside your own levels; it never "
+                  "counts toward their current level.",
+    )
     # categories = models.ManyToManyField(Category, blank=True)
     specific_teacher_to_notify = models.ForeignKey(
         settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True}, blank=True, null=True,
