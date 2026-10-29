@@ -62,7 +62,7 @@
       <ul>
         <li>
           {{ course.label|default:"It" }} has <strong>{{ course.competencies|length }}</strong> competencies. Each counts at your
-          current level in it, which is its most recent assessment, on the Proficiency Scale:
+          current level in it, which is {{ rollup }}, on the Proficiency Scale:
           {% for level, label, code in scale %}{{ label }} ({{ code }}) counts {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}.
           A competency not yet assessed (n/a) counts 0.
         </li>
@@ -111,16 +111,20 @@
         <thead>
           <tr>
             <th class="competency-summary-name">Competency</th>
-            <th>Assessments</th>
+            <th>Current level</th>
+            <th>Assessments, oldest first</th>
           </tr>
         </thead>
         <tbody>
           {% regroup pane.rows by competency.category as categories %}
           {% for category in categories %}
-            {% if category.grouper %}<tr class="info"><th colspan="2">{{ category.grouper }}</th></tr>{% endif %}
+            {% if category.grouper %}<tr class="info"><th colspan="3">{{ category.grouper }}</th></tr>{% endif %}
             {% for row in category.list %}
             <tr id="{{ course.pane_id }}-competency-{{ row.competency.pk }}">
               <td title="{{ row.competency.qualified_name }}">{{ row.competency.name }}</td>
+              <td class="competency-summary-current">
+                {% if row.level %}<span class="label competency-code competency-level competency-level-{{ row.level }}" title="{{ row.label }}">{{ row.code }}</span>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+              </td>
               <td class="competency-summary-evidence">
                 {% for evidence in row.evidence %}
                   {% with item=evidence.item %}

@@ -24,6 +24,7 @@ from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
 
 from .models import Competency, CompetencyAssessment, ProficiencyLevel
+from .rollup import current_levels
 
 
 #: The three-letter code shown for each level on a chip where many share a row (see level_codes).
@@ -123,7 +124,7 @@ def course_competencies(student):
     """ The student's competencies, course by course: first each of their current courses that has a
     competency set, then each other set they have evidence in, by label.
 
-    Current levels come from the roll-up (CompetencyAssessmentQuerySet.current). It takes three
+    Current levels come from the roll-up (competencies.rollup.current_levels). It takes three
     queries, however many courses and competencies there are.
 
     Args:
@@ -132,16 +133,18 @@ def course_competencies(student):
     Returns:
         list[CourseCompetencies]: one per course whose set has at least one competency.
     """
-    current = CompetencyAssessment.objects.filter(user=student).current().select_related('competency')
-    levels = {assessment.competency_id: assessment.level for assessment in current}
+    levels = current_levels(user=student)[student.pk]
     registrations = [
         registration for registration in CourseStudent.objects.current_courses(student).select_related('course', 'block')
         if registration.course.competency_set
     ]
     registered_labels = {registration.course.competency_set for registration in registrations}
-    labels = registered_labels | {assessment.competency.course for assessment in current}
+    # the sets the student has evidence in, read in the same query as the competencies
+    assessed_labels = Competency.objects.filter(pk__in=list(levels)).values('course')
 
-    competencies = Competency.objects.filter(course__in=labels).filter(Q(active=True) | Q(pk__in=list(levels)))
+    competencies = Competency.objects.filter(
+        Q(course__in=registered_labels) | Q(course__in=assessed_labels)
+    ).filter(Q(active=True) | Q(pk__in=list(levels)))
     by_label = {label: list(group) for label, group in groupby(competencies, key=lambda competency: competency.course)}
 
     courses = [
@@ -178,12 +181,7 @@ def course_matrix(course, block=None):
         registrations = registrations.filter(block=block)
     registrations = list(registrations.select_related('user__profile', 'block').order_by('user__last_name', 'user__first_name', 'user__username'))
 
-    levels = defaultdict(dict)
-    current = CompetencyAssessment.objects.filter(
-        user_id__in=[registration.user_id for registration in registrations], competency__course=course.competency_set,
-    ).current()
-    for user_id, competency_id, level in current.values_list('user_id', 'competency_id', 'level'):
-        levels[user_id][competency_id] = level
+    levels = current_levels(user_id__in=[registration.user_id for registration in registrations], competency__course=course.competency_set)
     assessed = {competency_id for student_levels in levels.values() for competency_id in student_levels}
 
     columns = list(Competency.objects.filter(course=course.competency_set).filter(Q(active=True) | Q(pk__in=assessed)))

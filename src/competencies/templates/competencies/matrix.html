@@ -35,8 +35,8 @@
 
   <p>
     <strong>{{ course.title }}</strong>{% if course.title != course.competency_set %} ({{ course.competency_set }}){% endif %}:
-    each student's current level in each of its {{ columns|length }} competencies, which is their most recent
-    assessment of it. Select a level to see that student's assessments of the competency.
+    each student's current level in each of its {{ columns|length }} competencies, which is {{ rollup }}.
+    Select a level to see that student's assessments of the competency.
   </p>
   <p class="competency-matrix-key">
     Proficiency Scale:

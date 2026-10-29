@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from model_bakery import baker
 
-from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel
+from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel, RollupStrategy
 from competencies.summaries import course_competencies, course_matrix
 from competencies.tests.test_approval import set_competencies_flag
 from competencies.tests.test_profile_views import own_query_count
@@ -260,6 +260,48 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(response['Content-Disposition'], 'attachment; filename="digital-hackerspace-competencies.csv"')
         self.assertEqual(list(csv.reader(io.StringIO(response.content.decode())))[1], ['Ann Adams', 'adams', 'B', '0.00', 'n/a', 'n/a', 'n/a'])
+
+    def test_matrix__the_decks_roll_up_sets_every_level_alike(self):
+        """ Switching the deck's roll-up strategy changes a current level on every page that shows one,
+        alike: the matrix and its CSV, the student's competencies page and their profile """
+        self.assess(self.zed, self.defining, ProficiencyLevel.EXTENDING)
+        self.assess(self.zed, self.defining, ProficiencyLevel.EMERGING)
+        self.client.force_login(self.teacher)
+        summary = reverse('competencies:summary', args=[self.zed.pk])
+        profile = reverse('profiles:profile_detail', args=[self.zed.profile.pk])
+        cell = 'class="label competency-code competency-level competency-level-{}" title="{}: Choose a design opportunity">{}</a>'
+
+        # the most recent assessment, by default: Emerging, so 1 / 2 = 0.5 rounds to Emerging
+        response = self.client.get(self.matrix_url())
+        self.assertContains(response, "competencies, which is the level of its most recent assessment.")
+        self.assertContains(response, cell.format(1, "Emerging", "EMG"))
+        self.assertEqual(self.csv_rows()[1][3:6], ['0.50', 'Emerging', 'Emerging'])
+        self.assertContains(self.client.get(summary), 'competency-level-1" title="Emerging">EMG</span>')
+        self.assertContains(self.client.get(profile), 'competency-level-1"', count=1)
+
+        # the highest: Extending, so 4 / 2 = 2 is Developing
+        config = SiteConfig.get()
+        config.competency_rollup = RollupStrategy.HIGHEST
+        config.save()
+
+        response = self.client.get(self.matrix_url())
+        self.assertContains(response, "competencies, which is the highest level it has been assessed at.")
+        self.assertContains(response, cell.format(4, "Extending", "EXT"))
+        self.assertEqual(self.csv_rows()[1][3:6], ['2.00', 'Developing', 'Extending'])
+        response = self.client.get(summary)
+        self.assertContains(response, 'competency-level-4" title="Extending">EXT</span>')
+        self.assertContains(response, "Each counts at your\n          current level in it, which is the highest level it has been assessed at, on")
+        self.assertContains(self.client.get(profile), 'competency-level-2"', count=1)
+
+    def csv_rows(self):
+        """ The rows of the CSV of the whole course (the header, then Adams, then Zed).
+
+        Returns:
+            list[list[str]]: the rows.
+        """
+        response = self.client.get(self.matrix_url(course=self.course.pk, format='csv'))
+        header, adams, zed = list(csv.reader(io.StringIO(response.content.decode())))
+        return [header, zed]
 
     def test_matrix__csv_text_never_runs_as_a_formula(self):
         """ Text that a spreadsheet would run as a formula (a student's own name, a username, a group, an

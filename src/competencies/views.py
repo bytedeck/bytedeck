@@ -22,6 +22,7 @@ from tenant.views import NonPublicOnlyViewMixin
 from .forms import CompetencyImportForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
 from .models import Competency, ProficiencyLevel
+from .rollup import describe_rollup
 from .summaries import LEVEL_RANGES, course_competencies, course_matrix, evidence_by_competency, level_codes
 
 # session key holding the parsed competency set between the upload and preview steps
@@ -196,12 +197,15 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
         - 'level_counts', for the breakdown of its average: each level the student holds in the course,
           as (level, label, how many competencies), and 'scale', each level with its label and code, the
           averages that round to it and whether the course's average does;
-        - 'rows', each of the course's competencies with its evidence and the deck's label and code for
+        - 'rows', each of the course's competencies with the student's current level in it (None when
+          not yet assessed) and its label and code, and its evidence with the deck's label and code for
           each assessment's level.
 
-        Also 'scale': each level of the Proficiency Scale as (level, label, code), for the explanation.
+        Also 'scale': each level of the Proficiency Scale as (level, label, code), and 'rollup', what a
+        current level is under the deck's roll-up strategy, for the explanation.
         """
-        labels = SiteConfig.get().get_competency_scale_labels()
+        config = SiteConfig.get()
+        labels = config.get_competency_scale_labels()
         codes = level_codes(labels)
         evidence = evidence_by_competency(self.student)
         courses = course_competencies(self.student)
@@ -226,6 +230,9 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                 'rows': [
                     {
                         'competency': competency,
+                        'level': course.levels.get(competency.pk),
+                        'label': labels.get(course.levels.get(competency.pk), ''),
+                        'code': codes.get(course.levels.get(competency.pk), ''),
                         'evidence': [
                             {'item': item, 'label': labels[item.assessment.level], 'code': codes[item.assessment.level]}
                             for item in evidence.get(competency.pk, [])
@@ -238,6 +245,7 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
             'student': self.student,
             'panes': panes,
             'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
+            'rollup': describe_rollup(config),
         })
         return super().get_context_data(**kwargs)
 
@@ -274,9 +282,11 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
         - 'rows', one per student, each with their CourseCompetencies, the deck's label for their
           current level of proficiency, and a cell per column: its competency, and the student's level
           in it with its code and label (None and '' when not yet assessed);
-        - 'scale', each level of the Proficiency Scale as (level, label, code), for the key.
+        - 'scale', each level of the Proficiency Scale as (level, label, code), for the key, and 'rollup',
+          what a current level is under the deck's roll-up strategy, for the introduction.
         """
-        labels = SiteConfig.get().get_competency_scale_labels()
+        config = SiteConfig.get()
+        labels = config.get_competency_scale_labels()
         codes = level_codes(labels)
         courses = list(Course.objects.filter(active=True).exclude(competency_set=''))
         course = next((course for course in courses if str(course.pk) == self.request.GET.get('course')), next(iter(courses), None))
@@ -311,6 +321,7 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
             'categories': [(category, len(list(group))) for category, group in groupby(columns, key=lambda column: column.category)],
             'rows': rows,
             'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
+            'rollup': describe_rollup(config),
         })
         return super().get_context_data(**kwargs)
 

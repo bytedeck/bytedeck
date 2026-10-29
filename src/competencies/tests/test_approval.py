@@ -212,7 +212,7 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         self.assertEqual(CompetencyAssessment.objects.get(competency=self.communicating), unchanged)
         rerated = CompetencyAssessment.objects.get(competency=self.thinking)
         self.assertEqual(rerated.assessed_by, self.teacher)
-        self.assertEqual(list(CompetencyAssessment.objects.filter(user=self.student).current().order_by('-timestamp', '-pk'))[0], rerated)
+        self.assertEqual(CompetencyAssessment.objects.filter(user=self.student).order_by('-timestamp', '-pk').first(), rerated)
         text = self.approval_comment()
         self.assertIn('On reflection', text)
         self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>Developing</b>', text)
