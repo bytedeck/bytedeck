@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.views.generic import FormView, ListView, TemplateView
@@ -19,9 +20,10 @@ from siteconfig.models import SiteConfig
 
 from tenant.views import NonPublicOnlyViewMixin
 
-from .forms import CompetencyImportForm
+from .forms import CompetencyImportForm, CompetencyOverrideForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
-from .models import Competency, ProficiencyLevel
+from .models import Competency, CompetencyOverride, ProficiencyLevel
+from .rollup import describe_rollup, evidence_levels
 from .summaries import LEVEL_RANGES, course_competencies, course_matrix, evidence_by_competency, level_codes
 
 # session key holding the parsed competency set between the upload and preview steps
@@ -196,12 +198,16 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
         - 'level_counts', for the breakdown of its average: each level the student holds in the course,
           as (level, label, how many competencies), and 'scale', each level with its label and code, the
           averages that round to it and whether the course's average does;
-        - 'rows', each of the course's competencies with its evidence and the deck's label and code for
-          each assessment's level.
+        - 'rows', each of the course's competencies with the student's current level in it (None when
+          not yet assessed) and its label and code, the teacher's override that set it (None when it is
+          the roll-up of the evidence), and its evidence with the deck's label and code for each
+          assessment's level; and 'overridden', whether any of the course's levels is an override.
 
-        Also 'scale': each level of the Proficiency Scale as (level, label, code), for the explanation.
+        Also 'scale': each level of the Proficiency Scale as (level, label, code), and 'rollup', what a
+        current level is under the deck's roll-up strategy, for the explanation.
         """
-        labels = SiteConfig.get().get_competency_scale_labels()
+        config = SiteConfig.get()
+        labels = config.get_competency_scale_labels()
         codes = level_codes(labels)
         evidence = evidence_by_competency(self.student)
         courses = course_competencies(self.student)
@@ -216,6 +222,7 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                 'active': course.pane_id == active_id,
                 'level_label': labels.get(course.level, ''),
                 'level_counts': [(level, labels[level], counts[level]) for level in ProficiencyLevel.values if counts[level]],
+                'overridden': any(competency.pk in course.overrides for competency in course.competencies),
                 'scale': [
                     {
                         'level': level, 'label': labels.get(level, ''), 'code': codes.get(level, ''),
@@ -226,6 +233,10 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                 'rows': [
                     {
                         'competency': competency,
+                        'level': course.levels.get(competency.pk),
+                        'label': labels.get(course.levels.get(competency.pk), ''),
+                        'code': codes.get(course.levels.get(competency.pk), ''),
+                        'override': course.overrides.get(competency.pk),
                         'evidence': [
                             {'item': item, 'label': labels[item.assessment.level], 'code': codes[item.assessment.level]}
                             for item in evidence.get(competency.pk, [])
@@ -238,6 +249,7 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
             'student': self.student,
             'panes': panes,
             'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
+            'rollup': describe_rollup(config),
         })
         return super().get_context_data(**kwargs)
 
@@ -273,10 +285,13 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
           it spans, for the header;
         - 'rows', one per student, each with their CourseCompetencies, the deck's label for their
           current level of proficiency, and a cell per column: its competency, and the student's level
-          in it with its code and label (None and '' when not yet assessed);
-        - 'scale', each level of the Proficiency Scale as (level, label, code), for the key.
+          in it with its code and label (None and '' when not yet assessed), and the teacher's override
+          that set it (None when it is the roll-up of the evidence);
+        - 'scale', each level of the Proficiency Scale as (level, label, code), for the key, and 'rollup',
+          what a current level is under the deck's roll-up strategy, for the introduction.
         """
-        labels = SiteConfig.get().get_competency_scale_labels()
+        config = SiteConfig.get()
+        labels = config.get_competency_scale_labels()
         codes = level_codes(labels)
         courses = list(Course.objects.filter(active=True).exclude(competency_set=''))
         course = next((course for course in courses if str(course.pk) == self.request.GET.get('course')), next(iter(courses), None))
@@ -297,6 +312,7 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
                             'level': row.levels.get(column.pk),
                             'code': codes.get(row.levels.get(column.pk), ''),
                             'label': labels.get(row.levels.get(column.pk), ''),
+                            'override': row.overrides.get(column.pk),
                         }
                         for column in columns
                     ],
@@ -311,14 +327,15 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
             'categories': [(category, len(list(group))) for category, group in groupby(columns, key=lambda column: column.category)],
             'rows': rows,
             'scale': [(level, labels[level], codes[level]) for level in ProficiencyLevel.values],
+            'rollup': describe_rollup(config),
         })
         return super().get_context_data(**kwargs)
 
     def csv_response(self, context):
         """ The matrix as a CSV download: a row per student with their name, username, block, average
         and current level of proficiency, then their level in each competency (headed "Category:
-        Competency"), by the deck's labels ("n/a" where not yet assessed). Every cell is made safe
-        to open in a spreadsheet (csv_safe).
+        Competency"), by the deck's labels ("n/a" where not yet assessed, and "(override)" after a level
+        a teacher set). Every cell is made safe to open in a spreadsheet (csv_safe).
 
         Args:
             context (dict): what get_context_data returned, with a course.
@@ -342,6 +359,92 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
                     registration.user.profile.teacher_name(), registration.user.username, registration.block,
                     f"{row['course'].average:.2f}", row['level_label'] or 'n/a',
                 ]
-                + [cell['label'] or 'n/a' for cell in row['cells']]
+                + [f"{cell['label']} (override)" if cell['override'] else cell['label'] or 'n/a' for cell in row['cells']]
             )])
         return response
+
+
+@method_decorator([competencies_enabled, staff_member_required], name='dispatch')
+class CompetencyOverrideView(NonPublicOnlyViewMixin, FormView):
+    """ Where staff set a student's level in a competency, overriding the roll-up of their evidence on
+    every page that shows it, or clear the override. Opened from the competency's row on the student's
+    competencies page, which it returns to. It shows the level worked out from the evidence, the
+    override in force, and every override of it so far: who set or cleared it, when, and why.
+    """
+    template_name = 'competencies/override.html'
+    form_class = CompetencyOverrideForm
+
+    def dispatch(self, request, *args, **kwargs):
+        """ Looks up the student and competency in the URL (after the staff check, which wraps this).
+
+        Raises:
+            Http404: if there's no such user or competency.
+        """
+        self.student = get_object_or_404(get_user_model(), pk=kwargs['user_pk'])
+        self.competency = get_object_or_404(Competency, pk=kwargs['competency_pk'])
+        self.labels = SiteConfig.get().get_competency_scale_labels()
+        return super().dispatch(request, *args, **kwargs)
+
+    def overrides(self):
+        """ The student's overrides of the competency, newest first, with who set each. """
+        return CompetencyOverride.objects.filter(user=self.student, competency=self.competency).select_related('set_by__profile')
+
+    def get_form_kwargs(self):
+        """ The form starts on the override in force, if any, and offers the deck's labels. """
+        kwargs = super().get_form_kwargs()
+        in_force = self.overrides().in_force().first()
+        kwargs.update({'labels': self.labels, 'initial': {'level': in_force.level if in_force else ''}})
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        """ Returns the template context: the student and competency; 'evidence_level', their level
+        worked out from the evidence (None when not yet assessed) with its 'evidence_label', and 'rollup',
+        how that is worked out; 'in_force', the override in force (None if there is none); 'history',
+        every override record, newest first, with the deck's label for each level; and 'summary_url',
+        the competency's row on the student's competencies page. """
+        codes = level_codes(self.labels)
+        evidence_level = evidence_levels(user=self.student, competency=self.competency)[self.student.pk].get(self.competency.pk)
+        history = list(self.overrides())
+        in_force = next((override for override in history[:1] if override.level is not None), None)
+        kwargs.update({
+            'student': self.student,
+            'competency': self.competency,
+            'evidence_level': evidence_level,
+            'evidence_label': self.labels.get(evidence_level, ''),
+            'evidence_code': codes.get(evidence_level, ''),
+            'rollup': describe_rollup(SiteConfig.get()),
+            'in_force': in_force,
+            'in_force_label': self.labels.get(in_force.level, '') if in_force else '',
+            'in_force_code': codes.get(in_force.level, '') if in_force else '',
+            'history': [{'override': override, 'label': self.labels.get(override.level, '')} for override in history],
+            'summary_url': self.summary_url(),
+        })
+        return super().get_context_data(**kwargs)
+
+    def summary_url(self):
+        """ The competency's row on the student's competencies page, in the tab of the course it belongs
+        to, or the page itself when no course of the student's shows it. """
+        url = reverse('competencies:summary', args=[self.student.pk])
+        for course in course_competencies(self.student):
+            if self.competency in course.competencies:
+                return f"{url}?course={course.pane_id}#{course.pane_id}-competency-{self.competency.pk}"
+        return url
+
+    def form_valid(self, form):
+        """ Records the override, or its clearing, by the requesting teacher, then returns to the
+        student's competencies page. Clearing when no override is in force records nothing. """
+        level = form.cleaned_data['level']
+        if level is None and not self.overrides().in_force().exists():
+            messages.info(self.request, "There was no override to clear.")
+        else:
+            override = CompetencyOverride(
+                user=self.student, competency=self.competency, level=level, note=form.cleaned_data['note'], set_by=self.request.user,
+            )
+            override.full_clean()
+            override.save()
+            if level is None:
+                messages.success(self.request, f"Cleared the override of {self.competency.name}: the level worked out from the evidence stands.")
+            else:
+                name = self.student.profile.teacher_name()
+                messages.success(self.request, f"Set {name}'s level in {self.competency.name} to {self.labels[level]}.")
+        return redirect(self.summary_url())

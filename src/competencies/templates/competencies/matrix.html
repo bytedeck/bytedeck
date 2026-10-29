@@ -35,13 +35,14 @@
 
   <p>
     <strong>{{ course.title }}</strong>{% if course.title != course.competency_set %} ({{ course.competency_set }}){% endif %}:
-    each student's current level in each of its {{ columns|length }} competencies, which is their most recent
-    assessment of it. Select a level to see that student's assessments of the competency.
+    each student's current level in each of its {{ columns|length }} competencies, which is {{ rollup }}.
+    Select a level to see that student's assessments of the competency.
   </p>
   <p class="competency-matrix-key">
     Proficiency Scale:
     {% for level, label, code in scale %}<span class="label competency-code competency-level competency-level-{{ level }}">{{ code }}</span> {{ label }}&ensp;{% endfor %}
-    <span class="label competency-code label-default">n/a</span> Not yet assessed
+    <span class="label competency-code label-default">n/a</span> Not yet assessed&ensp;
+    <span class="label competency-code label-default competency-override">&nbsp;</span> Outlined: set by a teacher, in place of the evidence
   </p>
 
   {% if rows %}
@@ -71,7 +72,8 @@
           {% for cell in row.cells %}
           <td class="competency-matrix-cell">
             {% if cell.level %}<a href="{% url 'competencies:summary' registration.user_id %}?course={{ course_row.pane_id }}#{{ course_row.pane_id }}-competency-{{ cell.competency.pk }}"
-              class="label competency-code competency-level competency-level-{{ cell.level }}" title="{{ cell.label }}: {{ cell.competency.name }}">{{ cell.code }}</a>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+              class="label competency-code competency-level competency-level-{{ cell.level }}{% if cell.override %} competency-override{% endif %}"
+              title="{{ cell.label }}: {{ cell.competency.name }}{% if cell.override %} (set by {{ cell.override.set_by.profile.preferred_full_name|default:'a teacher' }} on {{ cell.override.timestamp|date }}){% endif %}">{{ cell.code }}</a>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
           </td>
           {% endfor %}
         </tr>

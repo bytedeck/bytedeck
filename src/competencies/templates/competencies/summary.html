@@ -6,10 +6,11 @@
 {% comment %}
   A student's competencies summary (CompetencySummaryView), laid out like Mark Calculations: a table of
   their courses with each one's current level of proficiency, then a tab per course with an explanation
-  of how that level is worked out, and all of the course's competencies, each with a chip for every
-  assessment of it, oldest first. The chips show three-letter codes at one fixed width, so many fit on a
-  row; a chip links to the work it was given for, and its title says what that was, when, and the
-  level in full. "n/a" stands for not yet assessed. A student with one course gets its content without
+  of how that level is worked out, and all of the course's competencies, each with its current level
+  (which staff can override), a dot per assessment at its level's height to show growth over time, and
+  a chip for every assessment of it, oldest first. The chips show three-letter codes at one fixed
+  width, so many fit on a row; a chip links to the work it was given for, and its title says what that
+  was, when, and the level in full. "n/a" stands for not yet assessed. A student with one course gets its content without
   a tab strip over it.
 {% endcomment %}
 <p>Hello {{ student.profile.get_preferred_name|default:student.username }},
@@ -62,9 +63,10 @@
       <ul>
         <li>
           {{ course.label|default:"It" }} has <strong>{{ course.competencies|length }}</strong> competencies. Each counts at your
-          current level in it, which is its most recent assessment, on the Proficiency Scale:
+          current level in it, which is {{ rollup }}, on the Proficiency Scale:
           {% for level, label, code in scale %}{{ label }} ({{ code }}) counts {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}.
           A competency not yet assessed (n/a) counts 0.
+          {% if pane.overridden %}Where your teacher has set your level in a competency (outlined below), that level counts instead.{% endif %}
         </li>
         <li>
           {% if pane.level_counts %}
@@ -111,16 +113,31 @@
         <thead>
           <tr>
             <th class="competency-summary-name">Competency</th>
-            <th>Assessments</th>
+            <th>Current level</th>
+            <th>Over time</th>
+            <th>Assessments, oldest first</th>
           </tr>
         </thead>
         <tbody>
           {% regroup pane.rows by competency.category as categories %}
           {% for category in categories %}
-            {% if category.grouper %}<tr class="info"><th colspan="2">{{ category.grouper }}</th></tr>{% endif %}
+            {% if category.grouper %}<tr class="info"><th colspan="4">{{ category.grouper }}</th></tr>{% endif %}
             {% for row in category.list %}
             <tr id="{{ course.pane_id }}-competency-{{ row.competency.pk }}">
               <td title="{{ row.competency.qualified_name }}">{{ row.competency.name }}</td>
+              <td class="competency-summary-current">
+                {% if row.override %}
+                  <span class="label competency-code competency-level competency-level-{{ row.level }} competency-override"
+                    title="{{ row.label }}: set by {{ row.override.set_by.profile.preferred_full_name|default:'a teacher' }} on {{ row.override.timestamp|date }}{% if request.user.is_staff and row.override.note %}: {{ row.override.note }}{% endif %}">{{ row.code }}</span>
+                {% elif row.level %}<span class="label competency-code competency-level competency-level-{{ row.level }}" title="{{ row.label }}">{{ row.code }}</span>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+                {% if request.user.is_staff %}<a href="{% url 'competencies:override' student.pk row.competency.pk %}" class="btn btn-default btn-xs"
+                  title="Set or clear this level: it stands in place of the level worked out from the evidence"><i class="fa fa-pencil"></i></a>{% endif %}
+              </td>
+              <td class="competency-summary-history">
+                {% if row.evidence|length > 1 %}<span class="competency-history" role="img"
+                  title="Level over time, oldest first: {% for evidence in row.evidence %}{{ evidence.label }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+                  aria-label="Level over time, oldest first: {% for evidence in row.evidence %}{{ evidence.label }}{% if not forloop.last %}, {% endif %}{% endfor %}">{% for evidence in row.evidence %}<span class="competency-history-dot competency-level-{{ evidence.item.assessment.level }}"></span>{% endfor %}</span>{% endif %}
+              </td>
               <td class="competency-summary-evidence">
                 {% for evidence in row.evidence %}
                   {% with item=evidence.item %}

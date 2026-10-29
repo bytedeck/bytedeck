@@ -18,6 +18,14 @@ class ProficiencyLevel(models.IntegerChoices):
     EXTENDING = 4, 'Extending'
 
 
+class RollupStrategy(models.TextChoices):
+    """ How a student's assessments of a competency become their current level in it: the deck's
+    choice (SiteConfig.competency_rollup), applied by competencies.rollup. """
+    MOST_RECENT = 'most_recent', 'Most recent assessment'
+    MOST_COMMON = 'most_common', 'Most common level in the latest assessments'
+    HIGHEST = 'highest', 'Highest level assessed'
+
+
 class CompetencyQuerySet(models.QuerySet):
     """ Custom queryset for Competency, exposing the common filters as chainable methods. """
 
@@ -132,25 +140,6 @@ class QuestCompetency(models.Model):
         return f"{self.quest} - {self.competency}"
 
 
-class CompetencyAssessmentQuerySet(models.QuerySet):
-    """ Custom queryset for CompetencyAssessment. """
-
-    def current(self):
-        """ The roll-up of the evidence: for each student and competency in this queryset, the
-        assessment that stands as their current level, which is the most recent one (ties on the
-        timestamp go to the one recorded last). Everything that shows a current level reads it
-        through here, so a different roll-up strategy changes only this method.
-
-        It is one query: the latest assessment per student and competency is picked by a Postgres
-        ``DISTINCT ON`` subquery, so it serves one student's profile or a whole class alike.
-
-        Returns:
-            QuerySet: the current assessments, at most one per student and competency.
-        """
-        latest = self.order_by('user_id', 'competency_id', '-timestamp', '-pk').distinct('user_id', 'competency_id')
-        return self.filter(pk__in=latest.values('pk'))
-
-
 class CompetencyAssessment(models.Model):
     """ The atomic evidence record: a single assessment of a student on a single competency,
     at a specific level, from a specific source (a QuestSubmission in v1; the generic FK allows
@@ -190,8 +179,6 @@ class CompetencyAssessment(models.Model):
 
     timestamp = models.DateTimeField(auto_now_add=True)
 
-    objects = CompetencyAssessmentQuerySet.as_manager()
-
     class Meta:
         ordering = ['-timestamp']
         indexes = [
@@ -222,3 +209,72 @@ class CompetencyAssessment(models.Model):
     def __str__(self):
         """ Returns "<student>: <competency> = <level label>" for admin and debugging output. """
         return f"{self.user}: {self.competency} = {self.get_level_display()}"
+
+
+class CompetencyOverrideQuerySet(models.QuerySet):
+    """ Custom queryset for CompetencyOverride. """
+
+    def in_force(self):
+        """ The overrides that stand: for each student and competency in this queryset, its latest
+        record (ties on the timestamp going to the one recorded last), unless that record cleared the
+        override.
+
+        It is one query: the latest record per student and competency is picked by a Postgres
+        ``DISTINCT ON`` subquery.
+
+        Returns:
+            QuerySet: at most one override per student and competency, each with a level.
+        """
+        latest = self.order_by('user_id', 'competency_id', '-timestamp', '-pk').distinct('user_id', 'competency_id')
+        return self.filter(pk__in=latest.values('pk')).exclude(level=None)
+
+
+class CompetencyOverride(models.Model):
+    """ A teacher's summative level for a student in a competency, which stands as the student's
+    current level in it in place of the roll-up of their evidence (see competencies.rollup), on
+    every page that shows one.
+
+    Each change is a new record, so who set which level, when and why stays on record: a student's
+    latest record for a competency is the one in force, and a record with no level clears the
+    override, so the roll-up of their evidence applies again.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='competency_overrides',
+        help_text="The student whose level it is."
+    )
+
+    competency = models.ForeignKey(
+        # PROTECT, as for evidence: a competency with a level set can be deactivated but never hard-deleted.
+        Competency, on_delete=models.PROTECT, related_name='overrides'
+    )
+
+    level = models.IntegerField(
+        choices=ProficiencyLevel.choices, null=True, blank=True,
+        help_text="The level that stands as the student's current level in the competency, "
+                  "or blank to clear the override."
+    )
+
+    note = models.TextField(blank=True, help_text="Why it was set or cleared. Only staff see it.")
+
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='competency_overrides_set',
+        help_text="The staff user who set or cleared it."
+    )
+
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    objects = CompetencyOverrideQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['-timestamp', '-pk']
+        indexes = [
+            models.Index(fields=['user', 'competency', 'timestamp'], name='competency_override_idx')
+        ]
+
+    def __str__(self):
+        """ Returns "<student>: <competency> set to <level label>", or "... cleared", for admin and debugging output. """
+        if self.level is None:
+            return f"{self.user}: {self.competency} cleared"
+        return f"{self.user}: {self.competency} set to {self.get_level_display()}"

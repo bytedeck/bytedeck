@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from model_bakery import baker
 
-from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel
+from competencies.models import Competency, CompetencyAssessment, CompetencyOverride, ProficiencyLevel
 from competencies.summaries import CourseCompetencies, course_competencies, evidence_by_competency, level_codes
 from competencies.tests.test_approval import set_competencies_flag
 from courses.models import Block, Course, CourseStudent, Semester
@@ -158,17 +158,23 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         self.assertEqual([course.title for course in course_competencies(self.student)], ["Digital Hackerspace"])
 
-    def test_course_competencies__three_queries(self):
-        """ It takes three queries however many courses and competencies there are """
+    def test_course_competencies__four_queries(self):
+        """ It takes four queries however many courses, competencies and overrides there are, with who set
+        each override """
         for competency in (self.defining, self.making, self.collaborating):
             self.assess(competency, ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        for competency in (self.ideating, self.collaborating):
+            CompetencyOverride.objects.create(user=self.student, competency=competency, level=ProficiencyLevel.EXTENDING, set_by=self.teacher)
 
         with CaptureQueriesContext(connection) as queries:
             courses = course_competencies(self.student)
-            summaries = [(course.title, course.average) for course in courses]
+            summaries = [
+                (course.title, course.average, [override.set_by.profile.preferred_full_name() for override in course.overrides.values()])
+                for course in courses
+            ]
 
         self.assertEqual(len(summaries), 2)
-        self.assertEqual(own_query_count(queries), 3)
+        self.assertEqual(own_query_count(queries), 4)
 
     def test_average__a_course_with_no_competencies_is_zero(self):
         """ A course with no competencies averages 0, rather than dividing by zero """
@@ -352,8 +358,10 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
     def test_summary__a_table_of_courses_then_a_tab_each_listing_every_competency(self):
         """ Like Mark Calculations: a table of the student's courses (then other sets with evidence) with
         each one's average and current level of proficiency, then a tab per course listing all its
-        competencies by category, each with a fixed-width chip per assessment showing its three-letter
-        code, oldest first, linking to the submission and titled with the level, quest and date, or "n/a" """
+        competencies by category, each with its current level's three-letter code (or "n/a"), a dot per
+        assessment raised to its level (from two assessments on), then a fixed-width chip per assessment
+        showing its code, oldest first, linking to the submission and titled with the level, quest and
+        date, or "n/a" """
         brainstorm = self.submission("Brainstorm")
         prototype = self.submission("Prototype")
         self.assess(self.defining, ProficiencyLevel.DEVELOPING, minutes_ago=60 * 24 * 3, source=brainstorm)
@@ -376,15 +384,28 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'<a href="#{pane}" role="tab" data-toggle="tab">Digital Hackerspace</a>'
             r'.*?<a href="#course-pane-core" role="tab" data-toggle="tab">Core</a>'
             rf'.*?<div role="tabpanel" class="tab-pane active" id="{pane}">\s*<h3>Explanation</h3>.*?<h3>ADST 9 Competencies</h3>'
-            r'.*?<tr class="info"><th colspan="2">Applied Design - Defining</th></tr>\s*'
+            r'.*?<th class="competency-summary-name">Competency</th>\s*<th>Current level</th>\s*<th>Over time</th>\s*'
+            r'<th>Assessments, oldest first</th>'
+            r'.*?<tr class="info"><th colspan="4">Applied Design - Defining</th></tr>\s*'
             rf'<tr id="{pane}-competency-{self.defining.pk}">\s*'
             r'<td title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</td>\s*'
+            r'<td class="competency-summary-current">\s*'
+            r'<span class="label competency-code competency-level competency-level-4" title="Nailed It">NAI</span>\s*'
+            rf'<a href="{reverse("competencies:override", args=[self.student.pk, self.defining.pk])}" class="btn btn-default btn-xs"\s*'
+            r'title="Set or clear this level: it stands in place of the level worked out from the evidence">'
+            r'<i class="fa fa-pencil"></i></a>\s*</td>\s*'
+            r'<td class="competency-summary-history">\s*<span class="competency-history" role="img"\s*'
+            r'title="Level over time, oldest first: Developing, Nailed It"\s*aria-label="Level over time, oldest first: Developing, Nailed It">'
+            r'<span class="competency-history-dot competency-level-2"></span>'
+            r'<span class="competency-history-dot competency-level-4"></span></span>\s*</td>\s*'
             r'<td class="competency-summary-evidence">\s*'
             rf'<a href="{brainstorm.get_absolute_url()}" class="label competency-code competency-level competency-level-2"\s*'
             r'title="Developing: Brainstorm, [^"]+">DEV</a>\s*'
             rf'<a href="{prototype.get_absolute_url()}" class="label competency-code competency-level competency-level-4"\s*'
             r'title="Nailed It: Prototype, [^"]+">NAI</a>'
-            r'.*?Generate potential ideas</td>\s*<td class="competency-summary-evidence">\s*'
+            r'.*?Generate potential ideas</td>\s*<td class="competency-summary-current">\s*'
+            r'<span class="text-muted" title="Not yet assessed">n/a</span>\s*<a [^>]+><i class="fa fa-pencil"></i></a>\s*</td>\s*'
+            r'<td class="competency-summary-history">\s*</td>\s*<td class="competency-summary-evidence">\s*'
             r'<span class="text-muted" title="Not yet assessed">n/a</span>'
             r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Explanation</h3>.*?<h3>Core Competencies</h3>'
             r'.*?competency-level-3"\s*title="Got It: Prototype, [^"]+">GOT</a>'
@@ -393,6 +414,11 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
         latest.refresh_from_db()
         self.assertIn(f'title="Nailed It: Prototype, {date_filter(timezone.localtime(latest.timestamp))}"', content)
         self.assertNotContains(response, "Retired competency")
+        # one assessment is no trend yet: Collaborating, in the Core tab, has no dots
+        self.assertRegex(content, (
+            r'(?s)id="course-pane-core".*?<td class="competency-summary-history">\s*</td>\s*'
+            r'<td class="competency-summary-evidence">'
+        ))
 
     def test_summary__each_course_explains_how_its_level_is_worked_out(self):
         """ At the top of each course's tab: how many competencies it has and what each point on the
@@ -409,7 +435,8 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
         content = response.content.decode()
         self.assertContains(response, "Here is how your current level of proficiency in <strong>Digital Hackerspace</strong> is worked out:")
         self.assertRegex(content, (
-            r'(?s)ADST 9 has <strong>3</strong> competencies\. Each counts at your\s*current level in it, which is its most recent assessment, '
+            r'(?s)ADST 9 has <strong>3</strong> competencies\. Each counts at your\s*current level in it, '
+            r'which is the level of its most recent assessment, '
             r'on the Proficiency Scale:\s*Emerging \(EMG\) counts 1, Developing \(DEV\) counts 2, '
             r'Got It \(GOT\) counts 3, Nailed It \(NAI\) counts 4\.\s*'
             r'A competency not yet assessed \(n/a\) counts 0\.'

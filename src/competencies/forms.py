@@ -237,3 +237,29 @@ class QuestCompetenciesFormMixin:
 
         # whatever is left was deselected
         QuestCompetency.objects.filter(pk__in=[link.pk for link in existing.values()]).delete()
+
+
+class CompetencyOverrideForm(forms.Form):
+    """ A teacher's override of a student's level in a competency (CompetencyOverride): a level on the
+    deck's Proficiency Scale, or none to clear the override, with a note for staff. """
+
+    level = forms.TypedChoiceField(
+        coerce=int, empty_value=None, required=False, label="Current level",
+        help_text="This level stands as the student's current level in the competency, wherever it shows, "
+                  "until you change or clear it.",
+    )
+    note = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 3}), required=False,
+        help_text="Why you set it, kept with the level's history. Only staff see this note.",
+    )
+
+    def __init__(self, *args, labels, **kwargs):
+        """ Offers the levels by the deck's labels, after the choice to clear the override.
+
+        Args:
+            *args: positional arguments passed through to ``forms.Form``.
+            labels (dict[int, str]): the deck's label for each level (SiteConfig.get_competency_scale_labels).
+            **kwargs: keyword arguments passed through to ``forms.Form``.
+        """
+        super().__init__(*args, **kwargs)
+        self.fields['level'].choices = [('', "No override: the level worked out from the evidence")] + list(labels.items())

@@ -125,7 +125,11 @@ def posted_level(data, link, start):
 
 
 def competencies_enabled():
-    """ Whether this deck has competencies enabled (the public schema, with no SiteConfig, hasn't). """
+    """ Whether this deck has competencies enabled (the public schema, with no SiteConfig, hasn't).
+
+    Returns:
+        bool: True when the deck has a SiteConfig with enable_competencies set.
+    """
     config = SiteConfig.get()
     return config is not None and config.enable_competencies
 

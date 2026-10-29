@@ -1602,23 +1602,27 @@ table[data-toggle="table"].bt-reveal {
     color: #fff;
 }
 .competency-approval-levels .btn.competency-level-1.active,
-.label.competency-level-1 {
+.label.competency-level-1,
+.competency-history-dot.competency-level-1 {
     background-color: #c9302c;
     border-color: #ac2925;
 }
 .competency-approval-levels .btn.competency-level-2.active,
-.label.competency-level-2 {
+.label.competency-level-2,
+.competency-history-dot.competency-level-2 {
     background-color: #f0ad4e;
     border-color: #eea236;
     color: #333;
 }
 .competency-approval-levels .btn.competency-level-3.active,
-.label.competency-level-3 {
+.label.competency-level-3,
+.competency-history-dot.competency-level-3 {
     background-color: #3c763d;
     border-color: #326432;
 }
 .competency-approval-levels .btn.competency-level-4.active,
-.label.competency-level-4 {
+.label.competency-level-4,
+.competency-history-dot.competency-level-4 {
     background-color: #31708f;
     border-color: #2b6380;
 }
@@ -1650,11 +1654,42 @@ table[data-toggle="table"].bt-reveal {
 /* A student's competencies summary (competencies/summary.html): a grid of a course's competencies,
    each with a chip for every assessment of it, wrapping onto more lines as the chips build up. */
 .competency-summary .competency-summary-name {
-    width: 45%;
+    width: 35%;
 }
 .competency-summary-evidence .label {
     margin: 1px 2px 1px 0;
 }
+/* A competency's assessments over time, oldest first, on a student's competencies summary: a dot per
+   assessment in its level's colour, raised a step per level, so growth (or a slip) shows at a glance. */
+.competency-history {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 34px;
+    padding: 0 3px 2px;
+    border-bottom: 1px solid #999;
+    vertical-align: middle;
+}
+.competency-history-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.competency-history-dot.competency-level-2 {
+    margin-bottom: 8px;
+}
+.competency-history-dot.competency-level-3 {
+    margin-bottom: 16px;
+}
+.competency-history-dot.competency-level-4 {
+    margin-bottom: 24px;
+}
+.competency-summary-current,
+.competency-summary-history {
+    white-space: nowrap;
+}
+
 /* A competency's row that a link opened (a cell of the staff competency matrix): clear of the fixed
    navbar, and outlined so it stands out from the rows around it. */
 .competency-summary tr[id] {
@@ -1663,6 +1698,15 @@ table[data-toggle="table"].bt-reveal {
 .competency-summary tr:target {
     outline: 2px solid #f0ad4e;
     outline-offset: -2px;
+}
+
+/* A current level a teacher has set for a student (a CompetencyOverride), standing in place of the
+   level worked out from the evidence: outlined, on the competencies page, the matrix and the page
+   where it is set. */
+.label.competency-override {
+    outline: 2px dashed #777;
+    outline-offset: 1px;
+    margin: 0 3px;
 }
 
 /* The staff competency matrix (competencies/matrix.html): a course's students by its competencies.
