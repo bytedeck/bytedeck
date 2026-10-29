@@ -24,7 +24,7 @@ from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
 
 from .models import Competency, CompetencyAssessment, ProficiencyLevel
-from .rollup import current_levels
+from .rollup import current_levels, latest_self_assessments
 
 
 #: The three-letter code shown for each level on a chip where many share a row (see level_codes).
@@ -77,12 +77,15 @@ class CourseCompetencies:
         levels (dict[int, int]): competency pk to the student's current level, for those with one.
         overrides (dict[int, CompetencyOverride]): competency pk to the teacher's override in force,
             for those whose current level a teacher has set.
+        self_assessed (dict[int, CompetencyAssessment]): competency pk to the student's latest
+            self-assessment, shown beside their current level and never counted in it.
     """
     label: str
     registration: object = None
     competencies: list = field(default_factory=list)
     levels: dict = field(default_factory=dict)
     overrides: dict = field(default_factory=dict)
+    self_assessed: dict = field(default_factory=dict)
 
     @property
     def title(self):
@@ -128,8 +131,8 @@ def course_competencies(student):
     competency set, then each other set they have a level in, by label.
 
     Current levels come from the roll-up (competencies.rollup.current_levels), and a set the student
-    has a level in only through a teacher's override shows too. It takes four queries, however many
-    courses and competencies there are.
+    has a level in only through a teacher's override, or has only assessed themself in, shows too. It
+    takes five queries, however many courses and competencies there are.
 
     Args:
         student (User): the student.
@@ -139,13 +142,14 @@ def course_competencies(student):
     """
     levels, overrides = current_levels(user=student)
     levels, overrides = levels[student.pk], overrides[student.pk]
+    self_assessed = latest_self_assessments(user=student)[student.pk]
     registrations = [
         registration for registration in CourseStudent.objects.current_courses(student).select_related('course', 'block')
         if registration.course.competency_set
     ]
     registered_labels = {registration.course.competency_set for registration in registrations}
-    # the sets the student has a level in, read in the same query as the competencies
-    assessed_labels = Competency.objects.filter(pk__in=list(levels)).values('course')
+    # the sets the student has a level or a self-assessment in, read in the same query as the competencies
+    assessed_labels = Competency.objects.filter(pk__in=[*levels, *self_assessed]).values('course')
 
     competencies = Competency.objects.filter(
         Q(course__in=registered_labels) | Q(course__in=assessed_labels)
@@ -153,10 +157,14 @@ def course_competencies(student):
     by_label = {label: list(group) for label, group in groupby(competencies, key=lambda competency: competency.course)}
 
     courses = [
-        CourseCompetencies(registration.course.competency_set, registration, by_label[registration.course.competency_set], levels, overrides)
+        CourseCompetencies(
+            registration.course.competency_set, registration, by_label[registration.course.competency_set], levels, overrides, self_assessed,
+        )
         for registration in registrations if registration.course.competency_set in by_label
     ]
-    courses += [CourseCompetencies(label, None, by_label[label], levels, overrides) for label in by_label if label not in registered_labels]
+    courses += [
+        CourseCompetencies(label, None, by_label[label], levels, overrides, self_assessed) for label in by_label if label not in registered_labels
+    ]
     return courses
 
 
@@ -171,7 +179,7 @@ def course_matrix(course, block=None):
     deactivated ones that student has a level in. The columns are the set's active competencies plus
     any deactivated ones some row has a level in.
 
-    It takes four queries, however many students and competencies there are.
+    It takes five queries, however many students and competencies there are.
 
     Args:
         course (Course): the course, which has a competency set.
@@ -186,9 +194,9 @@ def course_matrix(course, block=None):
         registrations = registrations.filter(block=block)
     registrations = list(registrations.select_related('user__profile', 'block').order_by('user__last_name', 'user__first_name', 'user__username'))
 
-    levels, overrides = current_levels(
-        user_id__in=[registration.user_id for registration in registrations], competency__course=course.competency_set,
-    )
+    students = {'user_id__in': [registration.user_id for registration in registrations], 'competency__course': course.competency_set}
+    levels, overrides = current_levels(**students)
+    self_assessed = latest_self_assessments(**students)
     assessed = {competency_id for student_levels in levels.values() for competency_id in student_levels}
 
     columns = list(Competency.objects.filter(course=course.competency_set).filter(Q(active=True) | Q(pk__in=assessed)))
@@ -199,6 +207,7 @@ def course_matrix(course, block=None):
             [competency for competency in columns if competency.active or competency.pk in levels[registration.user_id]],
             levels[registration.user_id],
             overrides[registration.user_id],
+            self_assessed[registration.user_id],
         )
         for registration in registrations
     ]
@@ -218,12 +227,18 @@ class Evidence:
     description: str
     url: str = None
 
+    @property
+    def self_assessed(self):
+        """ Whether it is the student's assessment of themself, shown apart and never counted. """
+        return self.assessment.assessed_by_id == self.assessment.user_id
+
 
 def evidence_by_competency(student):
-    """ Every assessment of the student, oldest first, grouped by competency, each with what it was
-    given for: a quest submission links to the submission and is described by its quest's name; any
-    other source links to its own page, when it has one. Evidence whose submission is gone says its
-    quest was deleted, and evidence with no source, or whose other source is gone, has no link.
+    """ Every assessment of the student, oldest first, grouped by competency, their self-assessments
+    among them (Evidence.self_assessed), each with what it was given for: a quest submission links to
+    the submission and is described by its quest's name; any other source links to its own page, when
+    it has one. Evidence whose submission is gone says its quest was deleted, and evidence with no
+    source, or whose other source is gone, has no link.
 
     The sources are prefetched, a submission's through the base manager so that submissions of quests
     since archived or unpublished still name their quest, so the queries don't grow with the evidence.

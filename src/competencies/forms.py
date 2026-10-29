@@ -204,10 +204,7 @@ class QuestCompetenciesFormMixin:
             )
             self.competency_level_fields.append((competency, name))
 
-        layout = [COMPETENCIES_FIELD, HTML("{% include 'competencies/snippets/quest_competency_levels.html' %}")]
-        if SELF_ASSESSMENT_FIELD in self.fields:
-            layout.append(SELF_ASSESSMENT_FIELD)
-        return layout
+        return [COMPETENCIES_FIELD, HTML("{% include 'competencies/snippets/quest_competency_levels.html' %}"), SELF_ASSESSMENT_FIELD]
 
     def competency_levels(self):
         """ The default-level pickers for the template, marking which competencies are selected

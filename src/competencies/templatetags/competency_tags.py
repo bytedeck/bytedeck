@@ -74,20 +74,22 @@ def competency_approval_levels(context, submission):
     approved submission, commenting records the ones changed. Each starts on the submission's current
     level (from an earlier approval) or else the link's default, or, when the page is re-rendered for
     a posted form that didn't validate, on the level the teacher posted, so resubmitting it records
-    their choice. Renders nothing when the deck has competencies disabled or the quest has no active
-    competencies.
+    their choice. Beside each is the student's self-assessment of the submission, when they gave one,
+    as context for the teacher. Renders nothing when the deck has competencies disabled or the quest
+    has no active competencies.
 
-    Reads ``submission.quest.quest_competencies`` and the submission's current levels, so a page with
-    many submissions should prefetch ``quest__quest_competencies`` and call
-    competencies.assessments.prefetch_submission_levels.
+    Reads ``submission.quest.quest_competencies``, the submission's current levels and its
+    self-assessments, so a page with many submissions should prefetch ``quest__quest_competencies``
+    and call competencies.assessments.prefetch_submission_levels.
 
     Args:
         context (Context): the template context, for the request whose POST holds any posted levels.
         submission (QuestSubmission): the submission the approval form acts on.
 
     Returns:
-        dict: the snippet's context: 'rows', each with the competency, the posted field's name and
-        its (level, label, selected) choices; whether the submission is approved; the deck's label
+        dict: the snippet's context: 'rows', each with the competency, the posted field's name, its
+        (level, label, selected) choices and the student's self-assessed level and its label (None and
+        '' when they gave none); whether the submission is approved; the deck's label
         for the lowest level; and whether any row starts on it (so the nudge shows from the first
         render, not only once a level changes).
     """
@@ -100,13 +102,17 @@ def competency_approval_levels(context, submission):
     labels = config.get_competency_scale_labels()
     links = approval_links(submission.quest)
     current = submission_levels(submission) if links else {}
+    self_levels = submission_self_levels(submission) if links else {}
     rows = []
     for link in links:
         chosen = posted_level(data, link, starting_level(link, current))
+        self_level = self_levels.get(link.competency_id)
         rows.append({
             'competency': link.competency,
             'field_name': competency_level_field_name(link.competency_id),
             'levels': [(level, labels[level], level == chosen) for level in ProficiencyLevel.values],
+            'self_level': self_level,
+            'self_label': labels.get(self_level, ''),
         })
     starts_on_lowest = any(selected for row in rows for level, _label, selected in row['levels'] if level == ProficiencyLevel.EMERGING)
     return {

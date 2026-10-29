@@ -158,13 +158,14 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         self.assertEqual([course.title for course in course_competencies(self.student)], ["Digital Hackerspace"])
 
-    def test_course_competencies__four_queries(self):
-        """ It takes four queries however many courses, competencies and overrides there are, with who set
-        each override """
+    def test_course_competencies__five_queries(self):
+        """ It takes five queries however many courses, competencies, overrides and self-assessments there
+        are, with who set each override """
         for competency in (self.defining, self.making, self.collaborating):
             self.assess(competency, ProficiencyLevel.PROFICIENT, minutes_ago=5)
         for competency in (self.ideating, self.collaborating):
             CompetencyOverride.objects.create(user=self.student, competency=competency, level=ProficiencyLevel.EXTENDING, set_by=self.teacher)
+            self.assess(competency, ProficiencyLevel.DEVELOPING, minutes_ago=1, assessed_by=self.student)
 
         with CaptureQueriesContext(connection) as queries:
             courses = course_competencies(self.student)
@@ -174,7 +175,7 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
             ]
 
         self.assertEqual(len(summaries), 2)
-        self.assertEqual(own_query_count(queries), 4)
+        self.assertEqual(own_query_count(queries), 5)
 
     def test_average__a_course_with_no_competencies_is_zero(self):
         """ A course with no competencies averages 0, rather than dividing by zero """

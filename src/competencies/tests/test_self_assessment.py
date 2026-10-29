@@ -1,13 +1,24 @@
+import csv
+import io
+
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.template.defaultfilters import date as date_filter
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 
 from model_bakery import baker
 
 from comments.models import Comment
 from competencies.assessments import posted_self_assessments, record_self_assessments, submission_levels, submission_self_levels
 from competencies.forms import competency_level_field_name, self_assessment_field_name
-from competencies.models import CompetencyAssessment, ProficiencyLevel, QuestCompetency
+from competencies.models import CompetencyAssessment, ProficiencyLevel, QuestCompetency, RollupStrategy
+from competencies.rollup import current_levels, evidence_levels, latest_self_assessments
+from competencies.summaries import course_competencies
 from competencies.tests.test_approval import ApprovalTestMixin, set_competencies_flag
+from competencies.tests.test_profile_views import StudentCompetenciesMixin, own_query_count
+from competencies.tests.test_rollup import set_rollup
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest
 
@@ -284,3 +295,151 @@ class SelfAssessmentFormTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.quest.save()
         set_competencies_flag(False)
         self.assertNotContains(self.submission_page(submission), 'Your self-assessment')
+
+
+class SelfAssessmentNotCountedTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
+    """ Self-assessments never count toward a current level, by any strategy, and are read apart. """
+
+    def setUp(self):
+        """ The student is assessed Developing by the teacher, then self-assesses Extending. """
+        super().setUp()
+        CompetencyAssessment.objects.create(user=self.student, competency=self.thinking, level=DEV, assessed_by=self.teacher)
+        self.mine = CompetencyAssessment.objects.create(user=self.student, competency=self.thinking, level=EXT, assessed_by=self.student)
+
+    def test_current_levels__ignore_self_assessments_by_any_strategy(self):
+        """ The current level is the teacher's, whether by the most recent, the most common or the highest """
+        for strategy in RollupStrategy.values:
+            with self.subTest(strategy=strategy):
+                set_rollup(strategy)
+                levels, overrides = current_levels(user=self.student)
+                self.assertEqual(levels[self.student.pk], {self.thinking.pk: DEV})
+                self.assertEqual(evidence_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV})
+
+    def test_current_levels__a_self_assessment_alone_is_no_level(self):
+        """ A competency the student has only self-assessed has no current level """
+        CompetencyAssessment.objects.create(user=self.student, competency=self.communicating, level=EXT, assessed_by=self.student)
+
+        levels, overrides = current_levels(user=self.student)
+
+        self.assertNotIn(self.communicating.pk, levels[self.student.pk])
+
+    def test_latest_self_assessments__the_latest_per_student_and_competency(self):
+        """ Each student's latest self-assessment of each competency, not the teacher's, filtered like the
+        current levels, in one query """
+        later = CompetencyAssessment.objects.create(user=self.student, competency=self.thinking, level=PRF, assessed_by=self.student)
+        CompetencyAssessment.objects.filter(pk__in=[self.mine.pk, later.pk]).update(timestamp=self.mine.timestamp)
+        other = baker.make(User)
+        theirs = CompetencyAssessment.objects.create(user=other, competency=self.communicating, level=EMG, assessed_by=other)
+
+        with CaptureQueriesContext(connection) as queries:
+            latest = latest_self_assessments(user_id__in=[self.student.pk, other.pk])
+
+        self.assertEqual(own_query_count(queries), 1)
+        self.assertEqual(latest[self.student.pk], {self.thinking.pk: later})
+        self.assertEqual(latest[other.pk], {self.communicating.pk: theirs})
+        self.assertEqual(latest_self_assessments(user=self.student, competency=self.communicating)[self.student.pk], {})
+
+
+class SelfAssessmentShownTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
+    """ A self-assessment shows hollow beside the teacher's levels on the competencies page and the matrix,
+    and as context on the approval form. """
+
+    def setUp(self):
+        """ The student is assessed Developing in "Choose a design opportunity" by the teacher, then
+        self-assesses Nailed It on the same quest, and Got It in the Core "Collaborating". """
+        super().setUp()
+        self.brainstorm = self.submission("Brainstorm")
+        self.assess(self.defining, DEV, minutes_ago=30, source=self.brainstorm, assessed_by=self.teacher)
+        self.mine = self.assess(self.defining, EXT, minutes_ago=20, source=self.brainstorm, assessed_by=self.student)
+        self.core = self.assess(self.collaborating, PRF, minutes_ago=10, source=self.brainstorm, assessed_by=self.student)
+
+    def test_course_competencies__self_assessments_beside_and_not_counted(self):
+        """ Each course carries the student's latest self-assessments; the average counts only the teacher's
+        level, and a set the student has only self-assessed in (Core) shows, with no level """
+        adst, core = course_competencies(self.student)
+
+        self.assertEqual(adst.self_assessed, {self.defining.pk: self.mine, self.collaborating.pk: self.core})
+        self.assertEqual(adst.course_levels, [DEV])
+        self.assertEqual((core.label, core.course_levels, core.level), ("Core", [], 0))
+
+    def test_summary__hollow_chips_beside_the_teachers(self):
+        """ The competencies page shows the self-assessment hollow beside the current level and among the
+        chips (titled as one), leaves it out of the levels over time, and the explanation says so """
+        self.assess(self.defining, PRF, minutes_ago=10, source=self.submission("Prototype"), assessed_by=self.teacher)
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.summary_url())
+
+        content = response.content.decode()
+        when = date_filter(timezone.localtime(CompetencyAssessment.objects.get(pk=self.mine.pk).timestamp))
+        self.assertRegex(content, (
+            rf'(?s)<tr id="course-pane-{self.registration.pk}-competency-{self.defining.pk}">.*?'
+            r'<td class="competency-summary-current">\s*'
+            r'<span class="label competency-code competency-level competency-level-3" title="Got It">GOT</span>\s*'
+            r'<span class="label competency-code competency-level competency-level-4 competency-self"\s*'
+            rf'title="Self-assessed: Nailed It, {when}">NAI</span>\s*</td>\s*'
+            r'<td class="competency-summary-history">\s*<span class="competency-history" role="img"\s*'
+            r'title="Level over time, oldest first: Developing, Got It"'
+            r'.*?class="label competency-code competency-level competency-level-4 competency-self"\s*'
+            rf'title="Self-assessed: Nailed It: Brainstorm, {when}">NAI</a>'
+        ))
+        self.assertContains(response, (
+            "Hollow chips are your own self-assessments: they show beside your teacher's levels and don't count toward them."
+        ))
+
+    def test_summary__no_self_assessment_no_mention(self):
+        """ With no self-assessments, there's no hollow chip and the explanation doesn't mention them """
+        CompetencyAssessment.objects.self_assessments().delete()
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.summary_url())
+
+        self.assertNotContains(response, 'competency-self')
+        self.assertNotContains(response, 'Hollow chips are your own self-assessments')
+
+    def test_matrix__hollow_chip_beside_the_teachers(self):
+        """ The matrix shows the self-assessment hollow beside the student's level in the cell, the key
+        explains it, and the CSV keeps to the teacher's levels """
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('competencies:matrix'))
+
+        when = date_filter(timezone.localtime(CompetencyAssessment.objects.get(pk=self.mine.pk).timestamp))
+        self.assertContains(response, "competency-self\">&nbsp;</span> Hollow: the student's self-assessment, not counted")
+        self.assertContains(response, (
+            '<span class="label competency-code competency-level competency-level-4 competency-self"\n'
+            f'              title="Self-assessed: Nailed It: Choose a design opportunity, {when}">NAI</span>'
+        ))
+        rows = list(csv.reader(io.StringIO(self.client.get(reverse('competencies:matrix') + '?format=csv').content.decode())))
+        self.assertEqual(rows[1][5:], ['Developing', 'n/a', 'n/a'])
+
+    def test_approval_form__shows_the_self_assessment(self):
+        """ The approval form shows the student's self-assessment of the submission beside its competency,
+        hollow and in full, and nothing beside one they didn't self-assess """
+        QuestCompetency.objects.create(quest=self.brainstorm.quest, competency=self.defining)
+        QuestCompetency.objects.create(quest=self.brainstorm.quest, competency=self.making)
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.brainstorm.pk]))
+
+        self.assertContains(response, (
+            '<span class="competency-approval-name">Choose a design opportunity\n'
+            '      <span class="label competency-level competency-level-4 competency-self" '
+            'title="The student\'s self-assessment, not counted">Self: Nailed It</span></span>'
+        ))
+        self.assertContains(response, '<span class="competency-approval-name">Use materials safely</span>')
+
+    def test_approvals_tab__self_assessments_fetched_for_the_page(self):
+        """ The approvals page fetches every row's self-assessments at once, as it does their levels """
+        self.brainstorm.is_completed = True
+        self.brainstorm.semester = self.semester
+        self.brainstorm.save()
+        QuestCompetency.objects.create(quest=self.brainstorm.quest, competency=self.defining)
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        submission = next(s for s in tab['submissions'] if s.pk == self.brainstorm.pk)
+        self.assertEqual(submission.competency_self_levels, {self.defining.pk: EXT, self.collaborating.pk: PRF})
+        self.assertContains(response, 'Self: Nailed It')

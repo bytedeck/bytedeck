@@ -42,7 +42,8 @@
     Proficiency Scale:
     {% for level, label, code in scale %}<span class="label competency-code competency-level competency-level-{{ level }}">{{ code }}</span> {{ label }}&ensp;{% endfor %}
     <span class="label competency-code label-default">n/a</span> Not yet assessed&ensp;
-    <span class="label competency-code label-default competency-override">&nbsp;</span> Outlined: set by a teacher, in place of the evidence
+    <span class="label competency-code label-default competency-override">&nbsp;</span> Outlined: set by a teacher, in place of the evidence&ensp;
+    <span class="label competency-code competency-level competency-level-3 competency-self">&nbsp;</span> Hollow: the student's self-assessment, not counted
   </p>
 
   {% if rows %}
@@ -74,6 +75,8 @@
             {% if cell.level %}<a href="{% url 'competencies:summary' registration.user_id %}?course={{ course_row.pane_id }}#{{ course_row.pane_id }}-competency-{{ cell.competency.pk }}"
               class="label competency-code competency-level competency-level-{{ cell.level }}{% if cell.override %} competency-override{% endif %}"
               title="{{ cell.label }}: {{ cell.competency.name }}{% if cell.override %} (set by {{ cell.override.set_by.profile.preferred_full_name|default:'a teacher' }} on {{ cell.override.timestamp|date }}){% endif %}">{{ cell.code }}</a>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+            {% if cell.self_assessed %}<span class="label competency-code competency-level competency-level-{{ cell.self_assessed.level }} competency-self"
+              title="Self-assessed: {{ cell.self_label }}: {{ cell.competency.name }}, {{ cell.self_assessed.timestamp|date }}">{{ cell.self_code }}</span>{% endif %}
           </td>
           {% endfor %}
         </tr>
