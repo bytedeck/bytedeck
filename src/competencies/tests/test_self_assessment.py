@@ -112,6 +112,18 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.assertIn('<li><b>Self-assessment of Critical Thinking: Got It</b></li>', text)
         self.assertNotIn('Communicating', text)
 
+    def test_hand_in__the_comment_names_the_course(self):
+        """ A competency with a course is named with it in the comment, since courses can share a
+        competency's wording """
+        self.thinking.course = "ADST 9"
+        self.thinking.save()
+        submission = self.draft()
+
+        self.hand_in(submission, **{self_assessment_field_name(self.thinking.pk): EXT})
+
+        text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
+        self.assertIn('<li><b>Self-assessment of Critical Thinking (ADST 9): Extending</b></li>', text)
+
     def test_hand_in__a_level_off_the_scale_is_ignored(self):
         """ Anything posted that isn't a level (a hand-made request) records nothing """
         submission = self.draft()
@@ -241,7 +253,7 @@ class SelfAssessmentFormTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.assertContains(response, '<strong>Your self-assessment</strong>')
         self.assertContains(response, "it doesn't count toward your level.")
         self.assertRegex(content, (
-            r'(?s)<span class="competency-approval-name">Communicating</span>.*?'
+            r'(?s)<span class="competency-approval-name" title="Communication: Communicating">Communicating</span>.*?'
             r'<label class="btn btn-default active">\s*'
             rf'<input type="radio" name="{self_assessment_field_name(self.communicating.pk)}" value="" autocomplete="off" checked>Skip'
             r'.*?<label class="btn btn-default competency-level competency-level-4">\s*'
@@ -423,11 +435,15 @@ class SelfAssessmentShownTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.brainstorm.pk]))
 
         self.assertContains(response, (
-            '<span class="competency-approval-name">Choose a design opportunity\n'
+            '<span class="competency-approval-name" title="ADST 9: Applied Design - Defining: Choose a design opportunity">'
+            'Choose a design opportunity <small class="text-muted">(ADST 9)</small>\n'
             '      <span class="label competency-level competency-level-4 competency-self" '
             'title="The student\'s self-assessment, not counted">Self: Nailed It</span></span>'
         ))
-        self.assertContains(response, '<span class="competency-approval-name">Use materials safely</span>')
+        self.assertContains(response, (
+            '<span class="competency-approval-name" title="ADST 9: Applied Design - Making: Use materials safely">'
+            'Use materials safely <small class="text-muted">(ADST 9)</small></span>'
+        ))
 
     def test_approvals_tab__self_assessments_fetched_for_the_page(self):
         """ The approvals page fetches every row's self-assessments at once, as it does their levels """

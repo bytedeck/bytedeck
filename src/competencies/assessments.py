@@ -335,16 +335,21 @@ def record_self_assessments(submission, chosen):
 
 def describe_self_assessments(chosen):
     """ The student's self-assessment, one line per competency, for the comment they hand the quest in
-    with, as the other choices they make on the form are listed there. A long name is cut short.
+    with, as the other choices they make on the form are listed there. A long name is cut short, and
+    the competency's course follows it, since courses can share a competency's wording.
 
     Args:
         chosen (list[tuple[QuestCompetency, int]]): what posted_self_assessments returned.
 
     Returns:
-        list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity: Proficient".
+        list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity (ADST 9): Proficient".
     """
     labels = SiteConfig.get().get_competency_scale_labels()
-    return [f"Self-assessment of {truncatechars(link.competency.name, 50)}: {labels[level]}" for link, level in chosen]
+    lines = []
+    for link, level in chosen:
+        course = f" ({link.competency.course})" if link.competency.course else ""
+        lines.append(f"Self-assessment of {truncatechars(link.competency.name, 50)}{course}: {labels[level]}")
+    return lines
 
 
 def assessments_comment_html(assessments):
