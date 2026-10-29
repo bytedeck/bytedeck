@@ -358,9 +358,10 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
     def test_summary__a_table_of_courses_then_a_tab_each_listing_every_competency(self):
         """ Like Mark Calculations: a table of the student's courses (then other sets with evidence) with
         each one's average and current level of proficiency, then a tab per course listing all its
-        competencies by category, each with its current level's three-letter code (or "n/a") then a
-        fixed-width chip per assessment showing its code, oldest first, linking to the submission and titled
-        with the level, quest and date, or "n/a" """
+        competencies by category, each with its current level's three-letter code (or "n/a"), a dot per
+        assessment raised to its level (from two assessments on), then a fixed-width chip per assessment
+        showing its code, oldest first, linking to the submission and titled with the level, quest and
+        date, or "n/a" """
         brainstorm = self.submission("Brainstorm")
         prototype = self.submission("Prototype")
         self.assess(self.defining, ProficiencyLevel.DEVELOPING, minutes_ago=60 * 24 * 3, source=brainstorm)
@@ -383,8 +384,9 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'<a href="#{pane}" role="tab" data-toggle="tab">Digital Hackerspace</a>'
             r'.*?<a href="#course-pane-core" role="tab" data-toggle="tab">Core</a>'
             rf'.*?<div role="tabpanel" class="tab-pane active" id="{pane}">\s*<h3>Explanation</h3>.*?<h3>ADST 9 Competencies</h3>'
-            r'.*?<th class="competency-summary-name">Competency</th>\s*<th>Current level</th>\s*<th>Assessments, oldest first</th>'
-            r'.*?<tr class="info"><th colspan="3">Applied Design - Defining</th></tr>\s*'
+            r'.*?<th class="competency-summary-name">Competency</th>\s*<th>Current level</th>\s*<th>Over time</th>\s*'
+            r'<th>Assessments, oldest first</th>'
+            r'.*?<tr class="info"><th colspan="4">Applied Design - Defining</th></tr>\s*'
             rf'<tr id="{pane}-competency-{self.defining.pk}">\s*'
             r'<td title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</td>\s*'
             r'<td class="competency-summary-current">\s*'
@@ -392,6 +394,10 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'<a href="{reverse("competencies:override", args=[self.student.pk, self.defining.pk])}" class="btn btn-default btn-xs"\s*'
             r'title="Set or clear this level: it stands in place of the level worked out from the evidence">'
             r'<i class="fa fa-pencil"></i></a>\s*</td>\s*'
+            r'<td class="competency-summary-history">\s*<span class="competency-history" role="img"\s*'
+            r'title="Level over time, oldest first: Developing, Nailed It"\s*aria-label="Level over time, oldest first: Developing, Nailed It">'
+            r'<span class="competency-history-dot competency-level-2"></span>'
+            r'<span class="competency-history-dot competency-level-4"></span></span>\s*</td>\s*'
             r'<td class="competency-summary-evidence">\s*'
             rf'<a href="{brainstorm.get_absolute_url()}" class="label competency-code competency-level competency-level-2"\s*'
             r'title="Developing: Brainstorm, [^"]+">DEV</a>\s*'
@@ -399,7 +405,7 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             r'title="Nailed It: Prototype, [^"]+">NAI</a>'
             r'.*?Generate potential ideas</td>\s*<td class="competency-summary-current">\s*'
             r'<span class="text-muted" title="Not yet assessed">n/a</span>\s*<a [^>]+><i class="fa fa-pencil"></i></a>\s*</td>\s*'
-            r'<td class="competency-summary-evidence">\s*'
+            r'<td class="competency-summary-history">\s*</td>\s*<td class="competency-summary-evidence">\s*'
             r'<span class="text-muted" title="Not yet assessed">n/a</span>'
             r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Explanation</h3>.*?<h3>Core Competencies</h3>'
             r'.*?competency-level-3"\s*title="Got It: Prototype, [^"]+">GOT</a>'
@@ -408,6 +414,11 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
         latest.refresh_from_db()
         self.assertIn(f'title="Nailed It: Prototype, {date_filter(timezone.localtime(latest.timestamp))}"', content)
         self.assertNotContains(response, "Retired competency")
+        # one assessment is no trend yet: Collaborating, in the Core tab, has no dots
+        self.assertRegex(content, (
+            r'(?s)id="course-pane-core".*?<td class="competency-summary-history">\s*</td>\s*'
+            r'<td class="competency-summary-evidence">'
+        ))
 
     def test_summary__each_course_explains_how_its_level_is_worked_out(self):
         """ At the top of each course's tab: how many competencies it has and what each point on the

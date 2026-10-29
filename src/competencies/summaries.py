@@ -72,7 +72,7 @@ class CourseCompetencies:
     Attributes:
         label (str): the official course label, e.g. "ADST 9" ('' for competencies with none).
         registration (CourseStudent or None): the student's registration in a course that chose this
-            set, or None for a set they have evidence in outside their courses.
+            set, or None for a set they have a level in outside their courses.
         competencies (list[Competency]): the course's competencies, in category and name order.
         levels (dict[int, int]): competency pk to the student's current level, for those with one.
         overrides (dict[int, CompetencyOverride]): competency pk to the teacher's override in force,
@@ -125,7 +125,7 @@ class CourseCompetencies:
 
 def course_competencies(student):
     """ The student's competencies, course by course: first each of their current courses that has a
-    competency set, then each other set they have evidence in, by label.
+    competency set, then each other set they have a level in, by label.
 
     Current levels come from the roll-up (competencies.rollup.current_levels), and a set the student
     has a level in only through a teacher's override shows too. It takes four queries, however many
