@@ -2,14 +2,15 @@
 
 Every page that shows a current level (the course levels on a student's profile, their competencies
 page, and the staff competency matrix with its CSV) reads it through current_levels, so the deck's
-roll-up strategy (SiteConfig.competency_rollup) changes them all alike.
+roll-up strategy (SiteConfig.competency_rollup) changes them all alike, and a level a teacher has set
+(a CompetencyOverride) stands in place of the roll-up on all of them.
 """
 
 from collections import Counter, defaultdict
 
 from siteconfig.models import SiteConfig
 
-from .models import CompetencyAssessment, RollupStrategy
+from .models import CompetencyAssessment, CompetencyOverride, RollupStrategy
 
 
 def roll_up(levels, strategy, count):
@@ -59,9 +60,10 @@ def describe_rollup(config):
     return "the level of its most recent assessment"
 
 
-def current_levels(**filters):
-    """ Each student's current level in each competency they have been assessed in, by the deck's
-    roll-up strategy, from the assessments matching the filters.
+def evidence_levels(**filters):
+    """ Each student's level in each competency they have been assessed in, by the deck's roll-up
+    strategy, from the assessments matching the filters: their current level, unless a teacher has
+    set one (see current_levels).
 
     It takes one query, which serves one student's profile or a whole class alike: each student's
     assessments of each competency are read oldest first (ties on the timestamp in the order they
@@ -86,3 +88,26 @@ def current_levels(**filters):
         for competency_id, history in competencies.items():
             levels[user_id][competency_id] = roll_up(history, config.competency_rollup, config.competency_rollup_count)
     return levels
+
+
+def current_levels(**filters):
+    """ Each student's current level in each competency: the level a teacher has set for them, where
+    there is an override in force, else the roll-up of their evidence (evidence_levels).
+
+    It takes two queries, however many students and competencies there are.
+
+    Args:
+        **filters: filters choosing the students and competencies, which apply to the assessments and
+            the overrides alike, e.g. ``user=student`` or ``user_id__in=[...], competency__course="ADST 9"``.
+
+    Returns:
+        tuple: the levels (a defaultdict of user pk to a dict of competency pk to the current level,
+        for the competencies each has a level in), and the overrides in force (a defaultdict of user
+        pk to a dict of competency pk to the CompetencyOverride, with who set it).
+    """
+    levels = evidence_levels(**filters)
+    overrides = defaultdict(dict)
+    for override in CompetencyOverride.objects.filter(**filters).in_force().select_related('set_by__profile'):
+        overrides[override.user_id][override.competency_id] = override
+        levels[override.user_id][override.competency_id] = override.level
+    return levels, overrides

@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from model_bakery import baker
 
-from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel, RollupStrategy
+from competencies.models import Competency, CompetencyAssessment, CompetencyOverride, ProficiencyLevel, RollupStrategy
 from competencies.summaries import course_competencies, course_matrix
 from competencies.tests.test_approval import set_competencies_flag
 from competencies.tests.test_profile_views import own_query_count
@@ -116,20 +116,23 @@ class CourseMatrixTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
                 own = next(course for course in course_competencies(row.registration.user) if course.registration == row.registration)
                 self.assertEqual((row.competencies, row.average, row.level), (own.competencies, own.average, own.level))
 
-    def test_course_matrix__three_queries(self):
-        """ It takes three queries however many students and competencies there are """
+    def test_course_matrix__four_queries(self):
+        """ It takes four queries however many students and competencies there are """
         for _ in range(5):
             student = baker.make(User)
             self.register(student, self.block_a)
             for competency in (self.defining, self.making, self.retired):
                 self.assess(student, competency, ProficiencyLevel.PROFICIENT)
+            CompetencyOverride.objects.create(user=student, competency=self.making, level=ProficiencyLevel.EMERGING, set_by=self.teacher)
 
         with CaptureQueriesContext(connection) as queries:
             columns, rows = course_matrix(self.course)
             names = [(row.registration.user.profile.teacher_name(), row.registration.block.name, row.average) for row in rows]
+            setters = [override.set_by.profile.preferred_full_name() for row in rows for override in row.overrides.values()]
 
         self.assertEqual(len(names), 7)
-        self.assertEqual(own_query_count(queries), 3)
+        self.assertEqual(len(setters), 5)
+        self.assertEqual(own_query_count(queries), 4)
 
 
 class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
@@ -162,9 +165,9 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
             rf'(?s)<td><a href="{self.zed.profile.get_absolute_url()}">Zoe Zed</a></td>\s*<td>A</td>\s*<td>\s*'
             rf'<a href="{summary}\?course={pane}"\s*title="3.50 / 4"><span class="label competency-level competency-level-4">Extending</span></a>'
             rf'.*?<a href="{summary}\?course={pane}#{pane}-competency-{self.defining.pk}"\s*'
-            r'class="label competency-code competency-level competency-level-3" title="Got It: Choose a design opportunity">GOT</a>'
+            r'class="label competency-code competency-level competency-level-3"\s*title="Got It: Choose a design opportunity">GOT</a>'
             rf'.*?<a href="{summary}\?course={pane}#{pane}-competency-{self.making.pk}"\s*'
-            r'class="label competency-code competency-level competency-level-4" title="Extending: Use materials safely">EXT</a>'
+            r'class="label competency-code competency-level competency-level-4"\s*title="Extending: Use materials safely">EXT</a>'
         ))
         self.assertRegex(content, r'(?s)Ann Adams</a></td>\s*<td>B</td>.*?<span class="text-muted" title="Not yet assessed">n/a</span>')
         self.assertNotContains(response, "Retired without evidence")
@@ -269,7 +272,7 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.teacher)
         summary = reverse('competencies:summary', args=[self.zed.pk])
         profile = reverse('profiles:profile_detail', args=[self.zed.profile.pk])
-        cell = 'class="label competency-code competency-level competency-level-{}" title="{}: Choose a design opportunity">{}</a>'
+        cell = 'class="label competency-code competency-level competency-level-{}"\n              title="{}: Choose a design opportunity">{}</a>'
 
         # the most recent assessment, by default: Emerging, so 1 / 2 = 0.5 rounds to Emerging
         response = self.client.get(self.matrix_url())

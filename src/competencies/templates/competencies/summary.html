@@ -65,6 +65,7 @@
           current level in it, which is {{ rollup }}, on the Proficiency Scale:
           {% for level, label, code in scale %}{{ label }} ({{ code }}) counts {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}.
           A competency not yet assessed (n/a) counts 0.
+          {% if pane.overridden %}Where your teacher has set your level in a competency (outlined below), that level counts instead.{% endif %}
         </li>
         <li>
           {% if pane.level_counts %}
@@ -123,7 +124,12 @@
             <tr id="{{ course.pane_id }}-competency-{{ row.competency.pk }}">
               <td title="{{ row.competency.qualified_name }}">{{ row.competency.name }}</td>
               <td class="competency-summary-current">
-                {% if row.level %}<span class="label competency-code competency-level competency-level-{{ row.level }}" title="{{ row.label }}">{{ row.code }}</span>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+                {% if row.override %}
+                  <span class="label competency-code competency-level competency-level-{{ row.level }} competency-override"
+                    title="{{ row.label }}: set by {{ row.override.set_by.profile.preferred_full_name|default:'a teacher' }} on {{ row.override.timestamp|date }}{% if request.user.is_staff and row.override.note %}: {{ row.override.note }}{% endif %}">{{ row.code }}</span>
+                {% elif row.level %}<span class="label competency-code competency-level competency-level-{{ row.level }}" title="{{ row.label }}">{{ row.code }}</span>{% else %}<span class="text-muted" title="Not yet assessed">n/a</span>{% endif %}
+                {% if request.user.is_staff %}<a href="{% url 'competencies:override' student.pk row.competency.pk %}" class="btn btn-default btn-xs"
+                  title="Set or clear this level: it stands in place of the level worked out from the evidence"><i class="fa fa-pencil"></i></a>{% endif %}
               </td>
               <td class="competency-summary-evidence">
                 {% for evidence in row.evidence %}

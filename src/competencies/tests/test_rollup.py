@@ -8,8 +8,8 @@ from django.utils import timezone
 
 from model_bakery import baker
 
-from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel, RollupStrategy
-from competencies.rollup import current_levels, describe_rollup, roll_up
+from competencies.models import Competency, CompetencyAssessment, CompetencyOverride, ProficiencyLevel, RollupStrategy
+from competencies.rollup import current_levels, describe_rollup, evidence_levels, roll_up
 from competencies.tests.test_profile_views import own_query_count
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
@@ -109,9 +109,8 @@ class RollupSettingsTest(ByteDeckTenantTestCase):
         self.assertIn('competency_rollup_count', raised.exception.message_dict)
 
 
-class CurrentLevelsTest(ByteDeckTenantTestCase):
-    """ Tests for current_levels, the roll-up of students' evidence into their current level per
-    competency that every page showing a current level reads. """
+class EvidenceLevelsTest(ByteDeckTenantTestCase):
+    """ Tests for evidence_levels, the roll-up of students' evidence into their level per competency. """
 
     def setUp(self):
         """ Creates two students and two competencies to assess them on. """
@@ -131,7 +130,7 @@ class CurrentLevelsTest(ByteDeckTenantTestCase):
         CompetencyAssessment.objects.filter(pk=assessment.pk).update(timestamp=timezone.now() - timedelta(minutes=minutes_ago))
         return assessment
 
-    def test_current_levels__the_default_is_the_most_recent(self):
+    def test_evidence_levels__the_default_is_the_most_recent(self):
         """ By default each competency's current level is its most recent assessment's, whatever order
         they were recorded in """
         self.assess(self.thinking, DEV, minutes_ago=5)
@@ -139,32 +138,32 @@ class CurrentLevelsTest(ByteDeckTenantTestCase):
         self.assess(self.communicating, EMG, minutes_ago=20)
         self.assess(self.communicating, PRF, minutes_ago=10)
 
-        self.assertEqual(current_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV, self.communicating.pk: PRF})
+        self.assertEqual(evidence_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV, self.communicating.pk: PRF})
 
-    def test_current_levels__timestamp_ties_go_to_the_one_recorded_last(self):
+    def test_evidence_levels__timestamp_ties_go_to_the_one_recorded_last(self):
         """ Two assessments stamped the same moment are taken in the order they were recorded """
         earlier = self.assess(self.thinking, DEV, minutes_ago=5)
         later = self.assess(self.thinking, PRF, minutes_ago=5)
         # each assess() reads the clock separately, so give the two the very same stamp
         CompetencyAssessment.objects.filter(pk__in=[earlier.pk, later.pk]).update(timestamp=timezone.now() - timedelta(minutes=5))
 
-        self.assertEqual(current_levels(user=self.student)[self.student.pk], {self.thinking.pk: PRF})
+        self.assertEqual(evidence_levels(user=self.student)[self.student.pk], {self.thinking.pk: PRF})
 
-    def test_current_levels__by_the_decks_strategy(self):
+    def test_evidence_levels__by_the_decks_strategy(self):
         """ Switching the deck's strategy changes the current levels it gives """
         for minutes_ago, level in ((40, EXT), (30, DEV), (20, PRF), (10, DEV)):
             self.assess(self.thinking, level, minutes_ago)
 
         set_rollup(RollupStrategy.HIGHEST)
-        self.assertEqual(current_levels(user=self.student)[self.student.pk], {self.thinking.pk: EXT})
+        self.assertEqual(evidence_levels(user=self.student)[self.student.pk], {self.thinking.pk: EXT})
 
         set_rollup(RollupStrategy.MOST_COMMON, count=3)
-        self.assertEqual(current_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV})
+        self.assertEqual(evidence_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV})
 
         set_rollup(RollupStrategy.MOST_RECENT)
-        self.assertEqual(current_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV})
+        self.assertEqual(evidence_levels(user=self.student)[self.student.pk], {self.thinking.pk: DEV})
 
-    def test_current_levels__each_student_separately_and_filtered(self):
+    def test_evidence_levels__each_student_separately_and_filtered(self):
         """ Over several students each gets their own levels, the filters choose the students and
         competencies, and a student with no evidence has none """
         self.assess(self.thinking, DEV, minutes_ago=10)
@@ -172,13 +171,13 @@ class CurrentLevelsTest(ByteDeckTenantTestCase):
         self.assess(self.communicating, EMG, minutes_ago=5, user=self.other_student)
         nobody = baker.make(User)
 
-        levels = current_levels(user_id__in=[self.student.pk, self.other_student.pk, nobody.pk], competency=self.thinking)
+        levels = evidence_levels(user_id__in=[self.student.pk, self.other_student.pk, nobody.pk], competency=self.thinking)
 
         self.assertEqual(levels[self.student.pk], {self.thinking.pk: DEV})
         self.assertEqual(levels[self.other_student.pk], {self.thinking.pk: EXT})
         self.assertEqual(levels[nobody.pk], {})
 
-    def test_current_levels__one_query(self):
+    def test_evidence_levels__one_query(self):
         """ A whole class's levels take one query, however many students and competencies there are """
         students = baker.make(User, _quantity=3)
         for student in students:
@@ -188,7 +187,94 @@ class CurrentLevelsTest(ByteDeckTenantTestCase):
         SiteConfig.get()  # the deck's settings are cached between requests
 
         with CaptureQueriesContext(connection) as queries:
-            levels = current_levels(user_id__in=[student.pk for student in students])
+            levels = evidence_levels(user_id__in=[student.pk for student in students])
 
         self.assertEqual(own_query_count(queries), 1)
         self.assertEqual(sum(len(student_levels) for student_levels in levels.values()), 9)
+
+
+class CurrentLevelsTest(ByteDeckTenantTestCase):
+    """ Tests for current_levels, which every page showing a current level reads: a teacher's override in
+    force, else the roll-up of the evidence. """
+
+    def setUp(self):
+        """ Creates a teacher, two students and two competencies, the student assessed Developing in one. """
+        self.teacher = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.other_student = baker.make(User)
+        self.thinking = baker.make(Competency, name="Critical Thinking")
+        self.communicating = baker.make(Competency, name="Communicating")
+        CompetencyAssessment.objects.create(user=self.student, competency=self.thinking, level=DEV)
+
+    def override(self, level, user=None, competency=None):
+        """ Records an override of the student's level (or a clearing, with no level), by the teacher.
+
+        Returns:
+            CompetencyOverride: the saved record.
+        """
+        return CompetencyOverride.objects.create(
+            user=user or self.student, competency=competency or self.thinking, level=level, set_by=self.teacher,
+        )
+
+    def test_current_levels__the_evidence_without_an_override(self):
+        """ With no override, the current levels are the roll-up of the evidence, and there are no overrides """
+        levels, overrides = current_levels(user=self.student)
+
+        self.assertEqual(levels[self.student.pk], {self.thinking.pk: DEV})
+        self.assertEqual(overrides[self.student.pk], {})
+
+    def test_current_levels__an_override_wins_and_clearing_it_reverts(self):
+        """ An override stands in place of the evidence's level; a later one replaces it; clearing it
+        brings back the level worked out from the evidence """
+        first = self.override(EXT)
+        levels, overrides = current_levels(user=self.student)
+        self.assertEqual(levels[self.student.pk], {self.thinking.pk: EXT})
+        self.assertEqual(overrides[self.student.pk], {self.thinking.pk: first})
+
+        second = self.override(EMG)
+        levels, overrides = current_levels(user=self.student)
+        self.assertEqual(levels[self.student.pk], {self.thinking.pk: EMG})
+        self.assertEqual(overrides[self.student.pk], {self.thinking.pk: second})
+
+        self.override(None)
+        levels, overrides = current_levels(user=self.student)
+        self.assertEqual(levels[self.student.pk], {self.thinking.pk: DEV})
+        self.assertEqual(overrides[self.student.pk], {})
+
+    def test_current_levels__an_override_without_evidence(self):
+        """ A teacher can set a level in a competency the student hasn't been assessed in yet """
+        override = self.override(PRF, competency=self.communicating)
+
+        levels, overrides = current_levels(user=self.student)
+
+        self.assertEqual(levels[self.student.pk], {self.thinking.pk: DEV, self.communicating.pk: PRF})
+        self.assertEqual(overrides[self.student.pk], {self.communicating.pk: override})
+
+    def test_current_levels__overrides_filtered_alike(self):
+        """ The filters choose the overrides as they do the assessments: another student's, or another
+        competency's, don't apply """
+        self.override(EXT, user=self.other_student)
+        self.override(EXT, competency=self.communicating)
+
+        levels, overrides = current_levels(user=self.student, competency=self.thinking)
+
+        self.assertEqual(levels[self.student.pk], {self.thinking.pk: DEV})
+        self.assertEqual(overrides[self.student.pk], {})
+        self.assertNotIn(self.other_student.pk, levels)
+
+    def test_current_levels__two_queries(self):
+        """ A whole class's levels and overrides take two queries, with who set each override """
+        students = baker.make(User, _quantity=3)
+        for student in students:
+            for competency in baker.make(Competency, _quantity=3):
+                CompetencyAssessment.objects.create(user=student, competency=competency, level=PRF)
+                self.override(EXT, user=student, competency=competency)
+        SiteConfig.get()  # the deck's settings are cached between requests
+
+        with CaptureQueriesContext(connection) as queries:
+            levels, overrides = current_levels(user_id__in=[student.pk for student in students])
+            setters = {override.set_by.profile.preferred_full_name() for user in overrides.values() for override in user.values()}
+
+        self.assertEqual(own_query_count(queries), 2)
+        self.assertEqual(sum(len(student_levels) for student_levels in levels.values()), 9)
+        self.assertEqual(len(setters), 1)

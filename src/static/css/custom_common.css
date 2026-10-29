@@ -1665,6 +1665,14 @@ table[data-toggle="table"].bt-reveal {
     outline-offset: -2px;
 }
 
+/* A current level a teacher has set for a student (a CompetencyOverride), standing in place of the
+   level worked out from the evidence: outlined, on the competencies page, the matrix and the page
+   where it is set. */
+.label.competency-override {
+    outline: 2px dashed #777;
+    outline-offset: 1px;
+}
+
 /* The staff competency matrix (competencies/matrix.html): a course's students by its competencies.
    The competency names stand on end over their narrow columns (cut short, in full in the title),
    under their categories, and each cell holds one fixed-width level code. */

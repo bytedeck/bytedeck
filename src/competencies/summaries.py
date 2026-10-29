@@ -4,9 +4,9 @@ assessment of every competency on their competencies summary page.
 A course's competencies are those carrying its official course label (Competency.course). The courses
 shown for a student are the courses they are registered in this semester that have chosen a
 competency set (Course.competency_set), whether or not they have been assessed in them yet, plus any
-other set they have evidence in (e.g. the BC Core Competencies, which no course chooses as its set).
-Within a course, the competencies counted are its active ones, plus any deactivated ones the student
-already has evidence for.
+other set they have a level in (e.g. the BC Core Competencies, which no course chooses as its set),
+from evidence or a teacher's override. Within a course, the competencies counted are its active
+ones, plus any deactivated ones the student already has a level in.
 """
 
 import math
@@ -74,12 +74,15 @@ class CourseCompetencies:
         registration (CourseStudent or None): the student's registration in a course that chose this
             set, or None for a set they have evidence in outside their courses.
         competencies (list[Competency]): the course's competencies, in category and name order.
-        levels (dict[int, int]): competency pk to the student's current level, for those assessed.
+        levels (dict[int, int]): competency pk to the student's current level, for those with one.
+        overrides (dict[int, CompetencyOverride]): competency pk to the teacher's override in force,
+            for those whose current level a teacher has set.
     """
     label: str
     registration: object = None
     competencies: list = field(default_factory=list)
     levels: dict = field(default_factory=dict)
+    overrides: dict = field(default_factory=dict)
 
     @property
     def title(self):
@@ -124,8 +127,9 @@ def course_competencies(student):
     """ The student's competencies, course by course: first each of their current courses that has a
     competency set, then each other set they have evidence in, by label.
 
-    Current levels come from the roll-up (competencies.rollup.current_levels). It takes three
-    queries, however many courses and competencies there are.
+    Current levels come from the roll-up (competencies.rollup.current_levels), and a set the student
+    has a level in only through a teacher's override shows too. It takes four queries, however many
+    courses and competencies there are.
 
     Args:
         student (User): the student.
@@ -133,13 +137,14 @@ def course_competencies(student):
     Returns:
         list[CourseCompetencies]: one per course whose set has at least one competency.
     """
-    levels = current_levels(user=student)[student.pk]
+    levels, overrides = current_levels(user=student)
+    levels, overrides = levels[student.pk], overrides[student.pk]
     registrations = [
         registration for registration in CourseStudent.objects.current_courses(student).select_related('course', 'block')
         if registration.course.competency_set
     ]
     registered_labels = {registration.course.competency_set for registration in registrations}
-    # the sets the student has evidence in, read in the same query as the competencies
+    # the sets the student has a level in, read in the same query as the competencies
     assessed_labels = Competency.objects.filter(pk__in=list(levels)).values('course')
 
     competencies = Competency.objects.filter(
@@ -148,10 +153,10 @@ def course_competencies(student):
     by_label = {label: list(group) for label, group in groupby(competencies, key=lambda competency: competency.course)}
 
     courses = [
-        CourseCompetencies(registration.course.competency_set, registration, by_label[registration.course.competency_set], levels)
+        CourseCompetencies(registration.course.competency_set, registration, by_label[registration.course.competency_set], levels, overrides)
         for registration in registrations if registration.course.competency_set in by_label
     ]
-    courses += [CourseCompetencies(label, None, by_label[label], levels) for label in by_label if label not in registered_labels]
+    courses += [CourseCompetencies(label, None, by_label[label], levels, overrides) for label in by_label if label not in registered_labels]
     return courses
 
 
@@ -163,10 +168,10 @@ def course_matrix(course, block=None):
 
     Each row is the same CourseCompetencies the student's own competencies page shows for the course,
     so its average and current level of proficiency match it: the set's active competencies, plus any
-    deactivated ones that student has evidence for. The columns are the set's active competencies plus
-    any deactivated ones some row has evidence for.
+    deactivated ones that student has a level in. The columns are the set's active competencies plus
+    any deactivated ones some row has a level in.
 
-    It takes three queries, however many students and competencies there are.
+    It takes four queries, however many students and competencies there are.
 
     Args:
         course (Course): the course, which has a competency set.
@@ -181,7 +186,9 @@ def course_matrix(course, block=None):
         registrations = registrations.filter(block=block)
     registrations = list(registrations.select_related('user__profile', 'block').order_by('user__last_name', 'user__first_name', 'user__username'))
 
-    levels = current_levels(user_id__in=[registration.user_id for registration in registrations], competency__course=course.competency_set)
+    levels, overrides = current_levels(
+        user_id__in=[registration.user_id for registration in registrations], competency__course=course.competency_set,
+    )
     assessed = {competency_id for student_levels in levels.values() for competency_id in student_levels}
 
     columns = list(Competency.objects.filter(course=course.competency_set).filter(Q(active=True) | Q(pk__in=assessed)))
@@ -191,6 +198,7 @@ def course_matrix(course, block=None):
             registration,
             [competency for competency in columns if competency.active or competency.pk in levels[registration.user_id]],
             levels[registration.user_id],
+            overrides[registration.user_id],
         )
         for registration in registrations
     ]

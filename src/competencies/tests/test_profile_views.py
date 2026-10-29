@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from model_bakery import baker
 
-from competencies.models import Competency, CompetencyAssessment, ProficiencyLevel
+from competencies.models import Competency, CompetencyAssessment, CompetencyOverride, ProficiencyLevel
 from competencies.summaries import CourseCompetencies, course_competencies, evidence_by_competency, level_codes
 from competencies.tests.test_approval import set_competencies_flag
 from courses.models import Block, Course, CourseStudent, Semester
@@ -158,17 +158,23 @@ class CourseCompetenciesTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
 
         self.assertEqual([course.title for course in course_competencies(self.student)], ["Digital Hackerspace"])
 
-    def test_course_competencies__three_queries(self):
-        """ It takes three queries however many courses and competencies there are """
+    def test_course_competencies__four_queries(self):
+        """ It takes four queries however many courses, competencies and overrides there are, with who set
+        each override """
         for competency in (self.defining, self.making, self.collaborating):
             self.assess(competency, ProficiencyLevel.PROFICIENT, minutes_ago=5)
+        for competency in (self.ideating, self.collaborating):
+            CompetencyOverride.objects.create(user=self.student, competency=competency, level=ProficiencyLevel.EXTENDING, set_by=self.teacher)
 
         with CaptureQueriesContext(connection) as queries:
             courses = course_competencies(self.student)
-            summaries = [(course.title, course.average) for course in courses]
+            summaries = [
+                (course.title, course.average, [override.set_by.profile.preferred_full_name() for override in course.overrides.values()])
+                for course in courses
+            ]
 
         self.assertEqual(len(summaries), 2)
-        self.assertEqual(own_query_count(queries), 3)
+        self.assertEqual(own_query_count(queries), 4)
 
     def test_average__a_course_with_no_competencies_is_zero(self):
         """ A course with no competencies averages 0, rather than dividing by zero """
@@ -382,14 +388,18 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             rf'<tr id="{pane}-competency-{self.defining.pk}">\s*'
             r'<td title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</td>\s*'
             r'<td class="competency-summary-current">\s*'
-            r'<span class="label competency-code competency-level competency-level-4" title="Nailed It">NAI</span>\s*</td>\s*'
+            r'<span class="label competency-code competency-level competency-level-4" title="Nailed It">NAI</span>\s*'
+            rf'<a href="{reverse("competencies:override", args=[self.student.pk, self.defining.pk])}" class="btn btn-default btn-xs"\s*'
+            r'title="Set or clear this level: it stands in place of the level worked out from the evidence">'
+            r'<i class="fa fa-pencil"></i></a>\s*</td>\s*'
             r'<td class="competency-summary-evidence">\s*'
             rf'<a href="{brainstorm.get_absolute_url()}" class="label competency-code competency-level competency-level-2"\s*'
             r'title="Developing: Brainstorm, [^"]+">DEV</a>\s*'
             rf'<a href="{prototype.get_absolute_url()}" class="label competency-code competency-level competency-level-4"\s*'
             r'title="Nailed It: Prototype, [^"]+">NAI</a>'
             r'.*?Generate potential ideas</td>\s*<td class="competency-summary-current">\s*'
-            r'<span class="text-muted" title="Not yet assessed">n/a</span>\s*</td>\s*<td class="competency-summary-evidence">\s*'
+            r'<span class="text-muted" title="Not yet assessed">n/a</span>\s*<a [^>]+><i class="fa fa-pencil"></i></a>\s*</td>\s*'
+            r'<td class="competency-summary-evidence">\s*'
             r'<span class="text-muted" title="Not yet assessed">n/a</span>'
             r'.*?<div role="tabpanel" class="tab-pane " id="course-pane-core">\s*<h3>Explanation</h3>.*?<h3>Core Competencies</h3>'
             r'.*?competency-level-3"\s*title="Got It: Prototype, [^"]+">GOT</a>'

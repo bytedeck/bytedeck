@@ -209,3 +209,72 @@ class CompetencyAssessment(models.Model):
     def __str__(self):
         """ Returns "<student>: <competency> = <level label>" for admin and debugging output. """
         return f"{self.user}: {self.competency} = {self.get_level_display()}"
+
+
+class CompetencyOverrideQuerySet(models.QuerySet):
+    """ Custom queryset for CompetencyOverride. """
+
+    def in_force(self):
+        """ The overrides that stand: for each student and competency in this queryset, its latest
+        record (ties on the timestamp going to the one recorded last), unless that record cleared the
+        override.
+
+        It is one query: the latest record per student and competency is picked by a Postgres
+        ``DISTINCT ON`` subquery.
+
+        Returns:
+            QuerySet: at most one override per student and competency, each with a level.
+        """
+        latest = self.order_by('user_id', 'competency_id', '-timestamp', '-pk').distinct('user_id', 'competency_id')
+        return self.filter(pk__in=latest.values('pk')).exclude(level=None)
+
+
+class CompetencyOverride(models.Model):
+    """ A teacher's summative level for a student in a competency, which stands as the student's
+    current level in it in place of the roll-up of their evidence (see competencies.rollup), on
+    every page that shows one.
+
+    Each change is a new record, so who set which level, when and why stays on record: a student's
+    latest record for a competency is the one in force, and a record with no level clears the
+    override, so the roll-up of their evidence applies again.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='competency_overrides',
+        help_text="The student whose level it is."
+    )
+
+    competency = models.ForeignKey(
+        # PROTECT, as for evidence: a competency with a level set can be deactivated but never hard-deleted.
+        Competency, on_delete=models.PROTECT, related_name='overrides'
+    )
+
+    level = models.IntegerField(
+        choices=ProficiencyLevel.choices, null=True, blank=True,
+        help_text="The level that stands as the student's current level in the competency, "
+                  "or blank to clear the override."
+    )
+
+    note = models.TextField(blank=True, help_text="Why it was set or cleared. Only staff see it.")
+
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='competency_overrides_set',
+        help_text="The staff user who set or cleared it."
+    )
+
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    objects = CompetencyOverrideQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['-timestamp', '-pk']
+        indexes = [
+            models.Index(fields=['user', 'competency', 'timestamp'], name='competency_override_idx')
+        ]
+
+    def __str__(self):
+        """ Returns "<student>: <competency> set to <level label>", or "... cleared", for admin and debugging output. """
+        if self.level is None:
+            return f"{self.user}: {self.competency} cleared"
+        return f"{self.user}: {self.competency} set to {self.get_level_display()}"
