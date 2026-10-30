@@ -74,7 +74,7 @@ Once a quest has questions, the Questions page lists them with their type, instr
 
 The submission form gains one numbered answer field per question, in your order, above the usual comment box. Required questions must be answered before the quest can be submitted; optional ones say *(optional)*:
 
-![A student's submission form: Question 1 with a one-line box and "0 / 200 characters", Question 2 (optional) with a rich-text editor, and Question 3 with a file chooser saying "Allowed file types: Image"](../images/submission-questions/submission-form.png)
+![A student's submission form: Question 1 with a one-line box and "0 / 200 characters", Question 2 (optional) with a rich-text editor, and Question 3 (optional) with an "Attach a file" heading, a Choose file button, and help ending "Allowed file types: Image"](../images/submission-questions/submission-form.png)
 
 Short answers
 :   A counter under the box shows how much of the 200 characters is used, and the box stops accepting typing when it's full.
@@ -85,27 +85,54 @@ Long answers
 :   The same editor as the comment box, so students can format their answer and include images and links.
 
 File uploads
-:   The field says what it accepts, and the info icon beside it lists the exact file formats. A file of the wrong type, or over 16 MB, is refused with a message saying why, so the student can pick another.
+:   The student picks one file with **Choose file**. The help under the button says what the question accepts, and the info icon lists the exact file formats. A file of the wrong type, or over 16 MB, is refused with a message saying why, so the student can pick another.
 
 ### Answers save with the student's draft
 
-Students don't lose work in progress. Their answers are saved with their draft as they work: the draft saves itself about once a minute, and **Save Draft** saves it at once. A chosen file is saved straight away, and a note under the field says so:
+Students don't lose work in progress. Their answers are saved with their draft as they work: the draft saves itself about once a minute, and **Save Draft** saves it at once.
 
-![A file question after choosing a file: "Attached: thirds_photo.png (saved with your draft)"](../images/submission-questions/draft-file-saved.png)
+A chosen file is saved straight away, and listed above the button with a **Delete** button beside it, the same way files attached to the comment box are listed:
 
-When the student comes back later, their text answers are filled back in and their saved files are still attached. Choosing a new file for the same question replaces the saved one.
+![A file question after choosing a file: quest-map.png listed with a Delete button beside it, and the Choose file button below](../images/submission-questions/answer-file-saved.png)
 
-If submitting sends the student back to the form (a required answer was left blank, say), the files they chose are kept, so nothing needs choosing twice.
+* **Choosing another file** replaces the saved one: a file question holds one file.
+* **Delete** removes the saved file, for a file chosen by mistake. On an optional question it's how a student leaves the answer empty again.
+
+When the student comes back later, their text answers are filled back in and their saved file is still listed. If submitting sends the student back to the form (a required answer was left blank, say), the saved files are kept, so nothing needs choosing twice.
 
 ## Mark the answers
 
-When a student submits, their answers appear with the submission on **Quest Approvals**, each beside the question it answers. Your solution and marker notes are under each question, so comparing takes one glance:
+When a student submits, their answers appear with the submission, on **Quest Approvals** and on the submission's own page, in three columns: each **Question**, the **Answer provided**, and your **Solution**, so comparing takes one glance. The Solution column is marked *(visible to staff only)*, because students never see it.
 
-![A submission's answers: each question with its solution and marker notes on the left, and the student's answer on the right, including the solution image and the student's uploaded photo](../images/submission-questions/marking-answers.png)
+![A submission's answers in three columns: Question, Answer provided, and Solution (visible to staff only), with an X button beside each answer and an info button beside the first solution](../images/submission-questions/marking-answers.png)
 
-Images are shown in place, video and audio get a player, and every file has a link to the original. Any other kind of file is shown as its link.
+Images are shown in place, video and audio get a player, and every file has a link to the original. Any other kind of file is shown as its link. On a phone the columns stack: the question, then the answer, then the solution.
 
-Students see the same table on their own submission, headed **Your answer**, without your solutions or marker notes.
+A question with **marker notes** has an info button beside its solution. Press it to read the notes, formatting and all; they stay open until you press it again, press Escape or click elsewhere:
+
+![The marker notes open in a popup beside the first solution, reading "Look for campaigns as columns."](../images/submission-questions/marker-notes.png)
+
+### Mark answers wrong
+
+Beside each answer is an **X**. Press it to mark that answer wrong: the X turns red and the answer's row is highlighted. Press it again to take the mark back. Each press is saved at once, and until you return or approve the quest, only teachers see it.
+
+![The first answer marked wrong: its X is red and its row highlighted, and the other two answers are unmarked](../images/submission-questions/marking-wrong.png)
+
+When you **Return** or **Approve** the quest, every answer of that submission gets its mark, which the student sees too: a green check, or a red X (on a highlighted row) for each answer you marked wrong.
+
+* **Returning** the quest brings back only the questions you marked wrong. Each keeps its number, and a text answer starts with what the student wrote before, so they fix it rather than retype it. A file answer starts empty, with their earlier file still shown above. If you mark nothing wrong, no questions come back: the student just gets the comment box.
+* **Approving** works with or without marks: you can mark some answers wrong and still approve the quest, and the student sees which ones were wrong.
+* **Marks are final** once you return or approve. If you forget to mark an answer before returning, the student can answer in the comment box instead, or hand the quest back for you to look at again.
+
+Here's what the student sees after a return with the first answer marked wrong: their earlier answers with a red X or a green check,
+
+![The student's earlier answers: the first with a red X on a highlighted row, the other two with green checks](../images/submission-questions/returned-marks.png)
+
+and only Question 1 back on their form, holding their earlier answer:
+
+![The submission form after the return, with only Question 1, its box holding the earlier answer](../images/submission-questions/returned-redo.png)
+
+Students see the answers table on their own submission headed **Your answer**, without the Solution column or your marker notes.
 
 Approve, comment on or return the submission as usual: see [Review submissions](../quick-start/review-submissions.md).
 
