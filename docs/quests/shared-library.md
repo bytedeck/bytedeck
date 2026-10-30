@@ -12,41 +12,51 @@ That's why imported content always arrives unpublished, why an imported campaign
 
 ## Turn it on
 
-Only the deck owner can turn the Library on:
+Only the deck owner can turn the Library on, at the bottom of **Site Configuration**:
+
+![The Advanced section of Site Configuration, open (2), with Enable Shared Library ticked (3), Allow staff to export quests to the library unticked (4), and the Update button (5)](../images/shared-library/settings.png)
+/// caption
+The Advanced section of Site Configuration, with its settings that aren't about the Library left out.
+///
 
 1. Open **Admin > Site Configuration**.
 2. At the bottom of the page, press **Advanced** to open it.
-3. Tick **Enable Shared Library**, and press **Update**.
-
-![The Advanced section of Site Configuration, with Enable Shared Library ticked and Allow staff to export quests to the library unticked](../images/shared-library/settings.png)
-
-Enable Shared Library
-:   The master switch. With it off, your deck has no Library: no menu item, no importing, no sharing.
-
-Allow staff to export quests to the library
-:   Who may share from your deck. Off, only the owner can; on, any teacher can.
+3. Tick **Enable Shared Library**: the master switch. With it off, your deck has no Library: no menu item, no importing, no sharing.
+4. Tick **Allow staff to export quests to the library** if other teachers should be able to share from your deck. Unticked, only you can.
+5. Press **Update**.
 
 Once it's on, **Library** appears in the left menu for teachers:
 
-![The Library item in the left menu](../images/shared-library/sidebar.png)
+![The left menu, with the Library item outlined under Approvals](../images/shared-library/sidebar.png)
+/// caption
+The Library in the left menu.
+///
 
 ## Browse the Library
 
-The Library has two tabs, **Quests** and **Campaigns**. The search box searches the whole Library: quest names, campaign names and tags.
+![The Library's Quests tab (1), the Campaigns tab (2) and the search box (3), above the first few quests with their XP, campaign and tags](../images/shared-library/quests-tab.png)
+/// caption
+The Library's Quests tab. Each quest says which deck shared it.
+///
 
-![The Library's Quests tab, listing quests with their XP, campaign and tags](../images/shared-library/quests-tab.png)
+1. **Quests** lists every quest in the Library. Click one to see its summary and import it.
+2. **Campaigns** lists each campaign with how many quests it holds and their total XP.
+3. The search box searches the whole Library: quest names, campaign names and tags.
 
-Click a quest to see its summary and an **Import Quest** button:
+![The Library's Campaigns tab: Digital Citizenship and Orientation, with Digital Citizenship's information button (1) and import button (2)](../images/shared-library/campaigns-tab.png)
+/// caption
+The Campaigns tab, with the two buttons beside each campaign.
+///
 
-![A Library quest opened: "Check a website before you trust it." and an Import Quest button](../images/shared-library/quest-preview.png)
-
-The **Campaigns** tab lists each campaign with how many quests it holds and their total XP. Of the two buttons beside each, the blue one opens the campaign to read its quests, and the other imports it.
-
-![The Library's Campaigns tab: Digital Citizenship and Orientation, each with an information button and an import button](../images/shared-library/campaigns-tab.png)
+1. The blue button opens the campaign to read its quests.
+2. The other button imports it.
 
 Opening a campaign lists its quests. Click one to import just that quest, rather than the whole campaign.
 
-![A Library campaign's page: its description, quest count and XP, and its three quests](../images/shared-library/campaign-detail.png)
+![A Library campaign's page: who shared it, its description, quest count and XP, and its three quests](../images/shared-library/campaign-detail.png)
+/// caption
+A campaign in the Library, opened with its blue button.
+///
 
 ## Import from the Library
 
@@ -54,14 +64,26 @@ Importing **copies** a quest or campaign into your deck. The copy is yours: edit
 
 ### Import a quest
 
-1. In **Library**, on the **Quests** tab, click a quest and press **Import Quest**.
-2. Check the quest on the next page, which shows it as it will arrive, with its XP, tags and prerequisites, and press **Import**.
+1. In **Library**, on the **Quests** tab, click a quest and press its import button:
 
-    ![The Import Quest from Library page: Cancel and Import buttons, then the quest's details](../images/shared-library/import-quest-confirm.png)
+    ![A Library quest opened: "Check a website before you trust it." and its import button (1)](../images/shared-library/quest-preview.png)
+    /// caption
+    A quest in the Library, opened.
+    ///
+
+2. Check the quest on the next page, which shows it as it will arrive, with its XP, tags and prerequisites, and press **Import**:
+
+    ![The Import Quest from Library page: Cancel and Import (2), then the quest's name, summary and Quest Info](../images/shared-library/import-quest-confirm.png)
+    /// caption
+    The last check before an import.
+    ///
 
 3. The quest waits in your **Drafts** tab, and the message says what's left to do:
 
     ![The message after an import: "Successfully imported 'Spotting a Fake Source' to your deck. Two things left to do before students can see it: publish it, and give it a prerequisite so it is reachable on the quest map."](../images/shared-library/import-quest-result.png)
+    /// caption
+    The message after importing a quest.
+    ///
 
 A quest imported on its own arrives without a campaign, even if it's part of one in the Library. Import the campaign to bring the campaign.
 
@@ -74,11 +96,17 @@ Importing a campaign brings every published quest in it, with the prerequisites 
 
     If your deck already has some of its quests (because you imported them on their own first), the page says so. Importing replaces your copy's wording, name, tags and questions with the Library's, but keeps your own prerequisites on it and whether you'd published it. Tick **Keep my version** for any you'd rather leave exactly as they are:
 
-    ![The Digital Citizenship Campaign import page, warning that the deck already has Spotting a Fake Source, with a "Keep my version of Spotting a Fake Source" tick box](../images/shared-library/import-campaign-confirm.png)
+    ![The Digital Citizenship Campaign import page: Import (2), and a warning that the deck already has Spotting a Fake Source, with the "Keep my version of Spotting a Fake Source" tick box outlined](../images/shared-library/import-campaign-confirm.png)
+    /// caption
+    Importing a campaign when your deck already has one of its quests.
+    ///
 
 3. The campaign waits under your **Inactive** campaigns:
 
     ![The message after importing a campaign: "Successfully imported 'Digital Citizenship' to your deck. Two things left to do before students can see it: publish the campaign (which publishes its quests), and give its first quest a prerequisite so the campaign is reachable on the quest map."](../images/shared-library/import-campaign-result.png)
+    /// caption
+    The message after importing a campaign.
+    ///
 
 ### Your two steps after an import
 
@@ -93,7 +121,10 @@ The Library recognises its own content by an **Import ID**, so it knows which of
 
 * **A quest you've already imported can't be imported again.** The page says so and links to your copy. To get the Library's version back, delete your copy first. For a second copy, use **Copy** on your own quest.
 
-    ![The refusal: "Your deck already contains a quest with a matching Import ID", with a link to the existing quest](../images/shared-library/import-already-have.png)
+    ![The refusal: "Your deck already contains a quest with a matching Import ID", with the link to the existing quest outlined](../images/shared-library/import-already-have.png)
+    /// caption
+    Importing a quest your deck already has: the link opens your copy.
+    ///
 
 * **A campaign you've already imported can't be imported again** either. The page shows your copy instead.
 * **A name your deck already uses doesn't stop an import.** The arriving copy gets today's date added, such as `Photoshop Basics (Imported on 2026-10-08)`, and you're told. Rename it to suit your deck.
@@ -129,11 +160,18 @@ The deck owner can always share. Other teachers can share only if the owner has 
 
 1. On **Quests**, click your quest, and press its upload button (**Export this quest to the Library**):
 
-    ![A quest opened on the Quests page, with its row of buttons, the upload button second from the right](../images/shared-library/share-button.png)
+    ![A quest opened on the Quests page, with its row of buttons, the upload button (1) second from the right](../images/shared-library/share-button.png)
+    /// caption
+    A quest opened on the Quests page.
+    ///
 
-2. Read the licence, tick to agree, and press **Share Quest to Library**:
+2. Read the licence, and tick to agree.
+3. Press **Share Quest to Library**:
 
-    ![The Export Quest to Library page: the licence, the agreement tick box ticked, and the Share Quest to Library button](../images/shared-library/share-quest-confirm.png)
+    ![The Export Quest to Library page: the licence, the agreement tick box ticked (2), and the Share Quest to Library button (3)](../images/shared-library/share-quest-confirm.png)
+    /// caption
+    Sharing a quest to the Library.
+    ///
 
 A quest shared on its own doesn't take its campaign with it. Archived quests can't be shared; a draft can.
 
@@ -146,6 +184,9 @@ On **Admin > Campaigns**, press the campaign's upload button (**Export this Camp
 Shared content doesn't appear in the Library straight away. It arrives unpublished, and the people who look after the Library are told, so they can review and publish it:
 
 ![The message after sharing: "'Rule of Thirds' has been shared to the Library. A Library admin has been notified: it will appear in the Library once they review and publish it."](../images/shared-library/share-quest-result.png)
+/// caption
+The message after sharing a quest.
+///
 
 Your deck's name, your username and the date are kept with it, so other decks can see where it came from.
 
