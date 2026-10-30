@@ -48,7 +48,7 @@ QUEST_FIELDS_TRANSFERRED = frozenset({
     'max_repeats', 'max_xp', 'repeat_per_semester', 'hours_between_repeats', 'date_available',
     'time_available', 'date_expired', 'time_expired', 'icon', 'verification_required', 'hideable',
     'available_outside_course', 'instructions', 'submission_details', 'instructor_notes',
-    'quick_reply', 'blocking', 'map_transition', 'import_id',
+    'quick_reply', 'blocking', 'map_transition', 'import_id', 'competency_self_assessment',
 })
 
 QUEST_FIELDS_NOT_TRANSFERRED = {
@@ -137,6 +137,7 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
             quick_reply="Check your units!",
             blocking=True,
             map_transition=True,
+            competency_self_assessment=True,
         )
         quest.save()
         # Publishing through the manager avoids the post_save map-regeneration signal,

@@ -1,19 +1,22 @@
 {% comment %}
   A submission's competency levels on its approval form (the competency_approval_levels tag):
-  one segmented control per competency the quest gives evidence of, pre-selected to the
+  one segmented control per competency the quest gives evidence of (named with its course, since
+  courses can share a competency's wording, and in full in its title), pre-selected to the
   submission's current level or else the link's default (or the level posted, on a form re-rendered
   with errors), so approving with the defaults takes no extra clicks. Approving records the selected
   levels. On an approved submission, commenting records the levels changed, so a teacher can re-rate
   a quest; returning records nothing. The nudge, while the submission awaits approval, shows while
   any competency is set to the lowest level: rendered that way when a level starts there, and kept
-  in step by approval-levels.js as levels change.
+  in step by approval-levels.js as levels change. The student's self-assessment, when they gave one,
+  shows hollow beside each competency's name, for context.
 {% endcomment %}
 {% if rows %}
 <div class="competency-approval-levels">
   <p class="competency-approval-levels-heading"><strong>Competencies</strong> <small class="text-muted">({% if approved %}any you change are recorded when you comment{% else %}recorded when you approve{% endif %})</small></p>
   {% for row in rows %}
   <div class="competency-approval-row">
-    <span class="competency-approval-name">{{ row.competency.name }}</span>
+    <span class="competency-approval-name" title="{{ row.competency.qualified_name }}">{{ row.competency.name }}{% if row.competency.course %} <small class="text-muted">({{ row.competency.course }})</small>{% endif %}{% if row.self_level %}
+      <span class="label competency-level competency-level-{{ row.self_level }} competency-self" title="The student's self-assessment, not counted">Self: {{ row.self_label }}</span>{% endif %}</span>
     <div class="btn-group btn-group-xs" data-toggle="buttons" role="group" aria-label="{{ row.competency.name }}: proficiency level">
       {% for level, label, selected in row.levels %}
       <label class="btn btn-default competency-level competency-level-{{ level }}{% if selected %} active{% endif %}">

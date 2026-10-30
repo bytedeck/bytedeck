@@ -200,8 +200,11 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
           averages that round to it and whether the course's average does;
         - 'rows', each of the course's competencies with the student's current level in it (None when
           not yet assessed) and its label and code, the teacher's override that set it (None when it is
-          the roll-up of the evidence), and its evidence with the deck's label and code for each
-          assessment's level; and 'overridden', whether any of the course's levels is an override.
+          the roll-up of the evidence), the student's latest self-assessment (None if none) with its
+          label and code, its evidence with the deck's label and code for each assessment's level
+          (self-assessments among it), and 'teacher_evidence', the evidence without them, for the
+          levels over time; and 'overridden' and 'self_assessed', whether any of the course's levels is
+          an override and whether the student has self-assessed any of its competencies.
 
         Also 'scale': each level of the Proficiency Scale as (level, label, code), and 'rollup', what a
         current level is under the deck's roll-up strategy, for the explanation.
@@ -223,6 +226,7 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                 'level_label': labels.get(course.level, ''),
                 'level_counts': [(level, labels[level], counts[level]) for level in ProficiencyLevel.values if counts[level]],
                 'overridden': any(competency.pk in course.overrides for competency in course.competencies),
+                'self_assessed': any(competency.pk in course.self_assessed for competency in course.competencies),
                 'scale': [
                     {
                         'level': level, 'label': labels.get(level, ''), 'code': codes.get(level, ''),
@@ -230,20 +234,7 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
                     }
                     for level in LEVEL_RANGES
                 ],
-                'rows': [
-                    {
-                        'competency': competency,
-                        'level': course.levels.get(competency.pk),
-                        'label': labels.get(course.levels.get(competency.pk), ''),
-                        'code': codes.get(course.levels.get(competency.pk), ''),
-                        'override': course.overrides.get(competency.pk),
-                        'evidence': [
-                            {'item': item, 'label': labels[item.assessment.level], 'code': codes[item.assessment.level]}
-                            for item in evidence.get(competency.pk, [])
-                        ],
-                    }
-                    for competency in course.competencies
-                ],
+                'rows': [self.row(course, competency, evidence.get(competency.pk, []), labels, codes) for competency in course.competencies],
             })
         kwargs.update({
             'student': self.student,
@@ -252,6 +243,35 @@ class CompetencySummaryView(NonPublicOnlyViewMixin, TemplateView):
             'rollup': describe_rollup(config),
         })
         return super().get_context_data(**kwargs)
+
+    def row(self, course, competency, evidence, labels, codes):
+        """ One competency's row in a course's tab (see get_context_data).
+
+        Args:
+            course (CourseCompetencies): the course.
+            competency (Competency): the competency.
+            evidence (list[Evidence]): the student's assessments of it, oldest first.
+            labels (dict[int, str]): the deck's label for each level.
+            codes (dict[int, str]): each level's three-letter code.
+
+        Returns:
+            dict: the row.
+        """
+        level = course.levels.get(competency.pk)
+        self_assessed = course.self_assessed.get(competency.pk)
+        items = [{'item': item, 'label': labels[item.assessment.level], 'code': codes[item.assessment.level]} for item in evidence]
+        return {
+            'competency': competency,
+            'level': level,
+            'label': labels.get(level, ''),
+            'code': codes.get(level, ''),
+            'override': course.overrides.get(competency.pk),
+            'self_assessed': self_assessed,
+            'self_label': labels[self_assessed.level] if self_assessed else '',
+            'self_code': codes[self_assessed.level] if self_assessed else '',
+            'evidence': items,
+            'teacher_evidence': [item for item in items if not item['item'].self_assessed],
+        }
 
 
 @method_decorator([competencies_enabled, staff_member_required], name='dispatch')
@@ -285,8 +305,9 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
           it spans, for the header;
         - 'rows', one per student, each with their CourseCompetencies, the deck's label for their
           current level of proficiency, and a cell per column: its competency, and the student's level
-          in it with its code and label (None and '' when not yet assessed), and the teacher's override
-          that set it (None when it is the roll-up of the evidence);
+          in it with its code and label (None and '' when not yet assessed), the teacher's override
+          that set it (None when it is the roll-up of the evidence), and the student's latest
+          self-assessment (None if none) with its code and label;
         - 'scale', each level of the Proficiency Scale as (level, label, code), for the key, and 'rollup',
           what a current level is under the deck's roll-up strategy, for the introduction.
         """
@@ -313,6 +334,9 @@ class CompetencyMatrixView(NonPublicOnlyViewMixin, TemplateView):
                             'code': codes.get(row.levels.get(column.pk), ''),
                             'label': labels.get(row.levels.get(column.pk), ''),
                             'override': row.overrides.get(column.pk),
+                            'self_assessed': row.self_assessed.get(column.pk),
+                            'self_code': codes[row.self_assessed[column.pk].level] if column.pk in row.self_assessed else '',
+                            'self_label': labels[row.self_assessed[column.pk].level] if column.pk in row.self_assessed else '',
                         }
                         for column in columns
                     ],

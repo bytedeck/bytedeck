@@ -19,6 +19,22 @@ from .models import Competency, ProficiencyLevel, QuestCompetency
 #: Name of the multi-select field QuestCompetenciesFormMixin adds to a quest form.
 COMPETENCIES_FIELD = 'competencies'
 
+#: The quest form's field (Quest.competency_self_assessment) asking students for a self-assessment.
+SELF_ASSESSMENT_FIELD = 'competency_self_assessment'
+
+
+def self_assessment_field_name(competency_pk):
+    """ The name of a submission form's self-assessment field for one competency, apart from the
+    approval form's level fields (competency_level_field_name).
+
+    Args:
+        competency_pk (int): the competency's primary key.
+
+    Returns:
+        str: e.g. "self_assessment_12".
+    """
+    return f'self_assessment_{competency_pk}'
+
 
 def competency_level_field_name(competency_pk):
     """ The name of a quest form's default-level field for one competency.
@@ -129,9 +145,11 @@ class QuestCompetenciesFormMixin:
     """ Adds a quest's competencies to a quest ModelForm, for decks with competencies enabled.
 
     The form gets a multi-select of the deck's competencies and, for each one, a default-level
-    field (the level that completing the quest generally demonstrates). The page shows the
-    level picker only for the selected competencies; unselected ones' level fields are ignored.
-    With the feature flag off, none of these fields exist, so the form is unchanged.
+    field (the level that completing the quest generally demonstrates), then the quest's "Ask for
+    a self-assessment" checkbox (Quest.competency_self_assessment, which the form's Meta lists).
+    The page shows the level picker only for the selected competencies; unselected ones' level
+    fields are ignored. With the feature flag off, none of these fields exist, so the form is
+    unchanged.
 
     The form must call ``add_competency_fields()`` from its ``__init__`` (after
     ``super().__init__``) and place the layout objects it returns.
@@ -150,6 +168,9 @@ class QuestCompetenciesFormMixin:
         """
         config = SiteConfig.get()
         if config is None or not config.enable_competencies:
+            # a quest's self-assessment setting is meaningless without competencies, and absent
+            # from the form, it keeps whatever it was
+            self.fields.pop(SELF_ASSESSMENT_FIELD, None)
             return []
         self.competencies_enabled = True
 
@@ -183,7 +204,7 @@ class QuestCompetenciesFormMixin:
             )
             self.competency_level_fields.append((competency, name))
 
-        return [COMPETENCIES_FIELD, HTML("{% include 'competencies/snippets/quest_competency_levels.html' %}")]
+        return [COMPETENCIES_FIELD, HTML("{% include 'competencies/snippets/quest_competency_levels.html' %}"), SELF_ASSESSMENT_FIELD]
 
     def competency_levels(self):
         """ The default-level pickers for the template, marking which competencies are selected
