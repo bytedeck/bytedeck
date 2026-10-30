@@ -338,6 +338,15 @@ img.note-float-left, img.pull-left {
     margin-right: 10px;
 }
 
+/* An image on a line of its own at the right, as Bootstrap 3's center-block puts one in the center:
+   the editor's image menu aligns an image with either (#2910). Being a block, it is placed by its
+   margins, since a paragraph's text-align moves only inline content. */
+img.img-align-right {
+    display: block;
+    margin-left: auto;
+    margin-right: 0;
+}
+
 /*************** Lists *******************/
 
 ol > ol {
@@ -833,6 +842,16 @@ h3.comment-heading {
     overflow-x: auto;
 }
 
+/* The editor's Insert Math button (summernote-math.js) keeps each formula's LaTeX source in a
+   span beside it, so the formula can be opened and edited again. The plugin hides that span
+   with an inline display: none, but the HTML sanitizer doesn't allow "display", so a comment
+   or a submission has lost that style by the time it's shown, and the source would sit next
+   to the formula it draws (#2874). Hiding it here covers what's already saved too, on every
+   page and inside the editor. */
+.note-math .note-latex {
+    display: none;
+}
+
 /***********ACCORDIAN COMMENTS *******************************/
 
 /* lists within list-groups */
@@ -898,26 +917,44 @@ h3 > img#banner {
     background-color: transparent;
 }
 
-.list-group-item.left-side, .list-group-item.right-side {
-  margin: 0;
-  float: left;
-  border-bottom: none;
+/* A sidebar row with a "more" menu, the ⋮ at its right end, such as Quests and Badges for a
+   teacher. The row is a single list-group-item, so it takes the list's colours as a whole,
+   the current page's included, and its link and its ⋮ fill it between them: the ⋮ is part of
+   the row rather than a button of its own beside it (#1133). The row's text colour, and its
+   highlight when pointed at, are the ones its neighbouring links have, in custom.css and
+   custom_slate.css. */
+.list-group-item.sidebar-menu-row {
+    display: flex;
+    padding: 0;
 }
 
-.list-group-item.left-side {
-  border-top-right-radius: 0px ;
-  width: 80%;
+/* The sidebar's list is also a Bootstrap .nav, which paints the links of an open menu's row
+   (".nav .open > a") and would grey the row out while its menu is showing. These rules come
+   later and are as specific, so the row keeps its own colours. */
+.sidebar-menu .sidebar-menu-row > a,
+.sidebar-menu .sidebar-menu-row > a:hover,
+.sidebar-menu .sidebar-menu-row > a:focus {
+    color: inherit;
+    background-color: transparent;
+    border-color: transparent;
+    text-decoration: none;
 }
 
-.list-group-item.right-side {
-  width: 20%;
-  border-top-right-radius: 4px;
-  border-top-left-radius: 0px;
-  border-bottom-right-radius: 0px;
-  border-bottom-left-radius: 0px;
-  border-left: none;
-  padding-left:0px;
-  padding-right: 0px;
+.sidebar-menu-row-link {
+    flex: 1;
+    padding: 10px 15px;
+}
+
+.sidebar-menu-row-toggle {
+    width: 20%;
+    padding: 10px 0;
+    text-align: center;
+}
+
+/* The focus ring stays for someone moving through the page by keyboard, but doesn't ring the
+   ⋮ after a click, when Bootstrap focuses it as the menu opens. */
+.sidebar-menu-row-toggle:focus:not(:focus-visible) {
+    outline: none;
 }
 
 
@@ -1101,6 +1138,17 @@ div.btn-group.action-btn-group {
     figure.pull-right, figure.pull-left {
         margin-left: 0px;
         float: none !important;
+    }
+
+    /* A floated image sits on a line of its own too, with the text below it: beside an image of a
+       fixed width, a phone has room for a column of text too narrow to read (#2918). The editor's
+       Float Left and Float Right put the float in the image's style, which only !important outranks. */
+    img.note-float-left, img.note-float-right, img.pull-left, img.pull-right {
+        display: block;
+        float: none !important;
+        margin-left: 0;
+        margin-right: 0;
+        margin-bottom: 10px;
     }
 
 
@@ -1425,4 +1473,285 @@ table[data-toggle="table"].bt-reveal {
 .question-media-thumb {
     max-width: 100%;
     max-height: 40px;
+}
+
+/* A table opened in a bootstrap-table's detail row (the preview under a quest or a submission on
+   the quest tabs: a submission's answers, a quest's questions) reads from the top of each cell,
+   as a Bootstrap table does anywhere else. bootstrap-table centres its own cells vertically,
+   and its selector reaches the cells of every table nested inside them too (#2927). */
+.bootstrap-table .fixed-table-container .table .table td,
+.bootstrap-table .fixed-table-container .table .table th {
+    vertical-align: top;
+}
+
+/* An answer's mark in the marking table (questions/snippets/answer_mark.html, #2933): the X staff
+   mark it wrong with, or the check or X it was given, at the right of the answer's cell with
+   room between it and the answer. */
+.question-answers .answer-mark,
+.question-answers .answer-mark-wrong {
+    margin-left: 8px;
+}
+
+/* The label over each answer and solution in a submission's question answers
+   (questions/snippets/comment_answers.html). On a wide screen the header row names the
+   columns, so the labels are for a narrow one, where the columns stack (#2927). */
+.question-answers-label {
+    display: none;
+}
+@media (max-width: 767px) {
+    /* Bootstrap's sm breakpoint, as the grid's: below it, each answer's question, then its
+       answer, then its solution, one under another, with a rule between answers but not
+       between the parts of one. */
+    .question-answers > thead {
+        display: none;
+    }
+    table.question-answers > tbody > tr > td {
+        display: block;
+        width: 100%;
+    }
+    table.question-answers > tbody > tr > td + td {
+        border-top: none;
+    }
+    .question-answers-label {
+        display: block;
+        font-weight: bold;
+    }
+}
+
+/* A question's marker notes, opened from their info button (#2923). They show as written, so
+   the popover is wider than a hint's, what is in it is held to its width, and long notes
+   scroll inside it rather than running off the screen. */
+.btn.marker-notes-popover {
+    padding: 0 2px;
+    vertical-align: baseline;
+}
+/* Bootstrap rings a button it has focus on, so a click would leave one round the icon while
+   the notes are open; the ring stays for someone reaching the button by keyboard. */
+.btn.marker-notes-popover:focus:not(:focus-visible) {
+    outline: none;
+}
+.popover.marker-notes-tip {
+    max-width: min(600px, calc(100vw - 20px));
+}
+.popover.marker-notes-tip .popover-content {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+}
+.popover.marker-notes-tip img,
+.popover.marker-notes-tip video,
+.popover.marker-notes-tip iframe {
+    max-width: 100%;
+}
+.popover.marker-notes-tip img,
+.popover.marker-notes-tip video {
+    height: auto;
+}
+
+/* The bar under a file being attached by a draft save (#784): a slim Bootstrap progress bar on a
+   line of its own, inside the note's paragraph under the file input. */
+.draft-upload-progress {
+    display: block;
+    height: 6px;
+    max-width: 320px;
+    margin: 4px 0 0;
+}
+
+/* The Unflag button's icon (#824): a flag struck through by a red "no" sign, the sign drawn twice
+   the flag's size and the pair scaled down to sit in a button beside single icons. */
+.fa-stack.unflag-icon {
+    font-size: 0.63em;
+}
+.fa-stack.unflag-icon .fa-ban {
+    color: tomato;
+}
+
+/* Competency levels, colour-coded so they read at a glance: the selected level of each segmented
+   control on the approval forms (competencies/snippets/approval_levels.html), and the level labels
+   on a student's profile and evidence pages (span.label.competency-level-N). The colours follow
+   Bootstrap's contextual hues: Emerging red (danger), Developing yellow (warning), Proficient green
+   (success) and Extending blue (info). The shades are darker than Bootstrap's buttons so each text
+   and background pair has at least 4.5:1 contrast (WCAG AA), and yellow takes dark text. */
+.competency-approval-levels {
+    margin-bottom: 10px;
+}
+/* Each competency's row: its name, wrapping in the room left beside its level buttons, which keep a
+   column of their own on the right (#2952). Below Bootstrap's sm breakpoint a long name would have
+   too little room beside them to read, so there the buttons go under the name, still at the right,
+   in line with the buttons of the rows whose names fit beside them. */
+.competency-approval-row {
+    display: flex;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 3px 0;
+}
+.competency-approval-name {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.competency-approval-row > .btn-group {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+@media (max-width: 767px) {
+    .competency-approval-row {
+        flex-wrap: wrap;
+    }
+}
+.competency-approval-levels .btn.competency-level.active {
+    color: #fff;
+}
+.competency-approval-levels .btn.competency-level-1.active,
+.label.competency-level-1,
+.competency-history-dot.competency-level-1 {
+    background-color: #c9302c;
+    border-color: #ac2925;
+}
+.competency-approval-levels .btn.competency-level-2.active,
+.label.competency-level-2,
+.competency-history-dot.competency-level-2 {
+    background-color: #f0ad4e;
+    border-color: #eea236;
+    color: #333;
+}
+.competency-approval-levels .btn.competency-level-3.active,
+.label.competency-level-3,
+.competency-history-dot.competency-level-3 {
+    background-color: #3c763d;
+    border-color: #326432;
+}
+.competency-approval-levels .btn.competency-level-4.active,
+.label.competency-level-4,
+.competency-history-dot.competency-level-4 {
+    background-color: #31708f;
+    border-color: #2b6380;
+}
+
+/* A course's current level of proficiency beside its name in the XP panel of a student's profile
+   (competencies/snippets/course_competency_average.html). */
+.course-competency-average {
+    margin-left: 6px;
+}
+
+/* A level's three-letter code (EMG, DEV, PRF, EXT, or n/a) as a label, all at one width so a row of
+   them lines up and many fit on the page (a student's competencies summary). */
+.label.competency-code {
+    display: inline-block;
+    width: 3.4em;
+    text-align: center;
+}
+
+/* The averages that round to each competency level, in a course's explanation on a student's
+   competencies summary: only as wide as its two short columns need. */
+.table.competency-scale {
+    width: auto;
+}
+.competency-scale th,
+.competency-scale td {
+    padding-right: 30px;
+}
+
+/* A student's competencies summary (competencies/summary.html): a grid of a course's competencies,
+   each with a chip for every assessment of it, wrapping onto more lines as the chips build up. */
+.competency-summary .competency-summary-name {
+    width: 35%;
+}
+.competency-summary-evidence .label {
+    margin: 1px 2px 1px 0;
+}
+/* A competency's assessments over time, oldest first, on a student's competencies summary: a dot per
+   assessment in its level's colour, raised a step per level, so growth (or a slip) shows at a glance. */
+.competency-history {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 34px;
+    padding: 0 3px 2px;
+    border-bottom: 1px solid #999;
+    vertical-align: middle;
+}
+.competency-history-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.competency-history-dot.competency-level-2 {
+    margin-bottom: 8px;
+}
+.competency-history-dot.competency-level-3 {
+    margin-bottom: 16px;
+}
+.competency-history-dot.competency-level-4 {
+    margin-bottom: 24px;
+}
+.competency-summary-current,
+.competency-summary-history {
+    white-space: nowrap;
+}
+
+/* A competency's row that a link opened (a cell of the staff competency matrix): clear of the fixed
+   navbar, and outlined so it stands out from the rows around it. */
+.competency-summary tr[id] {
+    scroll-margin-top: 70px;
+}
+.competency-summary tr:target {
+    outline: 2px solid #f0ad4e;
+    outline-offset: -2px;
+}
+
+/* A current level a teacher has set for a student (a CompetencyOverride), standing in place of the
+   level worked out from the evidence: outlined, on the competencies page, the matrix and the page
+   where it is set. */
+.label.competency-override {
+    outline: 2px dashed #777;
+    outline-offset: 1px;
+    margin: 0 3px;
+}
+
+/* The staff competency matrix (competencies/matrix.html): a course's students by its competencies.
+   The competency names stand on end over their narrow columns (cut short, in full in the title),
+   under their categories, and each cell holds one fixed-width level code. */
+.competency-matrix-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.competency-matrix-key .label {
+    margin-right: 2px;
+}
+.competency-matrix th.competency-matrix-category {
+    text-align: center;
+    font-size: 90%;
+}
+.competency-matrix th.competency-matrix-name {
+    vertical-align: bottom;
+    padding: 4px 2px;
+}
+.competency-matrix th.competency-matrix-name div {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    max-height: 14em;
+    margin: 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: normal;
+}
+.competency-matrix td.competency-matrix-cell {
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* The quest form's competency picker (QuestCompetenciesSelect2Widget): a competency's
+   "Course: Category: Competency" label is often longer than a line, so each dropdown row and each
+   chosen chip shows one line cut short with an ellipsis, and the full text is its title on hover.
+   Cut by CSS rather than in the text, so searching still matches every word. */
+#select2-id_competencies-results .select2-results__option,
+#div_id_competencies .select2-selection__choice {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

@@ -21,6 +21,7 @@ from django_tenants.utils import tenant_context, get_public_schema_name, schema_
 
 from badges.models import Badge, BadgeAssertion
 from comments.models import Comment
+from competencies.models import Competency, CompetencyAssessment, CompetencyOverride, ProficiencyLevel
 from courses.models import Block, CourseStudent, Semester
 from hackerspace_online.management.commands.initdb import get_homepage_content
 from hackerspace_online.management.commands.merge_users import SIMPLE_REASSIGNMENTS
@@ -422,6 +423,45 @@ class MergeUsersTest(ByteDeckTenantTestCase, CommandMixin):
 
         assertion.refresh_from_db()
         self.assertEqual(assertion.issued_by, self.current)
+
+    def test_merge_users__moves_competency_evidence(self):
+        """Competency assessments of the duplicate account are the kept account's evidence afterwards."""
+        assessment = CompetencyAssessment.objects.create(
+            user=self.past, competency=baker.make(Competency), level=ProficiencyLevel.PROFICIENT,
+        )
+
+        self.merge()
+
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.user, self.current)
+
+    def test_merge_users__moves_competency_assessments_the_source_made(self):
+        """An assessment the duplicate account gave someone else is re-credited to the kept account, not orphaned."""
+        assessment = CompetencyAssessment.objects.create(
+            user=self.teacher, competency=baker.make(Competency), level=ProficiencyLevel.PROFICIENT,
+            assessed_by=self.past,
+        )
+
+        self.merge()
+
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.assessed_by, self.current)
+
+    def test_merge_users__moves_competency_levels_set(self):
+        """A teacher's override of the duplicate account's level stands for the kept account afterwards, and one the
+        duplicate account set for someone else is credited to the kept account."""
+        competency = baker.make(Competency)
+        of_the_duplicate = CompetencyOverride.objects.create(user=self.past, competency=competency, level=ProficiencyLevel.EXTENDING)
+        by_the_duplicate = CompetencyOverride.objects.create(
+            user=self.teacher, competency=competency, level=ProficiencyLevel.PROFICIENT, set_by=self.past,
+        )
+
+        self.merge()
+
+        of_the_duplicate.refresh_from_db()
+        by_the_duplicate.refresh_from_db()
+        self.assertEqual(of_the_duplicate.user, self.current)
+        self.assertEqual(by_the_duplicate.set_by, self.current)
 
     def test_merge_users__moves_course_registrations(self):
         """The duplicate's course registrations become the kept account's."""

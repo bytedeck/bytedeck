@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
+from django.core.validators import MinValueValidator
 from django.db import connection, models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -15,6 +16,7 @@ from django.conf import settings
 from django_tenants.utils import get_public_schema_name, schema_context
 from redis import exceptions as redis_exceptions
 
+from competencies.models import RollupStrategy
 from library.utils import get_library_schema_name
 from utilities.models import RestrictedFileField
 
@@ -309,6 +311,53 @@ class SiteConfig(models.Model):
         help_text="Automatically regenerate maps when contents are changed."
     )
 
+    enable_competencies = models.BooleanField(
+        verbose_name="Enable Competencies", default=False,
+        help_text="If enabled, you can attach competencies to quests and record proficiency-based \
+            assessments (Emerging / Developing / Proficient / Extending) when approving submissions."
+    )
+
+    # Configurable labels for the 4-point proficiency scale (see competencies.models.ProficiencyLevel).
+    # BC's official terms are the defaults; other decks may want different words entirely.
+    competency_label_level_1 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 1", default="Emerging", max_length=50,
+        help_text="The label displayed for the first (lowest) level of the proficiency scale."
+    )
+
+    competency_label_level_2 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 2", default="Developing", max_length=50,
+        help_text="The label displayed for the second level of the proficiency scale."
+    )
+
+    competency_label_level_3 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 3", default="Proficient", max_length=50,
+        help_text="The label displayed for the third level of the proficiency scale. \
+            This is the default level demonstrated by completing a quest."
+    )
+
+    competency_label_level_4 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 4", default="Extending", max_length=50,
+        help_text="The label displayed for the fourth (highest) level of the proficiency scale."
+    )
+
+    # How a student's assessments of a competency become their current level in it (see
+    # competencies.rollup). db_default as well as default: during a deploy the outgoing version still
+    # creates site configurations without these columns, so the database has to fill them in
+    # (CONTRIBUTING.md, "Migrations and the deploy window").
+    competency_rollup = models.CharField(
+        verbose_name="Current Level of a Competency", max_length=20, choices=RollupStrategy.choices,
+        default=RollupStrategy.MOST_RECENT, db_default=RollupStrategy.MOST_RECENT,
+        help_text="How a student's assessments of a competency become their current level in it, which their "
+                  "course's current level of proficiency is worked out from. BC's reporting guidance favours the "
+                  "most recent evidence. A level a teacher sets for a student overrides it."
+    )
+
+    competency_rollup_count = models.PositiveSmallIntegerField(
+        verbose_name="Latest Assessments Counted", default=3, db_default=3, validators=[MinValueValidator(2)],
+        help_text="For \"Most common level in the latest assessments\": how many of a student's latest assessments "
+                  "of a competency count. On a tie, whichever of the tied levels was assessed most recently stands."
+    )
+
     def __str__(self):
         return self.site_name
 
@@ -349,6 +398,21 @@ class SiteConfig(models.Model):
             return self.banner_image.url
         else:
             return static('img/banner.png')
+
+    def get_competency_scale_labels(self):
+        """ The deck's display labels for the proficiency scale.
+
+        Returns:
+            dict: a mapping of each proficiency level int, 1 through 4 (see
+            competencies.models.ProficiencyLevel), to this deck's custom label
+            for that level (str).
+        """
+        return {
+            1: self.competency_label_level_1,
+            2: self.competency_label_level_2,
+            3: self.competency_label_level_3,
+            4: self.competency_label_level_4,
+        }
 
     def get_default_quest_prerequisite(self):
         """The badge a quest created on this deck starts with as its prerequisite (#276).

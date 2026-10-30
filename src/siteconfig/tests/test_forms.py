@@ -108,6 +108,44 @@ class SiteConfigFormTest(ByteDeckTenantTestCase):
         with self.assertRaises(ValueError):
             SiteConfig.get().custom_stylesheet.read()
 
+    def test_competency_fields__hidden_when_feature_disabled(self):
+        """ When the competencies feature flag is off (the default), the competency settings
+        (the proficiency scale labels and the roll-up) should not appear in the form at all. Only the (advanced, deck-owner-only)
+        feature flag itself is present so the feature can be turned on. """
+        self.assertFalse(self.config.enable_competencies)
+        form = SiteConfigForm(instance=self.config, is_deck_owner=True)
+
+        self.assertIn('enable_competencies', form.fields)
+        self.assertIn('enable_competencies', form.advanced_fields)
+        for field_name in SiteConfigForm.competency_fields:
+            self.assertNotIn(field_name, form.fields)
+
+        # and the form still validates & saves without the competency fields in the POST data
+        form_data = model_to_form_data(self.config, SiteConfigForm)
+        form = SiteConfigForm(form_data, instance=self.config, is_deck_owner=True)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_competency_fields__shown_when_feature_enabled(self):
+        """ Once the feature flag is on, the competency settings become editable
+        (as advanced fields, so only by the deck owner) """
+        self.config.enable_competencies = True
+        self.config.full_clean()
+        self.config.save()
+
+        form = SiteConfigForm(instance=self.config, is_deck_owner=True)
+        for field_name in SiteConfigForm.competency_fields:
+            self.assertIn(field_name, form.fields)
+            self.assertIn(field_name, form.advanced_fields)
+            self.assertFalse(form.fields[field_name].disabled)
+
+        # non-owners can see but not edit advanced fields
+        form = SiteConfigForm(instance=self.config, is_deck_owner=False)
+        for field_name in SiteConfigForm.competency_fields:
+            self.assertTrue(form.fields[field_name].disabled)
+
+        # the class-level list of advanced fields is not mutated by instances
+        self.assertNotIn('competency_label_level_1', SiteConfigForm.advanced_fields)
+
     def test_clean_custom_profile_field__strips_whitespace(self):
         """Test if `clean_clean_custom_profile_field()` strips whitespace'd ends."""
         form_data = model_to_form_data(self.config, SiteConfigForm)

@@ -5,6 +5,7 @@
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
   <p>Are you sure you want to drop this quest?  All submission comments and files will be deleted.<p>
   <div class="well">
     <p>Quest Name: {{submission.quest.name}}</p>

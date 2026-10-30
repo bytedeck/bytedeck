@@ -1,4 +1,9 @@
-from .models import QuestionSubmission
+import html
+
+from django.db.models import Case, Max, Value, When
+from django.template.loader import render_to_string
+
+from .models import QuestionSubmission, QuestionType
 
 
 def save_draft_file_answers(question_formset, uploaded_files):
@@ -83,11 +88,13 @@ def discard_draft_question_submissions(quest_submission):
 
 
 def sync_draft_question_submissions(quest_submission):
-    """Ensure exactly one draft answer row exists per current question of the submission's
-    quest, and return the queryset of draft rows to build the answer formset from.
+    """Ensure exactly one draft answer row exists per question the student answers in this
+    hand-in, and return the queryset of draft rows to build the answer formset from.
 
-    Called every time the answer formset is built (submission page render and complete POST),
-    so the formset always matches the quest's *current* question set:
+    Those are all the quest's questions the first time, and after a return only the ones
+    marked wrong (`questions_to_answer`, #2933). Called every time the answer formset is built
+    (submission page render and complete POST), so the formset always matches the quest's
+    *current* question set:
 
     * A question added after the student started gets a fresh draft row here.
     * A deleted question's rows have question=None (SET_NULL). A *published* one is kept:
@@ -98,7 +105,8 @@ def sync_draft_question_submissions(quest_submission):
       filters on ``question__isnull=False``. Left alone it would sit in the schema forever,
       along with an uploaded file of up to 16 MiB (#2567).
     * Published rows (comment set) belong to an earlier submission cycle and are ignored,
-      so a returned-and-resubmitted quest starts a fresh set of drafts.
+      so a returned-and-resubmitted quest starts fresh drafts, a text one starting with the
+      answer it replaces.
     * Duplicate draft rows for the same question are healed by keeping one and deleting the
       rest (preferring a row with content, then the most recently edited). Duplicates can
       arise from two concurrent first renders racing this function, or from a published
@@ -145,11 +153,138 @@ def sync_draft_question_submissions(quest_submission):
     if duplicate_ids:
         QuestionSubmission.objects.filter(id__in=duplicate_ids).delete()
 
+    latest_answers = latest_published_answers(quest_submission)
     QuestionSubmission.objects.bulk_create([
-        QuestionSubmission(quest_submission=quest_submission, question=question)
-        for question in quest_submission.quest.question_set.all()
+        QuestionSubmission(
+            quest_submission=quest_submission, question=question,
+            # A text answer coming back to be fixed starts with what the student wrote, so they
+            # correct it rather than type it out again (#2933). A file answer starts empty: a
+            # file input can't be filled in, and the earlier file shows with its comment above.
+            response_text=_previous_text(latest_answers.get(question.id)),
+        )
+        for question in questions_to_answer(quest_submission, latest_answers)
         if question.id not in keeper_by_question
     ])
     return QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=True, question__isnull=False
     )
+
+
+def render_answer_file(answer):
+    """Render the file saved with a draft answer to a file question, with its Delete button.
+
+    The submission page shows this in the answer's control, and the draft-save and delete
+    endpoints hand it back so the page can replace it without a reload (#2925). Rendering it in
+    one place keeps what the student sees after a save or a removal identical to what a fresh
+    page would show.
+
+    Args:
+        answer (QuestionSubmission): the draft answer.
+
+    Returns:
+        str: the rendered HTML, empty when the answer holds no file.
+    """
+    return render_to_string("questions/snippets/answer_file_saved.html", {"answer": answer})
+
+
+def latest_published_answers(quest_submission):
+    """Return each question's most recently published answer on a submission.
+
+    Every hand-in publishes its answers with its own comment, and comments are numbered as they
+    are made, so the answer with the highest comment id is the one handed in last.
+
+    Args:
+        quest_submission: the QuestSubmission whose answers to read.
+
+    Returns:
+        dict: question id to the QuestionSubmission published for it last.
+    """
+    latest = {}
+    for answer in QuestionSubmission.objects.filter(
+        quest_submission=quest_submission, comment__isnull=False, question__isnull=False,
+    ).select_related("question").order_by("comment_id"):
+        latest[answer.question_id] = answer
+    return latest
+
+
+def questions_to_answer(quest_submission, latest_answers=None):
+    """Return the quest's questions the student answers in the submission's current hand-in.
+
+    All of them the first time. After a return, only those the teacher marked wrong when it
+    came back (#2933), so a quest returned with nothing marked wrong brings back just the
+    comment box. A question with no marked answer comes back too: one added to the quest since
+    the student last handed it in, or one answered before answers were marked at all, which is
+    how a return worked before marking existed.
+
+    Args:
+        quest_submission: the QuestSubmission being worked on.
+        latest_answers (dict): `latest_published_answers(quest_submission)`, if the caller
+            has it already.
+
+    Returns:
+        list: the Question objects to answer, in the quest's order.
+    """
+    if latest_answers is None:
+        latest_answers = latest_published_answers(quest_submission)
+    return [
+        question for question in quest_submission.quest.question_set.all()
+        if question.id not in latest_answers or latest_answers[question.id].is_correct is not True
+    ]
+
+
+def _previous_text(answer):
+    """The text of an answer coming back to be fixed, or nothing for a file answer or a new
+    question.
+
+    A short answer is stored HTML-escaped (`QuestionSubmissionForm.clean_response_text`), so a
+    student's ``R&D`` is kept as ``R&amp;D``. Its text input shows a value as plain text, so the
+    draft starts with the text as the student typed it: escaped, the field would show the entity
+    itself and could run past the field's 200-character limit. A long answer's editor shows HTML,
+    so its stored value is the right start as it is.
+
+    Args:
+        answer (QuestionSubmission): the question's latest published answer, or None.
+
+    Returns:
+        str: the text to start the new draft with.
+    """
+    if answer is None or answer.question.type == QuestionType.FILE_UPLOAD:
+        return ""
+    if answer.question.type == QuestionType.SHORT_ANSWER:
+        return html.unescape(answer.response_text)
+    return answer.response_text
+
+
+def finalize_answer_marks(quest_submission):
+    """Set each answer of the submission's latest hand-in right or wrong, as the teacher marked it.
+
+    Called when a teacher returns or approves the quest (#2933). Until then the X a teacher
+    toggles beside an answer is seen only by staff (`marked_wrong`); from here every answer of
+    that hand-in shows a check or an X (`is_correct`), and on a return only the wrong ones come
+    back for the student to answer again (`questions_to_answer`). Answers already marked are
+    left as they are, so an earlier hand-in keeps the marks it came back with.
+
+    Only a submission handed in and awaiting review is marked. One returned and not yet handed
+    in again has no hand-in under review: its latest one was judged when it came back, so
+    approving it from there leaves those answers as they are. Nor is an approved one: approving
+    it already marked its answers, unless it was approved before answers were marked at all, and
+    then a return brings every question back, as a return did before marking existed.
+
+    Args:
+        quest_submission: the QuestSubmission being returned or approved.
+
+    Returns:
+        int: how many answers were marked.
+    """
+    if not quest_submission.is_completed or quest_submission.is_approved:
+        return 0
+    latest_comment_id = QuestionSubmission.objects.filter(
+        quest_submission=quest_submission, comment__isnull=False,
+    ).aggregate(Max("comment_id"))["comment_id__max"]
+    if latest_comment_id is None:
+        return 0
+    # One statement, so an X saved while this runs lands either before it, and counts, or after
+    # it, and is refused (ajax_mark_answer writes only while an answer is unmarked).
+    return QuestionSubmission.objects.filter(
+        quest_submission=quest_submission, comment_id=latest_comment_id, is_correct__isnull=True,
+    ).update(is_correct=Case(When(marked_wrong=True, then=Value(False)), default=Value(True)))

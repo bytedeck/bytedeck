@@ -29,14 +29,27 @@ class SiteConfigForm(forms.ModelForm):
         "deck_owner",
         "enable_shared_library",
         "allow_staff_export",
+        "enable_competencies",
+    ]
+
+    # Only shown when the competencies feature is enabled.
+    competency_fields = [
+        "competency_label_level_1",
+        "competency_label_level_2",
+        "competency_label_level_3",
+        "competency_label_level_4",
+        "competency_rollup",
+        "competency_rollup_count",
     ]
 
     def __init__(self, *args, **kwargs):
         """Build the Site Configuration form and its crispy layout.
 
         Only the deck owner can change the settings in `advanced_fields`, so they're disabled for
-        anyone else. The Google sign-in setting is always disabled on this form, and the two Shared
-        Library settings are labelled as experimental.
+        anyone else. The competency settings (the proficiency scale labels and how a current level is
+        worked out) are only included once the competencies feature is enabled (otherwise they're
+        removed from the form entirely), and then join the owner-only advanced fields. The Google sign-in setting is always disabled on this form, and
+        the two Shared Library settings and the competencies flag are labelled as experimental.
 
         Args:
             *args: positional arguments passed through to ``forms.ModelForm``.
@@ -47,6 +60,15 @@ class SiteConfigForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
+        # The competency settings are meaningless (and just clutter) until
+        # the competencies feature is turned on.
+        self.advanced_fields = list(self.advanced_fields)
+        if self.instance.pk and self.instance.enable_competencies:
+            self.advanced_fields += self.competency_fields
+        else:
+            for field_name in self.competency_fields:
+                del self.fields[field_name]
+
         if not is_deck_owner:
             for field in self.advanced_fields:
                 self.fields[field].disabled = True
@@ -54,6 +76,7 @@ class SiteConfigForm(forms.ModelForm):
         self.fields['enable_google_signin'].disabled = True
         self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + " - EXPERIMENTAL WIP"
         self.fields['allow_staff_export'].label = self.fields['allow_staff_export'].label + " - EXPERIMENTAL WIP"
+        self.fields['enable_competencies'].label = self.fields['enable_competencies'].label + " - EXPERIMENTAL WIP"
 
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 

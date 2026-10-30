@@ -121,7 +121,10 @@
           {% endif %}
           {% comment %} Each question is a list-group item, so the questions read as one connected
              list (single hairline borders between them, no inter-item gaps) rather than a stack of
-             separate padded cards. {% endcomment %}
+             separate padded cards. A quest returned with no answer marked wrong has no questions
+             to answer again (#2933): the management form above still goes with the POST, but the
+             list and the rule below it are left out. {% endcomment %}
+          {% if question_formset.forms %}
           <div class="list-group question-submission-list">
           {# the loop variable must be named `form`: the crispy HTML() layout objects inside #}
           {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
@@ -132,35 +135,18 @@
               {# A <div> (not <p>) wraps it because multi-paragraph instructions keep their <p> tags, which #}
               {# would be invalid nested inside a <p> (the browser auto-closes the outer <p> early). #}
               <div>
-                <strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
+                {# the question's own number, so after a return only the ones marked wrong come back, each under its number (#2933) #}
+                <strong>Question {{ form.question.number }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
                 {{ form.question.instructions|unwrap_p }}
               </div>
               {% crispy form %}
-              {% comment %} A file kept from an earlier submit that failed validation: the file input
-                 above always renders empty (browsers never repopulate it), so without this the
-                 student has no way to tell their upload survived, and would re-attach it (#2165). {% endcomment %}
-              {% if form.instance.response_file %}
-                <p class="help-block">
-                  <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  {% if form.instance.response_file_is_script_capable %}
-                    {% comment %} An SVG or HTML file is never linked at its storage URL, here either:
-                       navigating to one runs whatever script it carries in the session of whoever
-                       follows the link, and the student following it is signed in (#2559). The
-                       download view responds with Content-Disposition: attachment instead. {% endcomment %}
-                    <a href="{% url 'questions:answer_file_download' form.instance.id %}">
-                      <i class="fa fa-fw fa-download"></i>{{ form.instance.response_file|filename }}</a>
-                  {% else %}
-                    <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
-                  {% endif %}
-                  <small>(already saved: only choose a file above if you want to replace it)</small>
-                </p>
-              {% endif %}
             </div>
           {% endfor %}
           </div>
           <hr>
+          {% endif %}
         {% endif %}
-        {% if question_formset %}
+        {% if question_formset.forms %}
           {# with per-question answer fields above, the general comment box needs its own heading #}
           {# so students know it's for anything beyond their answers #}
           <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
@@ -237,6 +223,9 @@
 
 {% endblock %}
 {% block js %}
+    {% if config.enable_competencies and request.user.is_staff %}
+    <script src="{% static 'competencies/js/approval-levels.js' %}?v=1.0"></script>
+    {% endif %}
     <script>
         $(document).ready(function() {
 
@@ -248,25 +237,15 @@
                 }, 1000);
             {% endif %}
 
-            // Copied from quest_approvals.html
-            // scoped to the main comment form: question answers add their own editors
-            $('[id^=btn_quick_text]').on('click', function () {
-                var msg = '<p>{{ quick_reply_text }}<br></p>';
-                var text_area = $('#main-comment-form div.note-editable');
-                if (text_area.html() == "<p><br></p>") // default empty summernote text area
-                  text_area.html(msg)
-                else
-                  text_area.append(msg);
-            });
-
-            // Quest-specific quick reply (#161): text comes from the button's data-quick-reply attribute.
-            // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
-            $('[id^=btn_quest_quick_text]').on('click', function () {
-                var raw = $(this).attr('data-quick-reply');
-                if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
-                // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
-                var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
-                var msg = '<p>' + escaped + '<br></p>';
+            // The quick reply buttons: the site-wide one and the quest's own (#161). Each carries its
+            // text in data-quick-reply, already sanitized on the server, so it goes in as HTML and a
+            // link in it arrives as a link. Read with .attr(), since .data() would turn text like
+            // "true" or "12" into other types. An empty text (a quest without one, #2114) adds nothing.
+            $('[id^=btn_quick_text], [id^=btn_quest_quick_text]').on('click', function () {
+                var html = $(this).attr('data-quick-reply');
+                if (!html) return;
+                // newlines become <br> so multi-line text keeps its lines in the HTML editor
+                var msg = '<p>' + html.replace(/\r\n|\r|\n/g, '<br>') + '<br></p>';
                 // scoped to the main comment form: question answers add their own editors
                 var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
@@ -474,6 +453,17 @@
                     data : formData,
                     processData : false, // hand jQuery the FormData as-is
                     contentType : false, // let the browser set the multipart boundary
+                    // Report how much of the request has gone up, under the note of each file
+                    // it carries, so a student attaching a large file sees it moving (#784).
+                    xhr : function() {
+                        var xhr = $.ajaxSettings.xhr();
+                        if (xhr.upload) {
+                            xhr.upload.addEventListener('progress', function(event) {
+                                if (event.lengthComputable) show_upload_progress(sentFiles, event.loaded, event.total);
+                            });
+                        }
+                        return xhr;
+                    },
 
                     // handle a successful response
                     success : function(json) {
@@ -583,15 +573,41 @@
             return carrying;
         }
 
+        function show_upload_progress(sentFiles, loaded, total) {
+            // The share of a draft save sent so far, shown as a bar and a percentage in the
+            // "Attaching" note of each input whose files went with it (#784). The share is of
+            // the whole request, which a file being attached is nearly all of. An input holding
+            // something else by now was chosen again while this save was away, so its note is
+            // about another file and is left alone.
+            var percent = Math.min(100, Math.round(loaded / total * 100));
+            $('#submission-main-form input[type="file"]').each(function() {
+                var chosen = chosen_files(this);
+                if (!chosen.length || !same_files(chosen, sentFiles[this.name])) return;
+                var note = file_note_holder($(this)).find('.draft-file-note-pending');
+                if (!note.length) return;
+                var bar = note.find('.draft-upload-progress');
+                if (!bar.length) {
+                    bar = $('<span class="progress draft-upload-progress">' +
+                            '<span class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></span>' +
+                            '</span>');
+                    note.append(' <span class="draft-upload-percent"></span>').append(bar);
+                }
+                bar.find('.progress-bar').css('width', percent + '%').attr('aria-valuenow', percent);
+                note.find('.draft-upload-percent').text(percent + '%');
+            });
+        }
+
         function show_saved_files(json, sentFiles) {
             // A saved file is stored with the draft, so its input is cleared: the file no
-            // longer needs re-choosing, and the next autosave must not upload it again. A
-            // note under the input says where it went. A rejected file is cleared too, with
-            // the validation error in its place, so the student re-chooses knowing why.
-            $.each(json.saved_answer_files || {}, function(field_name, file_name) {
-                file_note($('[name="' + field_name + '"]'),
-                    '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
-                    ' <small>(saved with your draft)</small>', sentFiles);
+            // longer needs re-choosing, and the next autosave must not upload it again. The
+            // list above the input, which the server re-renders, shows where it went. A
+            // rejected file is cleared too, with the validation error in its place, so the
+            // student re-chooses knowing why.
+            $.each(json.answer_files_html || {}, function(field_name, html) {
+                // A file answer's list holds its one saved file, the one just chosen, with the
+                // button that removes it (#2925).
+                file_note($('[name="' + field_name + '"]'), '', sentFiles);
+                $('.answer-file-saved[data-for="' + field_name + '"]').html(html);
             });
             if (typeof json.draft_attachments_html === 'string') {
                 // The comment's attachments have a list of their own below the box, which the
@@ -646,10 +662,12 @@
             file_note_element(input).html(html).removeClass('draft-file-note-pending');
         }
 
-        // Removing a file attached by mistake. Delegated from the page, because the list this
-        // button sits in is replaced wholesale every time the server re-renders it.
-        $(document).on('click', '.draft-attachment-delete', function() {
+        // Removing a file attached by mistake, from the comment's attachments or from a file
+        // answer (#2925). Delegated from the page, because the list each button sits in is
+        // replaced wholesale every time the server re-renders it.
+        $(document).on('click', '.draft-attachment-delete, .answer-file-delete', function() {
             var $button = $(this);
+            var $list = $button.closest('#draft-attachments, .answer-file-saved');
             // No confirmation: the file is one the student just attached to their own draft,
             // and re-attaching it is a couple of clicks, so a dialog on every removal costs
             // more than the mistake it guards against (#2749). The button's tooltip says the
@@ -662,7 +680,7 @@
                 type : "POST",
                 data : { csrfmiddlewaretoken: '{{ csrf_token }}' },
                 success : function(json) {
-                    $('#draft-attachments').html(json.draft_attachments_html);
+                    $list.html($button.hasClass('answer-file-delete') ? json.answer_file_html : json.draft_attachments_html);
                 },
                 error : function(xhr, errmsg, err) {
                     $button.prop('disabled', false);
@@ -687,5 +705,6 @@
     </script>
 
     {% include 'quest_manager/snippets/flag_submissions_scripts.html' %}
+    {% if request.user.is_staff %}{% include 'questions/snippets/answer_mark_scripts.html' %}{% endif %}
 
 {% endblock %}

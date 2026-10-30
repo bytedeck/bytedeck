@@ -46,10 +46,82 @@ Changes because: fix django-summernote/issues/465 issue, make it possible to use
              nEditable.outerHeight(height);
          }
 
+{% if not config.disable_attachment %}
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/2907, the editor's image upload is a function of its own that
+resolves with the uploaded images' URLs, so onImageUpload inserts them and the Edit Image dialog
+(the image-source plugin, in static/bytedeck_summernote/plugins/image-source/, which gets it as the
+uploadImages option) puts one in place of the image it changes.
+{% endcomment %}
+         /**
+          * Upload image files as attachments, the way the editor uploads an image added to it.
+          *
+          * @param {FileList|File[]} files - the images to upload.
+          * @returns {Promise} resolves with the uploaded images' URLs, or rejects once the writer
+          *     has been told why: an image too large, or a failed upload.
+          */
+         function uploadImages(files) {
+             var uploaded = $.Deferred();
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/783, an image dropped or pasted into the editor skips the
+dialog's file input, so its size is checked here, before it is sent. The server would refuse
+one over the limit only after the whole upload, and the web server refuses a request over its
+own cap with an error the editor can only report as "Got an error while uploading images."
+{% endcomment %}
+             var sizeCheck = window.uploadSizeCheck;
+             var tooLarge = sizeCheck && sizeCheck.problemWith(
+                 Array.prototype.slice.call(files), {{ config.attachment_filesize_limit }}, 0);
+             if (tooLarge) {
+                 alert(tooLarge);
+                 return uploaded.reject().promise();
+             }
+{% comment %} End changes {% endcomment %}
+             // custom attachment data
+             var attachmentData = origin.dataset;
+             $nImageInput = $nEditor.find('.note-image-input');
+             $nImageInput.fileupload();
+             $nImageInput.fileupload('send', {
+                 files: files,
+                 formData: $.extend({csrfmiddlewaretoken: csrftoken}, attachmentData),
+                 url: settings.url.upload_attachment,
+             })
+                 .done(function (data, textStatus, jqXHR) {
+                     uploaded.resolve($.map(data.files, function (file) { return file.url; }));
+                 })
+                 .fail(function (jqXHR, textStatus, errorThrown) {
+                     // if the error message from the server has any text in it, show it
+                     var msg = jqXHR.responseJSON;
+                     if (msg && msg.message) {
+                         alert(msg.message);
+                     }
+                     // otherwise, show something generic
+                     else {
+                         alert('Got an error while uploading images.');
+                     }
+                     uploaded.reject();
+                 });
+             // Summernote will replace ImageInput when next the dialog opens.
+             // But we have to reset it to prevent additional uploading by form itself.
+             $nImageInput.replaceWith($nImageInput.val('').clone(true));
+             return uploaded.promise();
+         }
+{% comment %} End changes {% endcomment %}
+{% endif %}
+
          var initEditor = function() {
              $sn.summernote($.extend(settings, {
 {% if iframe %}
                  disableResizeEditor: true,
+{% endif %}
+{% if not config.disable_attachment %}
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/2907, the Edit Image dialog uploads with the editor's own upload.
+{% endcomment %}
+                 uploadImages: uploadImages,
+{% comment %} End changes {% endcomment %}
 {% endif %}
                  callbacks: {
                      onInit: function() {
@@ -58,10 +130,11 @@ Changes because: fix django-summernote/issues/465 issue, make it possible to use
                          recalcHeight($nEditor);
 {% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
 
-Changes because: bytedeck/issues/783, the image dialog's file input carries the editor's own
-limit on an image, so js/upload-size-check.js refuses one over it as soon as it is chosen.
+Changes because: bytedeck/issues/783, the image dialogs' file inputs (Insert Image's, and Edit
+Image's from the image-source plugin, bytedeck/issues/2907) carry the editor's own limit on an
+image, so js/upload-size-check.js refuses one over it as soon as it is chosen.
 {% endcomment %}
-                         $nEditor.find('.note-image-input').attr('data-max-size', {{ config.attachment_filesize_limit }});
+                         $nEditor.find('.note-image-input, .note-image-source-file').attr('data-max-size', {{ config.attachment_filesize_limit }});
 {% comment %} End changes {% endcomment %}
 
 {% if iframe %}
@@ -119,7 +192,20 @@ Widgets that set no aria-label are untouched.
                          });
                      },
                      onBlur: function() {
-                         origin.value = $sn.summernote('code');
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/2902, the editing area's content is read from the editing area
+itself, not through summernote('code'). The keep-caret plugin keeps the focus in the editing area
+while the toolbar is pressed, so pressing the code view button blurs the editing area only
+once the code view, opening, takes the focus: summernote then counts the code view as open, but
+has not built its CodeMirror yet. summernote('code') saves the code view's CodeMirror into its
+textarea first, and the one it holds at that moment is the one from the last time the code view
+was open, whose text is the content as it was then. Saving it puts that old content in the code
+view, and closing the code view puts it back into the editor. The editing area is what lost the
+focus, so its own HTML is the content.
+{% endcomment %}
+                         origin.value = $nEditor.find('.note-editable').html();
+{% comment %} End changes {% endcomment %}
                      },
                      onBlurCodeview: function() {
                          origin.value = $sn.summernote('code');
@@ -128,48 +214,15 @@ Widgets that set no aria-label are untouched.
                      onImageUpload: function(files) {
 {% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
 
-Changes because: bytedeck/issues/783, an image dropped or pasted into the editor skips the
-dialog's file input, so its size is checked here, before it is sent. The server would refuse
-one over the limit only after the whole upload, and the web server refuses a request over its
-own cap with an error the editor can only report as "Got an error while uploading images."
+Changes because: bytedeck/issues/2907, the upload is uploadImages() above, which the Edit Image
+dialog (the image-source plugin) uses too.
 {% endcomment %}
-                         var sizeCheck = window.uploadSizeCheck;
-                         var tooLarge = sizeCheck && sizeCheck.problemWith(
-                             Array.prototype.slice.call(files), {{ config.attachment_filesize_limit }}, 0);
-                         if (tooLarge) {
-                             alert(tooLarge);
-                             return;
-                         }
+                         uploadImages(files).done(function (urls) {
+                             $.each(urls, function (index, url) {
+                                 $sn.summernote("insertImage", url);
+                             });
+                         });
 {% comment %} End changes {% endcomment %}
-                         // custom attachment data
-                         var attachmentData = origin.dataset;
-                         $nImageInput = $nEditor.find('.note-image-input');
-                         $nImageInput.fileupload();
-                         var jqXHR = $nImageInput.fileupload('send',
-                                                             {
-                                                                 files: files,
-                                                                 formData: $.extend({csrfmiddlewaretoken: csrftoken}, attachmentData),
-                                                                 url: settings.url.upload_attachment,
-                         })
-                                                 .done(function (data, textStatus, jqXHR) {
-                                                     $.each(data.files, function (index, file) {
-                                                         $sn.summernote("insertImage", file.url);
-                                                     });
-                                                 })
-                                                 .fail(function (jqXHR, textStatus, errorThrown) {
-                                                     // if the error message from the server has any text in it, show it
-                                                     var msg = jqXHR.responseJSON;
-                                                     if (msg && msg.message) {
-                                                         alert(msg.message);
-                                                     }
-                                                     // otherwise, show something generic
-                                                     else {
-                                                         alert('Got an error while uploading images.');
-                                                     }
-                                                 });
-                         // Summernote will replace ImageInput when next the dialog opens.
-                         // But we have to reset it to prevent additional uploading by form itself.
-                         $nImageInput.replaceWith($nImageInput.val('').clone(true));
                      }
                      {% endif %}
                  }

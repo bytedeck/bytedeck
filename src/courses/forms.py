@@ -1,3 +1,5 @@
+from collections import Counter
+
 from django import forms
 from django.forms.formsets import DELETION_FIELD_NAME
 
@@ -7,6 +9,7 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from django_select2.forms import Select2Widget
 
+from competencies.models import Competency
 from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
 from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
@@ -14,6 +17,10 @@ from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeMod
 
 class XPCourseChoiceMixin:
     """Asks the student which of their courses this submission's XP counts toward (issue #2440).
+
+    The form's ``registration`` field offers the student's course registrations, each shown as
+    its course. The work is filed against the registration rather than the course, so it stays
+    with that registration if a teacher later changes its course (issue #2875).
 
     They can also decline to choose: "split evenly between my courses" is the first option and
     the one selected by default, so a student who ignores the question gets the even split that
@@ -40,14 +47,17 @@ class XPCourseChoiceMixin:
                 or one where the student is picked on the form itself and so is not yet known.
         """
         super().__init__(*args, **kwargs)
-        registrations = CourseStudent.objects.current_courses(student) if student else None
-        courses = Course.objects.filter(id__in=registrations.values_list('course_id', flat=True)) if student else None
+        # a registration with no course has nothing to show the student, so it is not offered
+        registrations = (
+            CourseStudent.objects.current_courses(student).filter(course__isnull=False).select_related('course', 'block')
+            if student else None
+        )
 
-        if not student or not SiteConfig.get().students_choose_xp_course or courses.count() < 2:
-            del self.fields['course']
+        if not student or not SiteConfig.get().students_choose_xp_course or registrations.count() < 2:
+            del self.fields['registration']
             return
 
-        field = self.fields['course']
+        field = self.fields['registration']
         field.label = self.label
         # the label asks the whole question, so a line of help text under it would only repeat it
         field.help_text = ''
@@ -64,7 +74,14 @@ class XPCourseChoiceMixin:
         # student who does not think about the question gets the old behaviour. Assigning the
         # queryset last hands the choices, empty label included, to the widget set above.
         field.empty_label = self.split_evenly_label
-        field.queryset = courses
+        field.queryset = registrations
+        # a student registered in the same course twice (in two groups, say) would otherwise see
+        # two identical choices, so those name their group as well
+        counts = Counter(registration.course_id for registration in registrations)
+        field.label_from_instance = lambda registration: (
+            f'{registration.course} ({registration.block})'
+            if counts[registration.course_id] > 1 and registration.block else str(registration.course)
+        )
 
 
 class NoScriptTagDatePickerInput(DatePickerInput):
@@ -320,6 +337,24 @@ class ExcludedDateForm(forms.ModelForm):
         return excluded_date.save()  # formset saves the rest in its own function
 
 
+def class_days_changed(semester_form, excluded_date_formsets):
+    """Whether saving a semester's form and its excluded dates changes which days it has class on,
+    and so what share of it has passed: what every mark in it is worked out from (#2899).
+
+    Args:
+        semester_form (ModelForm): the semester's own form, which holds its first and last day.
+        excluded_date_formsets (iterable of BaseFormSet): the formsets of its excluded dates.
+
+    Returns:
+        bool: True when the first or last day changed, or an excluded date was added, edited or
+        removed.
+    """
+    return (
+        bool({'first_day', 'last_day'} & set(semester_form.changed_data))
+        or any(formset.has_changed() for formset in excluded_date_formsets)
+    )
+
+
 class ExcludedDateFormsetHelper(FormHelper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -420,3 +455,35 @@ class BlockForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['current_teacher'].initial = SiteConfig.get().deck_owner.pk
+
+
+class CourseForm(forms.ModelForm):
+    """ The course create and update form.
+
+    With competencies enabled for the deck, it offers the course's competency set as a choice of the
+    official course labels its imported competencies carry (e.g. "ADST 9"), so a course named its own
+    way can say which curriculum course it teaches. With the flag off the field is left off, keeping
+    whatever set the course already has.
+    """
+
+    class Meta:
+        model = Course
+        fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active', 'competency_set')
+
+    def __init__(self, *args, **kwargs):
+        """ Offer the deck's competency sets for the competency_set field, or drop it while the deck has
+        competencies disabled. """
+        super().__init__(*args, **kwargs)
+        if not SiteConfig.get().enable_competencies:
+            del self.fields['competency_set']
+            return
+        labels = set(Competency.objects.exclude(course='').values_list('course', flat=True))
+        if self.instance.competency_set:
+            # a set whose competencies are gone stays on offer, so saving the course doesn't drop it
+            labels.add(self.instance.competency_set)
+        self.fields['competency_set'] = forms.ChoiceField(
+            label="Competency set",
+            required=False,
+            choices=[('', '---------')] + [(label, label) for label in sorted(labels, key=str.lower)],
+            help_text=Course._meta.get_field('competency_set').help_text,
+        )

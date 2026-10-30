@@ -1,0 +1,248 @@
+"""Recording competency evidence for a quest submission.
+
+A submission of a quest with competencies attached holds one CompetencyAssessment per competency:
+its latest level in it. Approving the submission records a level for each of the quest's
+competencies: the level the teacher chose on the approval form, which starts on the level the
+submission already has (a submission returned and approved again) or else the link's default, as
+quick approvals and quests that need no teacher approval record too. Commenting on an approved
+submission records the levels the teacher changed on the form.
+
+A level recorded for a submission replaces the one it had for that competency, so each quest
+counts only its latest rating; the comment that recorded each rating keeps the record of what was
+given, and when.
+"""
+
+from collections import defaultdict
+
+from django.contrib.contenttypes.models import ContentType
+from django.template.defaultfilters import truncatechars
+from django.utils.html import format_html, format_html_join
+
+from siteconfig.models import SiteConfig
+
+from .forms import competency_level_field_name
+from .models import CompetencyAssessment, ProficiencyLevel
+
+
+def approval_links(quest):
+    """ The quest's competency links that an approval records evidence for.
+
+    Links to deactivated competencies are left out: a deactivated competency is hidden from
+    new use, and new evidence is new use.
+
+    Args:
+        quest (Quest): the quest being approved.
+
+    Returns:
+        list[QuestCompetency]: the links, in the default (course, category, name) ordering.
+    """
+    return [link for link in quest.quest_competencies.all() if link.competency.active]
+
+
+def _levels_by_submission(submissions):
+    """ The current levels of each of the submissions, in one query.
+
+    Args:
+        submissions (list[QuestSubmission]): the submissions, at least one.
+
+    Returns:
+        dict[int, dict[int, int]]: submission pk to its current level by competency pk.
+    """
+    levels = defaultdict(dict)
+    rows = CompetencyAssessment.objects.filter(
+        source_content_type=ContentType.objects.get_for_model(submissions[0]),
+        source_object_id__in=[submission.pk for submission in submissions],
+    ).order_by('timestamp', 'pk').values_list('source_object_id', 'competency_id', 'level')
+    # oldest first, so a later level for a competency replaces an earlier one
+    for submission_id, competency_id, level in rows:
+        levels[submission_id][competency_id] = level
+    return levels
+
+
+def prefetch_submission_levels(submissions):
+    """ Fetch the current levels of many submissions at once, for a page that shows the level
+    controls for each (see submission_levels).
+
+    Args:
+        submissions (iterable of QuestSubmission): the submissions.
+    """
+    submissions = list(submissions)
+    if not submissions:
+        return
+    levels = _levels_by_submission(submissions)
+    for submission in submissions:
+        submission.competency_levels = levels.get(submission.pk, {})
+
+
+def submission_levels(submission):
+    """ The submission's current level in each competency it has evidence for (its latest
+    assessment of each), from prefetch_submission_levels when the page fetched them.
+
+    Args:
+        submission (QuestSubmission): the submission.
+
+    Returns:
+        dict[int, int]: competency pk to level.
+    """
+    prefetched = getattr(submission, 'competency_levels', None)
+    if prefetched is not None:
+        return prefetched
+    return _levels_by_submission([submission]).get(submission.pk, {})
+
+
+def starting_level(link, current):
+    """ The level the approval form starts a link's competency on: the submission's current level
+    in it, or the link's default when it has none.
+
+    Args:
+        link (QuestCompetency): the quest's link to the competency.
+        current (dict[int, int]): the submission's current levels (submission_levels).
+
+    Returns:
+        int: a ProficiencyLevel value.
+    """
+    return current.get(link.competency_id, link.default_level)
+
+
+def posted_level(data, link, start):
+    """ The level posted for a link's competency on the approval form, or the level it started on.
+
+    Args:
+        data (QueryDict or None): the approval form's POST data, or None when no form was posted.
+        link (QuestCompetency): the quest's link to the competency.
+        start (int): the level the form started on (starting_level).
+
+    Returns:
+        int: a ProficiencyLevel value. Anything posted that isn't one (a hand-made request) falls
+        back to the starting level, as a missing value does.
+    """
+    raw = (data or {}).get(competency_level_field_name(link.competency_id))
+    try:
+        level = int(raw)
+    except (TypeError, ValueError):
+        return start
+    return level if level in ProficiencyLevel.values else start
+
+
+def competencies_enabled():
+    """ Whether this deck has competencies enabled (the public schema, with no SiteConfig, hasn't).
+
+    Returns:
+        bool: True when the deck has a SiteConfig with enable_competencies set.
+    """
+    config = SiteConfig.get()
+    return config is not None and config.enable_competencies
+
+
+def record_level(submission, link, level, assessed_by):
+    """ Record the submission's level in a link's competency, replacing the one it had.
+
+    Args:
+        submission (QuestSubmission): the submission; its student is the one assessed.
+        link (QuestCompetency): the quest's link to the competency.
+        level (int): the ProficiencyLevel value.
+        assessed_by (User or None): the teacher, or None when no teacher assessed it.
+
+    Returns:
+        CompetencyAssessment: the assessment created.
+    """
+    source_content_type = ContentType.objects.get_for_model(submission)
+    CompetencyAssessment.objects.filter(
+        source_content_type=source_content_type, source_object_id=submission.pk, competency=link.competency,
+    ).delete()
+    assessment = CompetencyAssessment(
+        user=submission.user,
+        competency=link.competency,
+        level=level,
+        source_content_type=source_content_type,
+        source_object_id=submission.pk,
+        assessed_by=assessed_by,
+    )
+    assessment.full_clean()
+    assessment.save()
+    return assessment
+
+
+def record_approval_assessments(submission, assessed_by=None, data=None):
+    """ Record the competency evidence an approval of the submission gives, if the deck has
+    competencies enabled: a level for each of the quest's competencies, the one posted or else the
+    one the form started on.
+
+    Args:
+        submission (QuestSubmission): the submission just approved; its student is the one assessed.
+        assessed_by (User or None): the teacher who approved it, or None for a quest that is
+            approved automatically (system-assessed).
+        data (QueryDict or None): the approval form's POST data, for the levels the teacher chose.
+
+    Returns:
+        list[CompetencyAssessment]: the assessments created, one per competency (empty when the
+        flag is off or the quest has no active competencies).
+    """
+    if not competencies_enabled():
+        return []
+    current = submission_levels(submission)
+    return [
+        record_level(submission, link, posted_level(data, link, starting_level(link, current)), assessed_by)
+        for link in approval_links(submission.quest)
+    ]
+
+
+def level_changes(submission, data):
+    """ The levels a teacher changed on the approval form: each competency whose posted level
+    differs from the one the form started on.
+
+    Args:
+        submission (QuestSubmission): the submission the form acts on.
+        data (QueryDict): the form's POST data.
+
+    Returns:
+        list[tuple[QuestCompetency, int]]: each changed link with its new level (empty when the
+        flag is off or nothing changed).
+    """
+    if not competencies_enabled():
+        return []
+    current = submission_levels(submission)
+    changes = []
+    for link in approval_links(submission.quest):
+        start = starting_level(link, current)
+        level = posted_level(data, link, start)
+        if level != start:
+            changes.append((link, level))
+    return changes
+
+
+def record_level_changes(submission, assessed_by, data):
+    """ Record the levels a teacher changed when commenting on an approved submission.
+
+    Args:
+        submission (QuestSubmission): the approved submission commented on.
+        assessed_by (User): the teacher.
+        data (QueryDict): the form's POST data.
+
+    Returns:
+        list[CompetencyAssessment]: the assessments created, one per changed competency.
+    """
+    return [record_level(submission, link, level, assessed_by) for link, level in level_changes(submission, data)]
+
+
+def assessments_comment_html(assessments):
+    """ The competency levels an approval or comment recorded, for the comment itself, so the student
+    reads them in the conversation alongside the approval (as a granted badge is announced there),
+    and the conversation keeps each rating given. A long name is cut short, with the full name in
+    its title.
+
+    Args:
+        assessments (list[CompetencyAssessment]): what record_approval_assessments or
+            record_level_changes returned.
+
+    Returns:
+        str: safe HTML listing each competency with the deck's label for its level, or '' for none.
+    """
+    if not assessments:
+        return ''
+    labels = SiteConfig.get().get_competency_scale_labels()
+    items = format_html_join('', '<li><span title="{}">{}</span>: <b>{}</b></li>', (
+        (assessment.competency.qualified_name, truncatechars(assessment.competency.name, 50), labels[assessment.level])
+        for assessment in assessments
+    ))
+    return format_html('<p>Competencies:</p><ul>{}</ul>', items)

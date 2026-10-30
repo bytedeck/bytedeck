@@ -15,6 +15,8 @@ import sys
 # https://django-environ.readthedocs.io/en/latest/#django-environ
 import environ
 
+from bytedeck_summernote.config import summernote_config
+
 env = environ.Env(
     # set casting, default value
     DEBUG=(bool, False),
@@ -173,6 +175,7 @@ TENANT_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    'competencies',
     # The Shared Library's own models live per schema: the deck that is the Library keeps
     # its content's origins in its schema, beside the content they describe (#2377).
     'library',
@@ -262,6 +265,7 @@ INSTALLED_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    'competencies',
     'library',
 )
 
@@ -286,6 +290,9 @@ MIDDLEWARE = [
     # pass back through them and pick up their response headers (review find on #2210).
     'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',
     'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
+    # Records when each signed-in person last used their deck (#2849). Needs auth and sessions
+    # above, and sits below the suspension check, so a person it turns away isn't recorded.
+    'profile_manager.middleware.LastActiveMiddleware',
 ]
 
 # Max size (bytes) of a request body Django will parse in memory, EXCLUDING
@@ -909,164 +916,10 @@ SOCIALACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomSocialAccountAdapter"
 #
 #################################
 
+# The editor's toolbar, menus, plugins and attachments are set up with the editor, in
+# bytedeck_summernote/config.py.
 SUMMERNOTE_THEME = 'bs3'
-SUMMERNOTE_CONFIG = {
-    # Using SummernoteWidget - iframe mode, default
-    'iframe': True,
-
-    # Or, you can set it as False to use SummernoteInplaceWidget by default - no iframe mode
-    # In this case, you have to load Bootstrap/jQuery stuff by manually.
-    # Use this when you're already using Bootstraip/jQuery based themes.
-    # 'iframe': False,
-
-    # You can put custom Summernote settings
-    'summernote': {
-        # As an example, using Summernote Air-mode
-        'airMode': False,
-
-        # Change editor size
-        'width': '100%',
-        'height': '480',
-
-        'followingToolbar': False,
-
-        # Customize toolbar buttons
-        'toolbar': [
-            ['style', ['style']],
-            ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-                      'strikethrough', 'add-text-tags', 'clear']],
-            ['fontname', ['fontname']],
-            ['fontsize', ['fontsize']],
-            ['color', ['color']],
-            ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
-            # ['height', ['height']],
-            ['table', ['table']],
-            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math', ]],  # , 'nugget']],
-            ['view', ['codeview']],
-            ['help', ['help']],
-        ],
-
-        # The menus that pop up over a clicked image, link or table. They belong here with the toolbar:
-        # django-summernote hands the editor only this 'summernote' dict (#268). The image menu's size
-        # buttons carry Summernote 0.8.20's names, and "custom" holds the buttons our plugins add.
-        'popover': {
-            'image': [
-                ['custom', ['imageShapes']],
-                ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
-                ['float', ['floatLeft', 'floatRight', 'floatNone']],
-                ['remove', ['removeMedia']]
-            ],
-            'link': [
-                ['link', ['linkDialogShow', 'unlink']]
-            ],
-            'table': [
-                ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
-                ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-                ['custom', ['tableHeaders', 'tableStyles']]
-            ],
-        },
-
-        # You can also add custom settings for external plugins
-        # 'print': {
-        #     'stylesheetUrl': '/some_static_folder/printable.css',
-        # },
-        'codemirror': {
-            'mode': 'htmlmixed',
-            'lineNumbers': 'true',
-            'lineWrapping': 'true',
-            # You have to include theme file in 'css' or 'css_for_inplace' before using it.
-            'theme': 'monokai',
-        },
-    },
-
-    # Need authentication while uploading attachments.
-    'attachment_require_authentication': True,
-    'attachment_filesize_limit': 4096 * 4096,
-
-    # Set `upload_to` function for attachments.
-    # 'attachment_upload_to': my_custom_upload_to_func(),
-
-    # Set custom storage class for attachments.
-    # 'attachment_storage_class': 'my.custom.storage.class.name',
-
-    # Set custom model for attachments (default: 'django_summernote.Attachment')
-    # 'attachment_model': 'my.custom.attachment.model',  # must inherit 'django_summernote.AbstractAttachment'
-
-    # You can disable attachment feature.
-    # Currently only works for images anyway.  Turn on when it works with other files
-    # Images can still be embedded with the image tool
-    'disable_attachment': False,
-
-    # Set `True` to return attachment paths in absolute URIs.
-    'attachment_absolute_uri': False,
-
-    # You can also add custom css/js for SummernoteInplaceWidget.
-    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    'css_for_inplace': (
-        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
-        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
-    ),
-    'js_for_inplace': (
-        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
-        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
-        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
-        os.path.join(STATIC_URL, 'js/summernote-math.js'),
-        os.path.join(STATIC_URL, 'js/summernote-classes.js'),
-        os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
-    ),
-
-    # Codemirror as codeview
-    # If any codemirror settings are defined, it will include codemirror files automatically.
-    'css': (
-        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        '//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css',
-        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
-        os.path.join(STATIC_URL, 'css/custom_common.css'),
-        os.path.join(STATIC_URL, 'css/custom.css'),
-        os.path.join(STATIC_URL, 'css/custom_summernote_iframe.css'),
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
-        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
-    ),
-
-    # To use external plugins,
-    # Include them within `css` and `js`.
-    'js': (
-        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
-        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
-        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
-        os.path.join(STATIC_URL, 'js/summernote-math.js'),
-        os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
-    ),
-
-    # Lazy initialize
-    # If you want to initialize summernote at the bottom of page, set this as True
-    # and call `initSummernote()` on your page.
-    # 'lazy': True,
-
-}
+SUMMERNOTE_CONFIG = summernote_config(STATIC_URL)
 
 # django-rseized
 DJANGORESIZED_DEFAULT_QUALITY = 90

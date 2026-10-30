@@ -16,6 +16,8 @@ from quest_manager.models import QuestSubmission
 from notifications.models import Notification
 
 from profile_manager.models import Profile
+from siteconfig.models import SiteConfig
+from utilities.html import textify
 from utilities.mail import deck_from_email
 
 User = get_user_model()
@@ -185,15 +187,19 @@ def generate_notification_email(user, root_url):
         return None
 
     if unread_notifications or submissions_awaiting_approval:
-        text_content = str(unread_notifications)
-
         html_content = html_template.render({
             'user': user,
             'notifications': unread_notifications,
             'submissions': submissions_awaiting_approval,
             'root_url': root_url,
+            # rendered without a request, so the context processor that usually provides the
+            # deck's settings doesn't run: the sign-off needs them passed in
+            'config': SiteConfig.get(),
             'profile_edit_url': reverse('profiles:profile_edit_own')
         })
+        # the same email for a mail client that doesn't show HTML, links included, as the
+        # announcement email does
+        text_content = textify(html_content)
         # Show the deck's domain as the sender name so a recipient can tell which deck an
         # email is from at a glance, while keeping the actual sending address (the one the
         # mail server is authorised for) unchanged (#2338).

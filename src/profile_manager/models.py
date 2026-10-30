@@ -163,6 +163,12 @@ class Profile(models.Model):
                                           help_text="A test account that won't show up in student lists",
                                           )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
+    # When the person last used the deck, written by LastActiveMiddleware at most once an hour.
+    # A session lasts weeks, so the user's last_login can be far older than their last visit (#2849).
+    last_active = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When this person last used the deck, recorded at most once an hour.",
+    )
     not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
 

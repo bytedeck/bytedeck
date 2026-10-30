@@ -1,6 +1,7 @@
 {% extends "profile_manager/base.html" %}
 {% load utility_tags %}
 {% load filters %}
+{% load competency_tags %}
 
 {% block heading_inner %}{{ object.get_preferred_name|default:"<<no name>>"|add_possessive }} Profile
     <div class="btn-group" role="group">
@@ -22,6 +23,12 @@
         <a class= "btn btn-primary" title="View your Mark Calculations"
           href="{% url 'courses:marks' object.user.id %}"
           role="button"><i class="fa fa-line-chart"></i></a>
+      {% endif %}
+
+      {% if config.enable_competencies and not object.user.is_staff %}
+        <a class="btn btn-default" title="View the Competencies Summary"
+          href="{% url 'competencies:summary' object.user.id %}"
+          role="button"><i class="fa fa-graduation-cap"></i></a>
       {% endif %}
 
       {% if request.user == object.user %}
@@ -97,11 +104,14 @@
             </div>
 
             {% if courses %}
+              {# beside each course, its competency average on decks that have competencies #}
+              {% course_competency_averages object.user as competency_averages %}
               {# each course's own XP, which differ when work is assigned to one of them (#2440) #}
               {% for registration, xp in course_xp %}
                 <div class="pull-right"> {{xp|floatformat:0}} / {{registration.course.xp_for_100_percent}} XP </div>
                 <div>
                     {{registration.course}}
+                    {% course_competency_average competency_averages registration %}
                 </div>
                 <div class="progress progress-xp">
                   <div class="progress-bar" role="progressbar" aria-valuenow="{{xp}}" aria-valuemin="0"
@@ -141,7 +151,7 @@
         {% endif %}
         <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
         {% if request.user.is_staff %}
-          <p>Last Login: {% if object.user.last_login %} {{ object.user.last_login}} ({{ object.user.last_login|timesince }} ago) {% else %}&mdash;{% endif %}</p>
+          <p>Last Active: {% if object.last_active %}{{ object.last_active }} ({{ object.last_active|timesince }} ago){% else %}Never{% endif %}</p>
         {% endif %}
       </div>
      </div> <!--panel -->

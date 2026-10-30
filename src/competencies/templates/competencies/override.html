@@ -1,0 +1,69 @@
+{% extends "competencies/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title %}Set a Level | {% endblock %}
+
+{% block heading_inner %}Set a Level{% endblock %}
+
+{% block content %}
+{% comment %}
+  Where staff override a student's level in a competency, or clear the override (CompetencyOverrideView):
+  the level worked out from the evidence, the override in force, the form, and every override so far.
+{% endcomment %}
+<p>
+  <strong>{{ student.profile.teacher_name }}</strong>'s level in <strong title="{{ competency.description }}">{{ competency.qualified_name }}</strong>.
+  A level you set here stands as their current level in it on every page that shows one (their profile, their
+  competencies page and the competency matrix), in place of the level worked out from the evidence, until you
+  change or clear it.
+</p>
+<ul class="competency-override-levels">
+  <li>
+    Worked out from the evidence ({{ rollup }}):
+    {% if evidence_level %}<span class="label competency-code competency-level competency-level-{{ evidence_level }}">{{ evidence_code }}</span> {{ evidence_label }}{% else %}<span class="label competency-code label-default">n/a</span> Not yet assessed{% endif %}
+  </li>
+  <li>
+    Set by a teacher:
+    {% if in_force %}
+      <span class="label competency-code competency-level competency-level-{{ in_force.level }} competency-override">{{ in_force_code }}</span> {{ in_force_label }},
+      by {{ in_force.set_by.profile.preferred_full_name|default:"a teacher no longer on this deck" }} on {{ in_force.timestamp|date }}{% if in_force.note %}: {{ in_force.note }}{% endif %}
+    {% else %}
+      none, so the level worked out from the evidence stands
+    {% endif %}
+  </li>
+</ul>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form|crispy }}
+  <input type="submit" value="Save" class="btn btn-primary"/>
+  <a href="{{ summary_url }}" role="button" class="btn btn-default">Cancel</a>
+</form>
+
+<h3>History</h3>
+{% if history %}
+<table class="table table-condensed">
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>By</th>
+      <th>Level</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in history %}
+    {% with override=entry.override %}
+    <tr>
+      <td>{{ override.timestamp }}</td>
+      <td>{{ override.set_by.profile.preferred_full_name|default:"A teacher no longer on this deck" }}</td>
+      <td>{% if override.level %}<span class="label competency-level competency-level-{{ override.level }}">{{ entry.label }}</span>{% else %}Cleared{% endif %}</td>
+      <td>{{ override.note }}</td>
+    </tr>
+    {% endwith %}
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No teacher has set {{ student.profile.get_preferred_name|default:student.username }}'s level in this competency yet.</p>
+{% endif %}
+{% endblock %}

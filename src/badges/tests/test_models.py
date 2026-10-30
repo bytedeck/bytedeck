@@ -324,7 +324,20 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
         self.assertNotIn(user3, qs)
 
-    def _granted_on(self, date, xp, course=None):
+    def test_user_badge_assertion_count__all_leaves_out_archived_students(self):
+        """The badge page's All list is every non-archived student, as its name says on every
+        page that offers it (#2136): an archived student who holds the badge is not listed."""
+        badge = baker.make(Badge)
+        archived = baker.make(User, is_active=False)
+        baker.make(BadgeAssertion, user=self.student, badge=badge)
+        baker.make(BadgeAssertion, user=archived, badge=badge)
+
+        qs = BadgeAssertion.objects.user_badge_assertion_count(badge)
+
+        self.assertIn(self.student, qs)
+        self.assertNotIn(archived, qs)
+
+    def _granted_on(self, date, xp, registration=None):
         """Grant the student a badge worth `xp`, stamped as granted on `date`.
 
         The timestamp is auto_now_add, so it has to be written after the fact rather than
@@ -332,26 +345,26 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         """
         assertion = baker.make(
             BadgeAssertion, user=self.student, badge=baker.make(Badge, xp=xp),
-            semester=self.sem, course=course,
+            semester=self.sem, registration=registration,
         )
         BadgeAssertion.objects.filter(pk=assertion.pk).update(timestamp=date)
         return assertion
 
-    def test_xp_by_course_series__answers_each_date_with_what_had_been_granted_by_then(self):
+    def test_xp_by_registration_series__answers_each_date_with_what_had_been_granted_by_then(self):
         """Each date gets the split as it stood then, which is what plots a course's line
         through the semester (issue #2459). Badges have no cap, so a date's figure is the
         running total of everything granted by then."""
-        maths = baker.make('courses.Course')
+        maths = baker.make('courses.CourseStudent', user=self.student, semester=self.sem, course=baker.make('courses.Course'))
         monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
-        self._granted_on(monday, xp=10, course=maths)
+        self._granted_on(monday, xp=10, registration=maths)
         self._granted_on(monday + datetime.timedelta(days=2), xp=25)
 
-        series = BadgeAssertion.objects.xp_by_course_series(
+        series = BadgeAssertion.objects.xp_by_registration_series(
             self.student, [monday - datetime.timedelta(days=1), monday, monday + datetime.timedelta(days=2)])
 
         self.assertEqual(series, [{}, {maths.id: 10}, {maths.id: 10, None: 25}])
 
-    def test_xp_by_course_series__costs_the_same_however_many_dates(self):
+    def test_xp_by_registration_series__costs_the_same_however_many_dates(self):
         """Reading the assertions once is the point of the series: charting a course asks for
         a whole semester of class days at a time, and what it costs must not grow with them
         (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
@@ -361,9 +374,9 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         dates = [monday + datetime.timedelta(days=day) for day in range(20)]
 
         with CaptureQueriesContext(connection) as one_date:
-            BadgeAssertion.objects.xp_by_course_series(self.student, dates[:1])
+            BadgeAssertion.objects.xp_by_registration_series(self.student, dates[:1])
         with CaptureQueriesContext(connection) as every_date:
-            BadgeAssertion.objects.xp_by_course_series(self.student, dates)
+            BadgeAssertion.objects.xp_by_registration_series(self.student, dates)
 
         self.assertEqual(len(every_date), len(one_date))
 

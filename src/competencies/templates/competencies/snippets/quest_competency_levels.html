@@ -1,0 +1,32 @@
+{% comment %}
+  The quest form's default-level pickers (QuestCompetenciesFormMixin). Every offered competency
+  has a row; only the selected competencies' rows are shown, and quest-competency-levels.js keeps
+  that in step as chips are added to or removed from the competencies field above.
+{% endcomment %}
+{% with levels=form.competency_levels %}
+<div id="quest-competency-levels" class="form-group{% if not levels.any_selected %} hidden{% endif %}">
+  <label class="control-label">Default proficiency levels</label>
+  <table class="table table-condensed">
+    <thead>
+      <tr>
+        <th>Competency</th>
+        <th class="col-sm-3">Default level</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for competency, field, selected in levels.rows %}
+      <tr data-competency-id="{{ competency.pk }}"{% if not selected %} class="hidden"{% endif %}>
+        <td>
+          <label for="{{ field.id_for_label }}">{{ competency.name }}</label>
+          {% if competency.course_and_category %}<br><small class="text-muted">{{ competency.course_and_category }}</small>{% endif %}
+        </td>
+        <td>
+          {{ field }}
+          {% if field.errors %}<span class="help-block text-danger">{{ field.errors|join:" " }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endwith %}

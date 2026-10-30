@@ -28,6 +28,7 @@ from library.exporter import (
 )
 from model_bakery import baker
 from notifications.models import Notification
+from competencies.models import Competency, QuestCompetency
 from courses.models import Rank
 from prerequisites.models import Prereq
 from quest_manager.models import Category, CommonData, Quest
@@ -398,6 +399,21 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         response = self.client.get(url)
         self.assert200URL(url)
         self.assertContains(response, self.local_quest.name)
+
+    def test_ExportQuestView__hides_competencies(self):
+        """The export confirmation page lists no competencies, since an export doesn't carry the
+        quest's competency links to the Library (#1915)."""
+        self.config.enable_competencies = True
+        self.config.full_clean()
+        self.config.save()
+        QuestCompetency.objects.create(quest=self.local_quest, competency=baker.make(Competency, name="Unshared Competency"))
+        self.client.force_login(self.config.deck_owner)
+
+        response = self.client.get(reverse('library:export_quest', args=[self.local_quest.import_id]))
+
+        self.assertContains(response, self.local_quest.name)
+        self.assertNotContains(response, "<li>Competencies:")
+        self.assertNotContains(response, "Unshared Competency")
 
     def test_require_export_permission__allowed_non_owner_and_staff_permission_enabled(self):
         """
@@ -3347,6 +3363,28 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
         )
+
+    def test_ImportQuestView__hides_competencies(self):
+        """The quest import preview lists no competencies: neither the Library quest's, which an
+        import doesn't bring along (#1915), nor those linked to this deck's quest at the same id."""
+        config = SiteConfig.get()
+        config.enable_competencies = True
+        config.full_clean()
+        config.save()
+        decoy = Quest.objects.get(pk=self.library_quest.id)
+        QuestCompetency.objects.create(quest=decoy, competency=baker.make(Competency, name="Local-only Competency"))
+        with library_schema_context():
+            QuestCompetency.objects.create(
+                quest=Quest.objects.get(pk=self.library_quest.id),
+                competency=baker.make(Competency, name="Library Competency"),
+            )
+
+        response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<li>Competencies:")
+        self.assertNotContains(response, "Library Competency")
+        self.assertNotContains(response, "Local-only Competency")
 
     def test_ImportQuestView__shows_the_library_quests_own_prereqs(self):
         """The quest import preview names the Library quest's prerequisite, not this deck's (#2529).

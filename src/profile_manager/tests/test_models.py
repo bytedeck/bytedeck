@@ -322,12 +322,14 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         in each. The list leads with the highest, which is the one the navbar shows closed."""
         maths = baker.make('courses.Course', title='Maths')
         art = baker.make('courses.Course', title='Art')
-        for course in (maths, art):
+        maths_registration, _art_registration = (
             baker.make('courses.CourseStudent', user=self.user, course=course,
                        block=baker.make('courses.Block'), semester=self.active_sem)
+            for course in (maths, art)
+        )
         baker.make(
             'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=60),
-            course=maths, semester=self.active_sem, is_completed=True, is_approved=True,
+            registration=maths_registration, semester=self.active_sem, is_completed=True, is_approved=True,
         )
         self.profile.xp_invalidate_cache()
 
@@ -427,7 +429,7 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         )
         baker.make(
             'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
-            course=graded.course, semester=self.active_sem, is_completed=True, is_approved=True,
+            registration=graded, semester=self.active_sem, is_completed=True, is_approved=True,
         )
         self.profile.xp_invalidate_cache()
 
@@ -463,7 +465,7 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         )
         baker.make(
             'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
-            course=first_registration.course, semester=self.active_sem, is_completed=True, is_approved=True,
+            registration=first_registration, semester=self.active_sem, is_completed=True, is_approved=True,
         )
         self.profile.xp_invalidate_cache()
         registrations = list(self.profile.current_courses())

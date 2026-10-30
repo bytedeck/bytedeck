@@ -1,4 +1,5 @@
-"""Headless render tests: a submit pressed while a chosen file is still attaching waits for it (#2834).
+"""Headless render tests: a file still attaching shows how far its upload has got (#784), and a submit
+pressed meanwhile waits for it (#2834).
 
 Choosing a file on a submission page saves the draft straight away, uploading the file (#2749). A
 submit pressed while that upload is still on its way would send the same file again with the form,
@@ -43,6 +44,15 @@ PAGE_ORIGIN = "http://deck.test"
 
 #: The chosen file's bytes: distinctive, so a request can be searched for them.
 FILE_CONTENT = b"attaching-2834-" * 64
+
+#: Keeps every XMLHttpRequest the page sends, so a test can raise the upload progress events a
+#: browser raises as a request's body goes out: Chromium raises none for a request the test is
+#: intercepting, which these all are.
+RECORD_XHRS = """
+window.sentXhrs = [];
+const send = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.send = function(body) { window.sentXhrs.push(this); return send.call(this, body); };
+"""
 
 
 def _find_chromium():
@@ -102,6 +112,7 @@ class SubmitWhileAttachingRenderTest(ByteDeckTenantTestCase):
         self.dialogs = []  # the text of any alert the page raised
         self.page.on("dialog", lambda dialog: (self.dialogs.append(dialog.message), dialog.dismiss()))
         self.page.route("**/*", self._serve)
+        self.page.add_init_script(RECORD_XHRS)
         self.page.goto(f"{PAGE_ORIGIN}/page/")
 
     def _serve(self, route, request):
@@ -172,6 +183,45 @@ class SubmitWhileAttachingRenderTest(ByteDeckTenantTestCase):
     def _waiting_shown(self):
         """Whether the note beside the button saying the submit waits for the file is showing."""
         return self.page.is_visible('#submit-waiting')
+
+    def _report_upload_progress(self, loaded, total):
+        """Raise an upload progress event on the draft save in flight, as the browser does while
+        its body goes out.
+
+        Args:
+            loaded (int): the bytes sent so far.
+            total (int): the bytes to send in all.
+        """
+        self.page.evaluate(
+            """([loaded, total]) => window.sentXhrs[window.sentXhrs.length - 1].upload.dispatchEvent(
+                new ProgressEvent('progress', {lengthComputable: true, loaded: loaded, total: total}))""",
+            [loaded, total],
+        )
+
+    def test_attaching__shows_how_much_of_the_file_has_gone_up(self):
+        """The note under the input shows the upload's progress, as a bar and a percentage, while
+        the draft save carrying the file is on its way, and follows it as more goes up (#784)."""
+        self._choose_file()
+
+        self._report_upload_progress(40, 100)
+        bar = '.draft-file-note-pending .draft-upload-progress .progress-bar'
+        self.assertEqual(self.page.get_attribute(bar, 'aria-valuenow'), '40')
+        self.assertIn('width: 40%', self.page.get_attribute(bar, 'style'))
+        self.assertEqual(self.page.text_content('.draft-file-note-pending .draft-upload-percent'), '40%')
+
+        self._report_upload_progress(997, 1000)
+        self.assertEqual(self.page.get_attribute(bar, 'aria-valuenow'), '100')
+        self.assertEqual(self.page.locator('.draft-upload-progress').count(), 1)
+
+    def test_attaching__the_progress_bar_goes_once_the_file_is_saved(self):
+        """Once the draft save stores the file, its note gives way to the saved file, bar and all."""
+        self._choose_file()
+        self._report_upload_progress(100, 100)
+        self.assertEqual(self.page.locator('.draft-upload-progress').count(), 1)
+
+        self._answer_save()
+        self.page.wait_for_selector('.draft-upload-progress', state='detached')
+        self.assertEqual(self.page.locator('.draft-file-note-pending').count(), 0)
 
     def test_submit__waits_for_the_file_attaching_and_sends_it_once(self):
         """A submit pressed while the draft save is uploading the chosen file waits for it, saying

@@ -10,11 +10,12 @@ from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget,
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
 from comments.sanitize import sanitize_comment_html
+from competencies.forms import QuestCompetenciesFormMixin
 from utilities.fields import ALL_SCRIPT_CAPABLE_TYPES, RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
 from courses.forms import XPCourseChoiceMixin
-from courses.models import Course
+from courses.models import CourseStudent
 
 from .models import Category, Quest, CommonData
 
@@ -71,7 +72,7 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
         super().__init__(*args, **kwargs)
 
 
-class QuestForm(forms.ModelForm):
+class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
 
     new_quest_prerequisite = forms.ModelChoiceField(
         # to_field_name="name",
@@ -155,7 +156,8 @@ class QuestForm(forms.ModelForm):
         Beyond the model fields, the layout carries the form's action buttons (cancel and submit,
         repeated top and bottom) and links out to the two parts of a quest configured on their own
         pages: prerequisites and submission questions. Both of those need a saved quest to attach
-        to, so on the create form they render as disabled placeholders explaining why.
+        to, so on the create form they render as disabled placeholders explaining why. When the deck
+        has competencies enabled, the competency fields (QuestCompetenciesFormMixin) follow the tags.
 
         Args:
             *args: positional arguments passed through to ``forms.ModelForm``.
@@ -165,6 +167,7 @@ class QuestForm(forms.ModelForm):
 
         self.fields['common_data'].label = 'Common Quest Info'
         self.fields['common_data'].queryset = CommonData.objects.filter(active=True)
+        competency_layout = self.add_competency_fields()
 
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
@@ -209,6 +212,7 @@ class QuestForm(forms.ModelForm):
                 'max_repeats',
                 'hours_between_repeats',
                 'tags',
+                *competency_layout,
                 'quick_reply',
                 Accordion(
                     AccordionGroup(
@@ -335,7 +339,7 @@ class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
 
     # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
     # is worded the same here as it is when a teacher grants a badge
-    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
+    registration = forms.ModelChoiceField(queryset=CourseStudent.objects.none(), required=False)
 
     # The comment's attachments take web files (SVG, HTML, XML, MHTML) as well as everything
     # else. This is the general "hand in your work" box, which whole cohorts of existing quests
@@ -453,7 +457,7 @@ class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMi
 
     # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
     # is worded the same here as it is when a teacher grants a badge
-    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
+    registration = forms.ModelChoiceField(queryset=CourseStudent.objects.none(), required=False)
 
 
 class CommonDataForm(forms.ModelForm):
