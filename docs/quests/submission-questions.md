@@ -49,14 +49,14 @@ Either one opens the quest's **Questions** page. On a quest with no questions ye
 
     ![The Create "Short Answer" Question form, with its instructions, solution text and marker notes filled in](../images/submission-questions/create-short-answer.png)
 
-5. For a **File Upload** question, choose the **Allowed file type**. The legend under it lists exactly which file formats each choice accepts.
+5. For a **File Upload** question, choose the **Allowed file type**. The legend under it lists the file formats each of the other choices accepts; **All** accepts any kind of file except those the tick box below covers.
 
     ![The Create "File Upload" Question form, with a solution file, Image as the allowed file type, and the legend of file formats](../images/submission-questions/create-file-upload.png)
 
 6. Press **Create**.
 
 !!! warning "Files that can carry a script"
-    **Also allow file types that can carry a script** adds SVG to the image choices, and SVG, HTML, XML and similar to **All**. A browser can run a script from these, so ByteDeck hands such an answer to you as a download rather than opening it. Tick it only for a quest that asks for one, such as a web design quest.
+    **Also allow file types that can carry a script** adds SVG to the image choices, and SVG, HTML, XML and similar to **All**. A browser can run a script from these, so ByteDeck hands such an answer to you as a download rather than opening it. An SVG answer is also shown as a picture, which runs no script. Tick it only for a quest that asks for one, such as a web design quest.
 
 A question's type is fixed once it's created. To turn a short answer into a long answer, delete it and create a new one.
 
@@ -85,7 +85,7 @@ Long answers
 :   The same editor as the comment box, so students can format their answer and include images and links.
 
 File uploads
-:   The student picks one file with **Choose file**. The help under the button says what the question accepts, and the info icon lists the exact file formats. A file of the wrong type, or over 16 MB, is refused with a message saying why, so the student can pick another.
+:   The student picks one file with **Choose file**. The help under the button says what the question accepts, and the info icon lists the exact file formats. A file of the wrong type, or over 16 MB, is refused as soon as the student chooses it, with a message saying why, so they can pick another.
 
 ### Answers save with the student's draft
 

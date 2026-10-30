@@ -159,7 +159,7 @@ A quest or campaign already in the Library can't be shared again; the page says 
 
 The Library is experimental. Before you rely on it:
 
-* **Updates don't flow.** Nothing is shared or imported twice, so a fix made on one deck doesn't reach decks that already imported the quest.
+* **Updates don't flow.** A quest or campaign already in the Library can't be shared again, and one your deck has already imported can't be imported again (both are matched by Import ID), so a fix made on one deck doesn't reach decks that already have the quest.
 * **Badges stay on their own deck**, in both directions. Badges for imported work are yours to set up.
 
 Something not covered here? Ask on the [discussion forum](https://github.com/bytedeck/bytedeck/discussions).

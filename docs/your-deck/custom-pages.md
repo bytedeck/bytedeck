@@ -48,7 +48,7 @@ The **☰** menu at the top right of every page (**Links** on a phone) holds you
     :   The small picture beside them. Press the button at the end of the field to browse the icons, or type an icon's name.
 
     URL
-    :   Where it goes: a page on your deck, such as `/pages/supplies/`, or any other website (`https://...`). ByteDeck checks that a page on your deck exists before saving the link.
+    :   Where it goes: a page on your deck, such as `/pages/supplies/`, or any other website (`https://...`). For a page on your deck, ByteDeck refuses an address it has no pages at, such as a typo like `/pagess/supplies/`. It doesn't check that the page itself exists, so try the link once it's saved.
 
     Open link in new tab
     :   Handy for links to other websites.
