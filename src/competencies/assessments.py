@@ -288,27 +288,34 @@ def posted_self_level(data, link):
 
 
 def posted_self_assessments(submission, data):
-    """ The levels the student chose for their self-assessment on handing the submission in.
+    """ The levels the student chose for their self-assessment on handing the submission in, and the
+    competencies they left on "Skip", which clears a level they gave on an earlier hand-in of it.
 
     Args:
         submission (QuestSubmission): the submission being handed in.
         data (QueryDict): the submission form's POST data.
 
     Returns:
-        list[tuple[QuestCompetency, int]]: each self-assessed link with the level chosen (those left
-        on "Skip" are left out).
+        list[tuple[QuestCompetency, int or None]]: each link posted, with the level chosen, or None for
+        "Skip". A link not posted at all, or posted anything but a level or "Skip" (a hand-made
+        request), is left out, so its earlier level stays.
     """
-    chosen = [(link, posted_self_level(data, link)) for link in self_assessment_links(submission)]
-    return [(link, level) for link, level in chosen if level is not None]
+    chosen = []
+    for link in self_assessment_links(submission):
+        level = posted_self_level(data, link)
+        if level is not None or data.get(self_assessment_field_name(link.competency_id)) == '':
+            chosen.append((link, level))
+    return chosen
 
 
 def record_self_assessments(submission, chosen):
     """ Record the student's self-assessment of the submission, each level replacing the one they gave
-    the competency on an earlier hand-in of it, and leaving the teacher's levels alone.
+    the competency on an earlier hand-in of it (and "Skip" clearing it), leaving the teacher's levels
+    alone.
 
     Args:
         submission (QuestSubmission): the submission handed in; its student assessed themself.
-        chosen (list[tuple[QuestCompetency, int]]): what posted_self_assessments returned.
+        chosen (list[tuple[QuestCompetency, int or None]]): what posted_self_assessments returned.
 
     Returns:
         list[CompetencyAssessment]: the self-assessments created.
@@ -319,6 +326,8 @@ def record_self_assessments(submission, chosen):
         CompetencyAssessment.objects.self_assessments().filter(
             source_content_type=source_content_type, source_object_id=submission.pk, competency=link.competency,
         ).delete()
+        if level is None:
+            continue
         assessment = CompetencyAssessment(
             user=submission.user,
             competency=link.competency,
@@ -339,7 +348,8 @@ def describe_self_assessments(chosen):
     the competency's course follows it, since courses can share a competency's wording.
 
     Args:
-        chosen (list[tuple[QuestCompetency, int]]): what posted_self_assessments returned.
+        chosen (list[tuple[QuestCompetency, int or None]]): what posted_self_assessments returned; the
+            competencies left on "Skip" aren't listed.
 
     Returns:
         list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity (ADST 9): Proficient".
@@ -347,6 +357,8 @@ def describe_self_assessments(chosen):
     labels = SiteConfig.get().get_competency_scale_labels()
     lines = []
     for link, level in chosen:
+        if level is None:
+            continue
         course = f" ({link.competency.course})" if link.competency.course else ""
         lines.append(f"Self-assessment of {truncatechars(link.competency.name, 50)}{course}: {labels[level]}")
     return lines

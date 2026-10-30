@@ -137,6 +137,7 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
             quick_reply="Check your units!",
             blocking=True,
             map_transition=True,
+            competency_self_assessment=True,
         )
         quest.save()
         # Publishing through the manager avoids the post_save map-regeneration signal,

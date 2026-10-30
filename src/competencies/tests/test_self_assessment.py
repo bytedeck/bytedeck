@@ -148,7 +148,8 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
 
     def test_hand_in_again__replaces_the_earlier_self_assessment(self):
         """ Handing a returned submission in again replaces the student's earlier self-assessment of each
-        competency they choose a level for, keeps the rest, and leaves the teacher's levels alone """
+        competency they choose a level for, clears one they switch to Skip, and leaves the teacher's
+        levels alone """
         submission = self.draft()
         self.hand_in(submission, **{
             self_assessment_field_name(self.thinking.pk): DEV, self_assessment_field_name(self.communicating.pk): EMG,
@@ -160,10 +161,29 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         submission.draft_comment = baker.make(Comment, text='draft again')
         submission.save()
 
+        self.hand_in(submission, **{
+            self_assessment_field_name(self.thinking.pk): EXT, self_assessment_field_name(self.communicating.pk): '',
+        })
+
+        self.assertEqual(self.self_assessed(submission), {self.thinking: EXT})
+        self.assertEqual(submission_levels(submission), {self.thinking.pk: EXT, self.communicating.pk: PRF})
+        text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
+        self.assertIn('Self-assessment of Critical Thinking: Extending', text)
+        self.assertNotIn('Self-assessment of Communicating', text)
+
+    def test_hand_in_again__a_competency_not_posted_keeps_its_level(self):
+        """ A competency missing from the POST altogether (a hand-made request; the form always posts
+        every one) keeps its earlier self-assessment """
+        submission = self.draft()
+        self.hand_in(submission, **{
+            self_assessment_field_name(self.thinking.pk): DEV, self_assessment_field_name(self.communicating.pk): EMG,
+        })
+        submission.draft_comment = baker.make(Comment, text='draft again')
+        submission.save()
+
         self.hand_in(submission, **{self_assessment_field_name(self.thinking.pk): EXT})
 
         self.assertEqual(self.self_assessed(submission), {self.thinking: EXT, self.communicating: EMG})
-        self.assertEqual(submission_levels(submission), {self.thinking.pk: EXT, self.communicating.pk: PRF})
 
     def test_hand_in__an_auto_approved_quest_records_both(self):
         """ A quest that needs no approval records its default levels, system-assessed, and the student's
