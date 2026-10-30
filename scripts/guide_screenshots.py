@@ -70,7 +70,10 @@ DRAW_JS = r"""
     }[c.side];
     // inside: the badge sits just within a large box, by the given side, with no arrow
     const off = c.inside ? -(R + 8) : c.dist + R;
-    const cx = ex + dx * off + c.dx, cy = ey + dy * off + c.dy;
+    // kept clear of the page's edges, since the picture can't reach past them; the arrow then
+    // points from wherever the badge lands
+    const cx = Math.min(Math.max(ex + dx * off + c.dx, R + 4), W - R - 4);
+    const cy = Math.min(Math.max(ey + dy * off + c.dy, R + 4), H - R - 5);
     const len = Math.hypot(ex - cx, ey - cy);
     if (!c.inside && len > R + GAP + 6) {
       const ux = (ex - cx) / len, uy = (ey - cy) / len;
@@ -111,7 +114,15 @@ class C:
 
 
 def rect(page, target):
-    """`target`'s rect in document coordinates (a rect dict is returned as it is)."""
+    """`target`'s rect in document coordinates, scrolled into view first.
+
+    Args:
+        page (Page): the Playwright page `target` is on.
+        target (Locator | dict): an element, or a rect dict (x, y, w, h), which is returned as it is.
+
+    Returns:
+        dict: x, y, w and h, in pixels from the top left of the document.
+    """
     if isinstance(target, dict):
         return target
     target.scroll_into_view_if_needed()
@@ -121,7 +132,14 @@ def rect(page, target):
 
 
 def union(rects):
-    """The smallest rect holding every rect in `rects`, to box several elements as one."""
+    """The smallest rect holding every rect in `rects`, to box several elements as one.
+
+    Args:
+        rects (list[dict]): rect dicts (x, y, w, h), as `rect` returns them.
+
+    Returns:
+        dict: the rect around them all.
+    """
     x0 = min(r["x"] for r in rects)
     y0 = min(r["y"] for r in rects)
     x1 = max(r["x"] + r["w"] for r in rects)
@@ -132,9 +150,15 @@ def union(rects):
 def shot(page, path, region, callouts=(), pad=10, trim=None):
     """Draw `callouts`, then save the part of the page covering `region` and the callouts to `path`.
 
-    `region` is a locator or rect, or a list of them: the picture is the smallest rectangle holding
-    them all, plus `pad` pixels. `trim` (a dict of left/top/right/bottom pixels) cuts that back, for
-    an element whose margin would bring a sliver of its neighbour into the picture.
+    Args:
+        page (Page): the Playwright page to photograph, already showing the state to show.
+        path (str): where to save the PNG, normally docs/images/<page>/<name>.png.
+        region (Locator | dict | list): what the picture is of. With several, the picture is the
+            smallest rectangle holding them all.
+        callouts (Iterable[C]): the badges and outlines to draw. The picture grows to hold them.
+        pad (int): pixels of the page to keep around `region`.
+        trim (dict | None): left/top/right/bottom pixels to cut back after padding, for an element
+            whose margin would bring a sliver of its neighbour into the picture.
     """
     regions = [rect(page, r) for r in (region if isinstance(region, (list, tuple)) else [region])]
     specs = [{"rect": rect(page, c.target), "n": None if c.n is None else str(c.n), "side": c.side, "dist": c.dist,
@@ -157,16 +181,34 @@ def shot(page, path, region, callouts=(), pad=10, trim=None):
 
 
 def browser(p):
-    """A headless Chromium: GUIDE_CHROMIUM's, or Playwright's own."""
+    """A headless Chromium: GUIDE_CHROMIUM's, or Playwright's own.
+
+    Args:
+        p (Playwright): the object `sync_playwright()` gives.
+
+    Returns:
+        Browser: the launched browser.
+    """
     return p.chromium.launch(executable_path=os.environ.get("GUIDE_CHROMIUM") or None,
                              args=["--no-proxy-server", "--disable-background-networking"])
 
 
 def login(browser, base, username, password="password", width=1100, height=1400):
-    """A page on deck `base`, signed in as `username` (None stays signed out), the debug toolbar hidden.
+    """A page on deck `base`, signed in as `username`, with the debug toolbar hidden.
 
     1100 pixels wide is the guide's standard: the app's desktop layout, at a width the guide's
     column shows without shrinking text much. The tall viewport keeps most crops on one screen.
+
+    Args:
+        browser (Browser): from `browser`.
+        base (str): the deck's address, such as http://hackerspace.localhost:8000.
+        username (str | None): who to sign in as; None stays signed out.
+        password (str): their password (the dev decks' accounts all use "password").
+        width (int): the window's width in pixels.
+        height (int): the window's height in pixels.
+
+    Returns:
+        Page: the signed-in page, on whatever the sign-in redirected to.
     """
     ctx = browser.new_context(viewport={"width": width, "height": height})
     ctx.add_init_script(f"""document.addEventListener('DOMContentLoaded', () => {{
@@ -183,14 +225,27 @@ def login(browser, base, username, password="password", width=1100, height=1400)
 
 
 def go(page, url, wait=400):
-    """Open `url` and let it settle."""
+    """Open `url` and let it settle.
+
+    Args:
+        page (Page): the page to navigate.
+        url (str): where to go.
+        wait (int): milliseconds to wait once the network is idle, for scripts that draw late.
+    """
     page.goto(url)
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(wait)
 
 
 def readable_message(page):
-    """The page's flash message, the window first narrowed so the message wraps to a width the guide shows legibly."""
+    """The page's flash message, the window first narrowed so the message wraps to a width the guide shows legibly.
+
+    Args:
+        page (Page): a page that has just shown a message, such as after a form's redirect.
+
+    Returns:
+        Locator: the first visible flash message, to pass to `shot` as its region.
+    """
     page.set_viewport_size({"width": 760, "height": 1400})
     page.wait_for_timeout(400)
     return page.locator(".alert.alert-dismissible:visible").first
