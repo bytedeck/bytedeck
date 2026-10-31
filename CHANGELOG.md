@@ -50,7 +50,7 @@ This file chronologically records all notable changes to this website, including
   - The editor's plugins live together in `bytedeck_summernote`, each described in its README [#2913](https://github.com/bytedeck/bytedeck/issues/2913)
   - The unused course columns are dropped from submissions and badge assertions, the second half of a two-release removal [#2888](https://github.com/bytedeck/bytedeck/issues/2888)
   - Several tests that failed now and then, depending on random names or the time of day, are made deterministic, and comment cleaning no longer floods the logs with parser warnings [#2766](https://github.com/bytedeck/bytedeck/issues/2766) [#2725](https://github.com/bytedeck/bytedeck/issues/2725) [#2782](https://github.com/bytedeck/bytedeck/issues/2782) [#1280](https://github.com/bytedeck/bytedeck/issues/1280)
-  - Routine dependency updates, including ruff and django-debug-toolbar
+  - Routine dependency updates: ruff, django-debug-toolbar and pipdeptree [#2645](https://github.com/bytedeck/bytedeck/issues/2645) [#2671](https://github.com/bytedeck/bytedeck/issues/2671) [#2661](https://github.com/bytedeck/bytedeck/issues/2661)
 * Devops:
   - Releases now go straight from `develop` to `master`; the staging server is retired [#2887](https://github.com/bytedeck/bytedeck/issues/2887)
   - New management commands: `merge_users` folds a duplicate account into the one being kept, and `quest_availability` explains why a quest is missing from a student's Available tab [#2761](https://github.com/bytedeck/bytedeck/issues/2761) [#2730](https://github.com/bytedeck/bytedeck/issues/2730)
