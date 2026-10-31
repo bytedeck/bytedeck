@@ -218,6 +218,36 @@ These capture maintainer preferences learned in review: follow them in new front
 * **Action-button tooltips use the native `title` attribute** (the browser's default popup), not JS bootstrap tooltips (`data-toggle="tooltip"`), to stay consistent with the rest of the app (e.g. the staff submission approve/comment/return buttons and the badge-detail action buttons).
 * **Django `{# … #}` comments are single-line only.** A multi-line `{# … #}` renders as *visible text* on the page: use `{% comment %}…{% endcomment %}` for any comment spanning more than one line.
 
+## User guide conventions (`docs/`)
+
+The user guide is a [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) site built from `docs/` (config in `mkdocs.yml`). `.github/workflows/docs.yml` builds it with `--strict` on every PR that touches it, so a broken link or missing image fails CI. It's published to GitHub Pages from `master`, so the live guide describes production: write a page, or change one, in the same PR as the feature it describes, and it goes live with the release that ships the feature. Its readers are deck owners and teachers, not developers. Every page in the guide follows these rules, so a page one session writes looks like the pages another wrote (maintainer decision, 2026-10-30).
+
+**Build and preview** with `pip install -r docs/requirements.txt`, then `mkdocs build --strict` (what CI runs) or `mkdocs serve --dev-addr 127.0.0.1:8100`. New pages go in `mkdocs.yml`'s `nav`; `docs/plans/` holds developer notes and is excluded from the site.
+
+**Writing**
+
+* Second person, plain words, short paragraphs. Name buttons, fields, tabs and menus in **bold**, spelled exactly as the app labels them, and give the path to a page (**Admin > Site Configuration**).
+* Say only what the app actually does: check each claim against the code (what a form validates, what an import carries, who can see what) before writing it. A guide that promises a check the app doesn't make is worse than no guide.
+* Describe the app as it is now; when a change makes a page wrong, fix the page in the same PR.
+* The CLAUDE.md style rules apply here too: "prerequisite", never "gate"; no em dashes.
+
+**Screenshots**: every screenshot is a figure with numbered callouts or an outline, cropped, and captioned.
+
+* **From the running app**, as everywhere in this file (see "Showing the change"): the `hackerspace` dev deck, signed in as the role the page is about. For a new deck's state (the starter quests, an empty list), create a fresh deck rather than describing a busy one. Never a mockup.
+* **Cropped to the part the text is about**: an element or a region, not a whole page or a whole long form. Keep a page's heading in when it says where the reader is. Shrink a tall rich-text editor with its own resize handle rather than cropping through it. Content outside the crop may be blanked when it would sit under a callout, and unrelated fields inside it may be left out only if the caption says so.
+* **Pointing at what the text means**, drawn with `scripts/guide_screenshots.py` (its docstring shows how), so every callout looks the same:
+  * Several things to point at: **numbered red badges with arrows**, and a **numbered list right after the figure** whose numbers match the badges, one item per badge. Field-by-field explanations of a form are that numbered list, not a definition list.
+  * In a long procedure, the figure can sit inside the list item it illustrates, its badges numbered by step.
+  * One thing to point at: a **red outline** with no number, named in the text or caption.
+  * Badges sit in empty space: never over the text they point at or over a neighbouring control. Buttons that touch each other get arrows without outlines (their outlines would overlap); a badge for something large, like an editor, sits inside its outline.
+* **Captioned**: a `/// caption` block straight after the image. The caption says what the picture shows (which screen, in what state), in a short sentence; the alt text describes the picture in full, callout numbers included, for readers who can't see it.
+* **Framed by the stylesheet**: `docs/stylesheets/extra.css` gives every image a thumbnail frame and every caption its style. Don't draw borders into the images.
+* **Legible**: shoot at the helper's default 1100 pixel window. A flash message spans the whole window, so narrow the window first (`readable_message`) or its text ends up too small to read in the guide.
+* Images live in `docs/images/<page>/`, named for what they show. Replace an image in place when retaking it, and delete any image no page uses.
+* The dev server needs a Celery worker (or `prerequisites.tasks.update_quest_conditions_for_user`) for quests to unlock as a student works through them.
+
+**In the PR**, put screenshots of the built guide pages (light, and dark if styling changed) in `### Screenshots`.
+
 ## Changelog conventions (`CHANGELOG.md`)
 
 The audience is **end users** (teachers/students on a deck), not developers: write for someone deciding whether a release affects them and what they now need to do differently. Detailed rationale lives in the linked PRs, so keep entries short and outcome-focused.
