@@ -49,6 +49,7 @@ DRAW_JS = r"""
     <filter id="ga-shadow" x="-50%" y="-50%" width="200%" height="200%">
       <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-opacity="0.35"/></filter></defs>`;
   const b = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity};
+  const warnings = [];
   const grow = (x0, y0, x1, y1) => { b.x0 = Math.min(b.x0, x0); b.y0 = Math.min(b.y0, y0); b.x1 = Math.max(b.x1, x1); b.y1 = Math.max(b.y1, y1); };
   const el = (tag, attrs) => {
     const e = document.createElementNS(NS, tag);
@@ -63,19 +64,34 @@ DRAW_JS = r"""
       grow(x - 2, y - 2, x + w + 2, y + h + 2);
     }
     if (c.n === null) continue;
-    // the point on the box's edge the arrow ends at, and the direction away from it
-    const [ex, ey, dx, dy] = {
-      right: [x + w, y + h * c.along, 1, 0], left: [x, y + h * c.along, -1, 0],
-      top: [x + w * c.along, y, 0, -1], bottom: [x + w * c.along, y + h, 0, 1],
-    }[c.side];
-    // inside: the badge sits just within a large box, by the given side, with no arrow
-    const off = c.inside ? -(R + 8) : c.dist + R;
-    // kept clear of the page's edges, since the picture can't reach past them; the arrow then
-    // points from wherever the badge lands
-    const cx = Math.min(Math.max(ex + dx * off + c.dx, R + 4), W - R - 4);
-    const cy = Math.min(Math.max(ey + dy * off + c.dy, R + 4), H - R - 5);
+    // the point on a side of the box the arrow ends at, the direction away from it, and where
+    // the badge sits: outside the box by the arrow's length, or just within it when inside
+    const place = (side, inside) => {
+      const [ex, ey, dx, dy] = {
+        right: [x + w, y + h * c.along, 1, 0], left: [x, y + h * c.along, -1, 0],
+        top: [x + w * c.along, y, 0, -1], bottom: [x + w * c.along, y + h, 0, 1],
+      }[side];
+      const off = inside ? -(R + 8) : c.dist + R;
+      return {ex, ey, inside, cx: ex + dx * off + c.dx, cy: ey + dy * off + c.dy};
+    };
+    // the picture can't reach past the page, so a badge has to land on it whole
+    const fits = (p) => p.cx >= R + 4 && p.cx <= W - R - 4 && p.cy >= R + 4 && p.cy <= H - R - 5;
+    let p = place(c.side, c.inside);
+    if (!fits(p) && !c.inside) {
+      // no room on the side asked for (a target against the page's edge): try the opposite
+      // side, and failing that put the badge inside the box, saying so
+      const opposite = {right: 'left', left: 'right', top: 'bottom', bottom: 'top'}[c.side];
+      p = place(opposite, false);
+      if (!fits(p)) {
+        p = place(c.side, true);
+        warnings.push(`callout ${c.n} has no room outside its target on either side, so it is drawn inside it`);
+      }
+    }
+    const {ex, ey} = p;
+    const cx = Math.min(Math.max(p.cx, R + 4), W - R - 4);
+    const cy = Math.min(Math.max(p.cy, R + 4), H - R - 5);
     const len = Math.hypot(ex - cx, ey - cy);
-    if (!c.inside && len > R + GAP + 6) {
+    if (!p.inside && len > R + GAP + 6) {
       const ux = (ex - cx) / len, uy = (ey - cy) / len;
       el('line', {x1: cx + ux * (R + 1), y1: cy + uy * (R + 1), x2: ex - ux * GAP, y2: ey - uy * GAP,
                   stroke: spec.color, 'stroke-width': 3, 'stroke-linecap': 'round', 'marker-end': 'url(#ga-head)'});
@@ -87,7 +103,7 @@ DRAW_JS = r"""
     grow(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 4);
   }
   doc.appendChild(svg);
-  return {bounds: isFinite(b.x0) ? b : null, W, H};
+  return {bounds: isFinite(b.x0) ? b : null, W, H, warnings};
 }
 """
 
@@ -101,6 +117,10 @@ class C:
     `along` where on that side the arrow lands (0 to 1), and `dx`/`dy` nudge the badge. `inside` puts
     the badge just within a large box, with no arrow. `box` False leaves out the box, for buttons that
     touch each other, whose boxes would overlap.
+
+    A badge has to land on the page whole, since the picture can't reach past it. When `side` has no
+    room (a target against the page's edge), the badge goes on the opposite side, and when neither
+    has room it's drawn inside the box and `shot` prints a warning, so the callout can be rethought.
     """
     target: object
     n: object = None
@@ -165,6 +185,8 @@ def shot(page, path, region, callouts=(), pad=10, trim=None):
               "along": c.along, "dx": c.dx, "dy": c.dy, "box": c.box, "inside": c.inside} for c in callouts]
     page.evaluate("() => document.getElementById('guide-annotations')?.remove()")
     drawn = page.evaluate(DRAW_JS, {"callouts": specs, "color": RED})
+    for warning in drawn["warnings"]:
+        print(f"warning: {path}: {warning}")
     r = union(regions)
     x0, y0, x1, y1 = r["x"] - pad, r["y"] - pad, r["x"] + r["w"] + pad, r["y"] + r["h"] + pad
     trim = trim or {}

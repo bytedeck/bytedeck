@@ -216,7 +216,7 @@ tenant.domains.create(domain='hackerspace.localhost.net', is_primary=False)
 
 ## The User Guide
 
-The [ByteDeck User Guide](https://bytedeck.github.io/bytedeck/) is built from the `docs/` folder with [MkDocs](https://www.mkdocs.org/) and the [Material](https://squidfunk.github.io/mkdocs-material/) theme (`mkdocs.yml` sets the page order). The User Guide workflow checks it on every PR that changes it and publishes it to GitHub Pages when the PR merges to `develop`. To preview your changes:
+The [ByteDeck User Guide](https://bytedeck.github.io/bytedeck/) is built from the `docs/` folder with [MkDocs](https://www.mkdocs.org/) and the [Material](https://squidfunk.github.io/mkdocs-material/) theme (`mkdocs.yml` sets the page order). The User Guide workflow checks it on every PR that changes it, and publishes it to GitHub Pages from `master`, so the published guide matches production: a guide change goes live with the release that takes it to `master`. To preview your changes:
 
 ```bash
 pip install -r docs/requirements.txt
