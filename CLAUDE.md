@@ -220,7 +220,7 @@ These capture maintainer preferences learned in review: follow them in new front
 
 ## User guide conventions (`docs/`)
 
-The user guide is a [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) site built from `docs/` (config in `mkdocs.yml`), published to GitHub Pages by `.github/workflows/docs.yml`, which builds with `--strict` so a broken link or missing image fails CI. Its readers are deck owners and teachers, not developers. Every page in the guide follows these rules, so a page one session writes looks like the pages another wrote (maintainer decision, 2026-10-30).
+The user guide is a [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) site built from `docs/` (config in `mkdocs.yml`). `.github/workflows/docs.yml` builds it with `--strict` on every PR that touches it, so a broken link or missing image fails CI. It's published to GitHub Pages from `master`, so the live guide describes production: write a page, or change one, in the same PR as the feature it describes, and it goes live with the release that ships the feature. Its readers are deck owners and teachers, not developers. Every page in the guide follows these rules, so a page one session writes looks like the pages another wrote (maintainer decision, 2026-10-30).
 
 **Build and preview** with `pip install -r docs/requirements.txt`, then `mkdocs build --strict` (what CI runs) or `mkdocs serve --dev-addr 127.0.0.1:8100`. New pages go in `mkdocs.yml`'s `nav`; `docs/plans/` holds developer notes and is excluded from the site.
 
