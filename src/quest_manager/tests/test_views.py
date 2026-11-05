@@ -5594,6 +5594,40 @@ class DetailViewTest(ByteDeckTenantTestCase):
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
         self.assertNotContains(response, 'Export this quest to the Library')
 
+    def test_detail__staff_see_why_students_cannot_start_the_quest(self):
+        """A teacher viewing a quest students can't start gets a banner at the top of the page
+        listing each reason, so a missing quest isn't a mystery (#2966)."""
+        self.client.force_login(self.test_teacher)
+        campaign = baker.make(Category, title="Photography", published=False)
+        quest = baker.make(Quest, name="Light and Shadow", published=False, campaign=campaign)
+
+        response = self.client.get(quest.get_absolute_url())
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        banner = soup.select_one(f'#quest-unavailable-{quest.id}')
+        self.assertIsNotNone(banner)
+        self.assertIn("Students can't start this quest", banner.get_text())
+        self.assertEqual(
+            [li.get_text(strip=True) for li in banner.select('li')],
+            ["It's a draft: Published isn't ticked on its form.", "Its campaign, Photography, isn't published."],
+        )
+        # It comes before the quest's own content.
+        content = response.content.decode()
+        self.assertLess(content.index(f'quest-unavailable-{quest.id}'), content.index(f'quest-info-{quest.id}'))
+
+    def test_detail__no_banner_for_a_quest_students_can_start(self):
+        """A quest open to students gets no banner, even for a teacher (#2966)."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(self.quest.get_absolute_url())
+        self.assertNotContains(response, f'quest-unavailable-{self.quest.id}')
+        self.assertNotContains(response, "Students can't start this quest")
+
+    def test_detail__students_get_no_banner(self):
+        """The banner is for staff: a student opening a draft quest's page doesn't get it (#2966)."""
+        quest = baker.make(Quest, published=False)
+        response = self.client.get(quest.get_absolute_url())
+        self.assertNotContains(response, f'quest-unavailable-{quest.id}')
+
 
 class ApproveViewTest(ByteDeckTenantTestCase):
     """ Tests for:
