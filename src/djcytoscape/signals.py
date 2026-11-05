@@ -5,7 +5,7 @@ from django.db.models.signals import post_save, post_delete
 from djcytoscape.models import CytoScape
 from siteconfig.models import SiteConfig
 from badges.models import Badge
-from quest_manager.models import Quest
+from quest_manager.models import Category, Quest
 from courses.models import Rank
 from prerequisites.models import Prereq
 
@@ -70,3 +70,22 @@ def prereq_regenerate_related_maps(sender, instance, **kwargs):
         return
 
     regenerate_related_maps(object_)
+
+
+@receiver(post_save, sender=Category)
+@disable_for_loaddata
+def campaign_regenerate_related_maps(sender, instance, **kwargs):
+    """Regenerates the maps a campaign's quests are drawn on, or would join, when the campaign is saved.
+
+    A map draws only active quests, and a quest in an unpublished campaign isn't active, so a
+    campaign's published state decides whether its quests are drawn at all. Publishing it is
+    the change that puts them on a map, yet ``Category.publish_with_quests`` saves only its
+    draft quests, and ticking Published on the campaign's form saves none, so the quests' own
+    signal can't be relied on here (#2965). A campaign's title is also drawn, as the label of
+    the box around its quests.
+
+    Each quest's maps are claimed once by ``regenerate_related_maps``, so a campaign of many
+    quests on one map still queues a single rebuild of it.
+    """
+    for quest in instance.quest_set.all():
+        regenerate_related_maps(quest)
