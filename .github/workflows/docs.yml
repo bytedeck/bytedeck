@@ -2,8 +2,13 @@ name: User Guide
 
 # Builds the user guide (mkdocs.yml, docs/) on every PR that touches it, so a broken
 # link or a missing image fails the check before it merges, and publishes it to
-# GitHub Pages on each push to develop. Publishing needs the repository's Pages
-# source set to "GitHub Actions" (Settings > Pages); until then the deploy job fails
+# GitHub Pages on each push to master. master is what production runs, so the
+# published guide describes the app teachers actually have: a guide change merges to
+# develop with the feature it describes, and goes live with the release that ships it.
+#
+# Publishing needs the repository's Pages source set to "GitHub Actions" (Settings >
+# Pages), and master allowed to deploy to the github-pages environment (Settings >
+# Environments > github-pages > Deployment branches); until then the deploy job fails
 # and the build job still checks the guide.
 #
 # Scoped to the files the guide is built from, so application PRs don't pay for it.
@@ -16,7 +21,7 @@ on:
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
   push:
-    branches: [develop]
+    branches: [master]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
@@ -46,15 +51,15 @@ jobs:
       # --strict turns warnings, such as a link to a missing page or image, into errors.
       run: mkdocs build --strict
     - name: Upload the site for Pages
-      if: github.ref == 'refs/heads/develop'
+      if: github.ref == 'refs/heads/master'
       uses: actions/upload-pages-artifact@v3
       with:
         path: site
 
   deploy:
     name: Publish to GitHub Pages
-    # develop only: a manual run on another branch checks the guide without publishing it
-    if: github.ref == 'refs/heads/develop'
+    # master only: a manual run on another branch checks the guide without publishing it
+    if: github.ref == 'refs/heads/master'
     needs: build
     runs-on: ubuntu-22.04
     permissions:

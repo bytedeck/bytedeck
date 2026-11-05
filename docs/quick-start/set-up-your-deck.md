@@ -4,27 +4,27 @@ Your deck's settings live on one page, **Site Configuration**. For the quick sta
 
 ## Open Site Configuration
 
-Open the **Admin** menu at the top right and choose **Site Configuration**. The Admin menu is where you'll find your deck's other building blocks too: ranks, groups, courses and semesters under **Course Setup**, and tags and campaigns under **Quest Setup**.
-
 ![The Admin menu open: Site Configuration first, then Course Setup (Ranks, Groups, Courses, Semesters), Quest Setup (Tags, Campaigns, Common Info), Custom Pages, and ByteDeck (Subscription, ByteDeck Forum, Changelog)](../images/quick-start/admin-menu.png)
+/// caption
+The Admin menu, which also holds your deck's other building blocks: ranks, groups, courses and semesters under **Course Setup**, and tags and campaigns under **Quest Setup**.
+///
 
-## Name your deck
+1. Open the **Admin** menu at the top right.
+2. Choose **Site Configuration**.
 
-![The top of Site Configuration: Site Name, Full; Site Name, Short; and Access Code](../images/quick-start/site-settings.png)
+## Name your deck and choose an access code
 
-Site Name, Full
-:   Your deck's name, shown throughout the site and in the browser tab, for example "Ms. Rivera's Science Lab". It starts out as your deck's address with "Deck" after it.
+![The top of Site Configuration: the Update button, then Site Name, Full; Site Name, Short; and Access Code, each marked with its number](../images/quick-start/site-settings.png)
+/// caption
+The top of Site Configuration on a new deck.
+///
 
-Site Name, Short
-:   A shorter version for places where the full name won't fit, for example "Science Lab".
+1. **Site Name, Full**: your deck's name, shown throughout the site and in the browser tab, for example "Ms. Rivera's Science Lab". It starts out as your deck's address with "Deck" after it.
+2. **Site Name, Short**: a shorter version for places where the full name won't fit, for example "Science Lab".
+3. **Access Code**: students need it to sign up to your deck, so only people you give it to can join. Every new deck starts with the same code, `314159`, so change it to something of your own before you share your deck's address.
+4. **Update** saves your changes. There's another Update button at the bottom of the page.
 
-## Choose an access code
-
-Students need the **access code** to sign up to your deck, so only people you give it to can join. Every new deck starts with the same code, `314159`, so change it to something of your own before you share your deck's address.
-
-Pick something easy to type: you'll write it on the board or put it in a message to your class. If it gets out, change it here: students who have already signed up aren't affected.
-
-Press **Update** at the top or bottom of the page to save.
+Pick an access code that's easy to type: you'll write it on the board or put it in a message to your class. If it gets out, change it here: students who have already signed up aren't affected.
 
 ## Optional: make it look like yours
 
