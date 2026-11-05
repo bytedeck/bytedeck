@@ -2466,6 +2466,14 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
         """Set up a tenant-aware test client and log in the staff user."""
         self.client.force_login(self.staff_user)
 
+    def test_quest_user_status__marks_an_unpublished_campaign(self):
+        """The quest's summary on its user status page marks an unpublished campaign, as the
+        quest's own page does (#2965)."""
+        self.quest.campaign = baker.make(Category, title="Draft Campaign", published=False)
+        self.quest.save()
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+        self.assertContains(response, "Draft Campaign (unpublished)</a>")
+
     def test_quest_user_status__displays_users_and_statuses(self):
         """
         Verify that the quest_user_status view:
@@ -2942,6 +2950,39 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         # Confrim quest was updated
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
+
+    def test_quest_update__keeps_an_unpublished_campaign(self):
+        """Editing a quest in an unpublished campaign shows that campaign selected, marked
+        "(unpublished)", and saving the form keeps the quest in it (#2965)."""
+        self.client.force_login(self.test_teacher)
+        draft = baker.make(Category, title="Draft Campaign", published=False)
+        quest = Quest.objects.create(**self.minimal_valid_form_data, campaign=draft)
+        url = reverse('quests:quest_update', kwargs={'pk': quest.pk})
+
+        soup = BeautifulSoup(self.client.get(url).content, 'html.parser')
+        selected = soup.select_one('select[name="campaign"] option[selected]')
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected['value'], str(draft.pk))
+        self.assertEqual(selected.get_text(), "Draft Campaign (unpublished)")
+
+        response = self.client.post(url, data={**self.minimal_valid_form_data, 'campaign': draft.pk})
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertEqual(quest.campaign, draft)
+
+    def test_quest_detail__marks_an_unpublished_campaign(self):
+        """A quest's page marks its campaign "(unpublished)" when the campaign isn't published, so
+        a teacher can see why students don't have the quest (#2965)."""
+        self.client.force_login(self.test_teacher)
+        draft = baker.make(Category, title="Draft Campaign", published=False)
+        live = baker.make(Category, title="Live Campaign", published=True)
+        draft_quest = Quest.objects.create(**self.minimal_valid_form_data, campaign=draft)
+        live_quest = Quest.objects.create(**{**self.minimal_valid_form_data, 'name': "Live Quest"}, campaign=live)
+
+        self.assertContains(self.client.get(draft_quest.get_absolute_url()), "Draft Campaign (unpublished)</a>")
+        live_response = self.client.get(live_quest.get_absolute_url())
+        self.assertContains(live_response, "Live Campaign</a>")
+        self.assertNotContains(live_response, "(unpublished)")
 
     def test_quest_update__new_prerequisite_names_the_map_the_quest_joins(self):
         """Giving a quest a prerequisite that sits on a map puts the quest on that map, so the
