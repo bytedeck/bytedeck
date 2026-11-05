@@ -116,7 +116,7 @@ class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
-                  'available_outside_course', 'archived', 'editor')
+                  'available_outside_course', 'archived', 'editor', 'competency_self_assessment')
 
         date_options = {
             'showMeridian': False,

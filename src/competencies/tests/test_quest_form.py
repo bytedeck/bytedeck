@@ -132,6 +132,41 @@ class QuestCompetenciesFormTest(ByteDeckTenantTestCase):
                 self.assertIn(f'<tr data-competency-id="{self.thinking.pk}">', rendered)
                 self.assertIn(f'<tr data-competency-id="{self.communicating.pk}" class="hidden">', rendered)
 
+    def test_self_assessment_field__follows_the_competencies(self):
+        """ The quest form asks whether to ask students for a self-assessment, after the competency levels,
+        for the TA form too; with competencies disabled the box isn't there """
+        enable_competencies()
+        for form_class in (QuestForm, TAQuestForm):
+            with self.subTest(form=form_class.__name__):
+                rendered = render_crispy_form(form_class(data=self.data([self.thinking])))
+
+                self.assertIn('name="competency_self_assessment"', rendered)
+                self.assertLess(rendered.index('id="quest-competency-levels"'), rendered.index('name="competency_self_assessment"'))
+                self.assertIn('Ask for a self-assessment', rendered)
+
+    def test_self_assessment_field__absent_when_disabled(self):
+        """ With competencies disabled the form has no self-assessment box, and saving leaves the quest's
+        setting as it was """
+        quest = baker.make(Quest, competency_self_assessment=True)
+
+        form = QuestForm(data=self.data(), instance=quest)
+
+        self.assertNotIn('competency_self_assessment', form.fields)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.save().competency_self_assessment)
+
+    def test_save__the_self_assessment_setting(self):
+        """ Ticking the box saves the quest asking for a self-assessment, and unticking it saves it not """
+        enable_competencies()
+        form = QuestForm(data={**self.data([self.thinking]), 'competency_self_assessment': 'on'})
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertTrue(quest.competency_self_assessment)
+
+        form = QuestForm(data=self.data([self.thinking]), instance=quest)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.save().competency_self_assessment)
+
     def test_competency_levels__marks_the_selected_rows(self):
         """ competency_levels() marks the selected competencies' rows, and reports when none are """
         enable_competencies()
