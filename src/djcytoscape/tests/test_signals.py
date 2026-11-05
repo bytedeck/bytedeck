@@ -10,7 +10,7 @@ from djcytoscape.tests.utils import simulate_regeneration_starting
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from badges.models import Badge
-from quest_manager.models import Quest
+from quest_manager.models import Category, Quest
 from courses.models import Rank
 from prerequisites.models import Prereq
 
@@ -236,6 +236,59 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         regenerate_map.apply(args=task.call_args.kwargs['args'], queue='default').get()
 
         self.assertTrue(drawn(), "the rebuild did not draw the quest that was just published")
+
+    def test_regenerate_related_maps__publishing_a_campaign_draws_its_published_quests(self, task):
+        """End to end: publishing a campaign puts its already-published quests on the map.
+
+        A published quest in an unpublished campaign isn't active, so no map draws it, and a
+        teacher can build a campaign's quests that way before publishing it (#2965). Publishing
+        the campaign saves only its draft quests, so the campaign's own save has to rebuild the
+        maps its quests join.
+        """
+        origin = baker.make(Quest, name='origin', published=True)
+        campaign = baker.make(Category, title='Photography', published=False)
+        quest = baker.make(Quest, name='quest in the campaign', published=True, campaign=campaign)
+        quest.add_simple_prereqs([origin])
+        scape = CytoScape.generate_map(origin, "Map")
+
+        def drawn():
+            labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+            return any('quest in the campaign' in (label or '') for label in labels)
+
+        self.assertFalse(drawn(), "a quest in an unpublished campaign should not be on the map")
+        task.reset_mock()
+        cache.clear()
+
+        campaign.publish_with_quests()
+
+        self.assertEqual(task.call_count, 1, "publishing the campaign queued no regeneration at all")
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+        regenerate_map.apply(args=task.call_args.kwargs['args'], queue='default').get()
+        self.assertTrue(drawn(), "the rebuild did not draw the campaign's quest")
+
+    def test_regenerate_related_maps__saving_a_campaign(self, task):
+        """Any save of a campaign rebuilds its quests' maps: ticking Published on its form, which
+        doesn't save the quests, and unpublishing it, which takes them off (#2965)."""
+        origin = baker.make(Quest, name='origin', published=True)
+        campaign = baker.make(Category, title='Photography', published=True)
+        quest = baker.make(Quest, name='quest in the campaign', published=True, campaign=campaign)
+        quest.add_simple_prereqs([origin])
+        scape = CytoScape.generate_map(origin, "Map")
+        task.reset_mock()
+        cache.clear()
+
+        campaign.published = False
+        campaign.save()
+
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+
+        # Off when the deck turns automatic map updates off, as for every other save.
+        self.config.map_auto_update = False
+        self.config.save()
+        cache.clear()
+        campaign.save()
+        self.assertEqual(task.call_count, 1)
 
     def test_regenerate_related_maps__an_or_prerequisite_also_names_the_map(self, task):
         """A quest attaches at its OR alternative too, so that map is rebuilt as well.

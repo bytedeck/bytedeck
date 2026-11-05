@@ -31,6 +31,16 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
+    def test_title_with_status__published(self):
+        """A published campaign's title_with_status is just its title."""
+        self.assertEqual(self.category.title_with_status, "Test Campaign")
+
+    def test_title_with_status__unpublished(self):
+        """An unpublished campaign's title_with_status marks it "(unpublished)", so staff can tell
+        it apart where they pick or see a quest's campaign (#2965)."""
+        self.category.published = False
+        self.assertEqual(self.category.title_with_status, "Test Campaign (unpublished)")
+
     def test_get_icon_url__returns_category_icon_when_set(self):
         """Category.get_icon_url returns the campaign's own icon url when it has one."""
         self.category.icon = 'icons/campaign.png'

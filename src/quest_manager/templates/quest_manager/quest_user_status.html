@@ -27,7 +27,7 @@
         <div class="col-sm-6">
           <ul class="list-unstyled">
             <li><h4>XP: {{q.xp}}{% if q.xp_can_be_entered_by_students %}+ <small>(student entered)</small>{% endif %}</h4></li>
-            <li>Campaign: {% if q.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' q.campaign.id %}">{{ q.campaign }}</a>{% else %}{{ q.campaign }}{% endif %}{% else %}-{% endif %}</li>
+            <li>Campaign: {% if q.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' q.campaign.id %}">{{ q.campaign.title_with_status }}</a>{% else %}{{ q.campaign.title_with_status }}{% endif %}{% else %}-{% endif %}</li>
             <li>Expiry: {{q.date_expired}}</li>
             <li>Repeatable: {% if q.max_repeats == 0 %}No
                    {% else %}
