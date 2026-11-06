@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
+from django.utils import timezone
 
 from django_tenants.utils import get_public_schema_name, schema_context
 from freezegun import freeze_time
@@ -689,6 +690,89 @@ class TenantDeletionClockTest(ByteDeckTenantTestCase):
         self.assertFalse(self.deck(paid_until=FROZEN_TODAY + timedelta(days=30)).is_deletable)
         # the public schema is never deletable (guarded before any clock math)
         self.assertFalse(Tenant(schema_name='public', can_delete=True).is_deletable)
+
+
+@freeze_time(FROZEN_NOW)
+class TenantUnusedTrialTest(ByteDeckTenantTestCase):
+    """A trial deck nobody ever signed in to can be deleted from the admin as soon as its
+    trial ends, without the year-long suspension clock: it holds no teaching work."""
+
+    def deck(self, **overrides):
+        """Return this test's Tenant row re-fetched with the given field values applied.
+
+        Args:
+            **overrides: Tenant field values; the defaults describe an unused trial deck whose
+                trial ended yesterday and whose stats the nightly check has refreshed.
+
+        Returns:
+            Tenant: A fresh instance reflecting the applied fields.
+        """
+        fields = {
+            'trial_end_date': FROZEN_TODAY - timedelta(days=1), 'paid_until': None,
+            'stripe_subscription_id': '', 'last_staff_login': None,
+            'cached_fields_updated_on': timezone.now(), 'can_delete': False, 'deletion_requested_on': None,
+        }
+        fields.update(overrides)
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        return Tenant.objects.get(pk=self.tenant.pk)
+
+    def test_is_unused_trial__trial_ended_never_paid_never_signed_in(self):
+        """A trial that has ended on a deck that never paid and that no teacher ever signed in
+        to is an unused trial: eligible for deletion as 'unused', and deletable once an admin
+        arms can_delete, as with every other path."""
+        deck = self.deck()
+        self.assertTrue(deck.is_unused_trial)
+        self.assertEqual(deck.deletion_eligibility, 'unused')
+        self.assertFalse(deck.is_deletable)
+        self.assertTrue(self.deck(can_delete=True).is_deletable)
+
+    def test_is_unused_trial__not_while_the_trial_runs(self):
+        """A trial running through today, or later, isn't over, used or not."""
+        for trial_end in (FROZEN_TODAY, FROZEN_TODAY + timedelta(days=10)):
+            with self.subTest(trial_end=trial_end):
+                deck = self.deck(trial_end_date=trial_end, can_delete=True)
+                self.assertFalse(deck.is_unused_trial)
+                self.assertFalse(deck.is_deletable)
+
+    def test_is_unused_trial__not_once_anyone_signed_in(self):
+        """A deck a teacher or its owner ever signed in to has been used."""
+        deck = self.deck(last_staff_login=timezone.now() - timedelta(days=40), can_delete=True)
+        self.assertFalse(deck.is_unused_trial)
+        self.assertFalse(deck.is_deletable)
+
+    def test_is_unused_trial__not_for_a_paid_linked_or_comped_deck(self):
+        """A deck that ever had paid access, one linked to a Stripe subscription, and a comped
+        deck with no dates are not unused trials."""
+        for fields in (
+            {'paid_until': FROZEN_TODAY - timedelta(days=100)},
+            {'stripe_subscription_id': 'sub_123'},
+            {'trial_end_date': None},
+        ):
+            with self.subTest(**fields):
+                self.assertFalse(self.deck(**fields).is_unused_trial)
+
+    def test_is_unused_trial__not_before_its_stats_are_refreshed(self):
+        """A blank last staff login means "never" only once the nightly check has counted the
+        deck's sign-ins; before that it means "not counted yet"."""
+        self.assertFalse(self.deck(cached_fields_updated_on=None).is_unused_trial)
+
+    def test_deletion_eligibility__suspension_paths_outrank_unused(self):
+        """An unused trial long suspended with an owner request reads as 'request', the
+        stronger reason, as it did before unused trials could be deleted."""
+        deck = self.deck(trial_end_date=FROZEN_TODAY - timedelta(days=800), deletion_requested_on=FROZEN_TODAY)
+        self.assertTrue(deck.is_unused_trial)
+        self.assertEqual(deck.deletion_eligibility, 'request')
+
+    def test_deletion_eligibility__never_the_library(self):
+        """The Shared Library's deck is never eligible for deletion, however it looks."""
+        from library.utils import get_library_schema_name
+
+        library = Tenant(
+            schema_name=get_library_schema_name(), trial_end_date=FROZEN_TODAY - timedelta(days=1),
+            cached_fields_updated_on=timezone.now(), can_delete=True)
+        self.assertTrue(library.is_unused_trial)
+        self.assertIsNone(library.deletion_eligibility)
+        self.assertFalse(library.is_deletable)
 
 
 class TenantCountingAndCachingTest(ByteDeckTenantTestCase):

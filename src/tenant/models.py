@@ -114,9 +114,9 @@ class Tenant(TenantMixin):
         # (they mean nothing to an admin reading the form)
         help_text="Arms this deck for deletion: deletion from the admin is refused until an "
                   "admin deliberately turns this on -- and even then only a suspended deck whose "
-                  "owner has requested deletion, or one that has been suspended for over a year "
-                  "(counted from when its owner was first sent the suspension notice), can "
-                  "actually be deleted."
+                  "owner has requested deletion, one that has been suspended for over a year "
+                  "(counted from when its owner was first sent the suspension notice), or a trial "
+                  "deck whose trial ended without anyone ever signing in, can actually be deleted."
     )
 
     # An owner's standing request to have the deck deleted, made from the deck's
@@ -570,24 +570,48 @@ class Tenant(TenantMixin):
         #2044 retirement policy. ALL of these must hold:
 
         * ``can_delete`` was deliberately armed by an admin (default False);
-        * the deck's waiting is over (``deletion_eligibility``): it is SUSPENDED
-          and either its owner has a standing deletion request or its
+        * the deck's waiting is over (``deletion_eligibility``): either it is
+          SUSPENDED and its owner has a standing deletion request or its
           ``deletion_date`` has arrived (a year of suspension, measured from the
           later of the suspension start and the episode's first suspended
           notice, so unrequested deletion can never outrun the year the warning
           email promised; a deck never warned at all never times out, since its
-          clock has not started). The public schema is never eligible.
+          clock has not started), or it is an unused trial (``is_unused_trial``).
+          The public and Shared Library schemas are never eligible.
         """
         return self.can_delete and self.deletion_eligibility is not None
 
     @property
+    def is_unused_trial(self):
+        """Whether this deck is a trial nobody ever used: its trial has ended, it never had
+        paid access or a Stripe subscription, and no teacher or owner has ever signed in to it
+        (the deck list's blank Last staff login, which leaves out ByteDeck's own admin account).
+        Such a deck holds no teaching work, so it may be deleted as soon as its trial ends,
+        without the year-long suspension clock.
+
+        Reads the cached ``last_staff_login``, and only once the nightly status check has
+        refreshed the deck's cached fields at least once: before that, a blank sign-in means
+        "not counted yet" rather than "never". ``TenantAdmin.delete_model`` checks the deck's
+        accounts live before dropping one, since someone may have signed in since the refresh.
+
+        Returns:
+            bool: whether the deck is an unused, ended trial.
+        """
+        return (
+            self.trial_end_date is not None and self.trial_end_date < localdate()
+            and self.paid_until is None and not self.stripe_subscription_id
+            and self.cached_fields_updated_on is not None and self.last_staff_login is None
+        )
+
+    @property
     def deletion_eligibility(self):
-        """Why this deck's deletion waiting is over: ``'request'`` (its owner has a
-        standing deletion request, which outranks the year clock), ``'timeout'``
-        (the year-long suspension clock has run out), or None while neither
-        holds. Only a SUSPENDED deck is ever eligible (an active subscription, a
-        running trial, or a managed-manually deck is not, and the operator can
-        suspend a live deck by editing its dates), and the public schema never is.
+        """Why this deck's deletion waiting is over: ``'request'`` (suspended, and its owner
+        has a standing deletion request, which outranks the year clock), ``'timeout'``
+        (suspended, and the year-long suspension clock has run out), ``'unused'`` (a trial
+        that ended without anyone ever signing in, see ``is_unused_trial``), or None while
+        none holds. A deck with an active subscription, a running trial, or managed manually
+        is never eligible (the operator can suspend a live deck by editing its dates), and the
+        public and Shared Library schemas never are.
 
         Arming ``can_delete`` is the operator's remaining step: ``is_deletable``
         is exactly this eligibility plus that arming, and the tenant admin's
@@ -595,18 +619,21 @@ class Tenant(TenantMixin):
         surface before anyone opens their change form.
 
         Returns:
-            str | None: ``'request'``, ``'timeout'``, or None.
+            str | None: ``'request'``, ``'timeout'``, ``'unused'``, or None.
         """
         from django_tenants.utils import get_public_schema_name
 
-        if self.schema_name == get_public_schema_name():
+        from library.utils import get_library_schema_name
+
+        if self.schema_name in (get_public_schema_name(), get_library_schema_name()):
             return None
-        if not self.is_suspended:  # active sub, on trial, or managed manually
-            return None
-        if self.deletion_requested_on is not None:
-            return 'request'
-        if localdate() >= self.deletion_date:
-            return 'timeout'
+        if self.is_suspended:
+            if self.deletion_requested_on is not None:
+                return 'request'
+            if localdate() >= self.deletion_date:
+                return 'timeout'
+        if self.is_unused_trial:
+            return 'unused'
         return None
 
     def sync_from_stripe_subscription(self, subscription):

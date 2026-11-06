@@ -426,8 +426,9 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     @admin.display(description="deletable")
     def deletable_text(self, obj):
         """Whether this deck can be deleted, and why: "via request" (its owner
-        asked; the date is on the change form) or "via timeout" (a year
-        suspended), next to the Subscription column so decks whose waiting is
+        asked; the date is on the change form), "via timeout" (a year
+        suspended) or "via unused trial" (a trial that ended without anyone ever
+        signing in), next to the Subscription column so decks whose waiting is
         over surface during any review. Arming *Can delete* on the deck is the
         one step left before the admin delete is allowed
         (``Tenant.deletion_eligibility`` / ``is_deletable``).
@@ -436,13 +437,13 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             obj (Tenant): The changelist row's tenant.
 
         Returns:
-            str | None: "via request", "via timeout", or None (an empty cell)
-            while the deck cannot be deleted.
+            str | None: "via request", "via timeout", "via unused trial", or None
+            (an empty cell) while the deck cannot be deleted.
         """
         eligibility = obj.deletion_eligibility
         if eligibility is None:
             return None
-        return 'via request' if eligibility == 'request' else 'via timeout'
+        return {'request': 'via request', 'timeout': 'via timeout', 'unused': 'via unused trial'}[eligibility]
 
     @admin.display(description="paid until", ordering="paid_until")
     def paid_until_text(self, obj):
@@ -515,8 +516,9 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """Deletion is gated on the deck being abandoned (#2044 retirement policy).
 
         Per object, the Django delete permission must hold AND the deck must be
-        deletable (``Tenant.is_deletable``: suspended and armed, plus either a
-        standing owner deletion request or a year on the suspension clock); this
+        deletable (``Tenant.is_deletable``: armed, plus either suspended with a
+        standing owner deletion request or a year on the suspension clock, or a
+        trial that ended without anyone ever signing in); this
         both hides the change form's Delete button and 403s the delete view for
         protected decks. With no object (module/changelist level) the default
         applies, so the model itself stays visible to authorized admins.
@@ -531,16 +533,28 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
         Re-checks the abandonment guard even though the delete view already
         enforces has_delete_permission -- schema drops are unrecoverable, so any
-        future code path that reaches here must fail closed too.
+        future code path that reaches here must fail closed too. For an unused
+        trial it also asks the deck itself whether a teacher or owner has signed
+        in: the eligibility reads the nightly cached Last staff login, and an
+        owner who signed in since then keeps their deck.
 
         For reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
         (auto_drop_schema stays False model-wide; only this admin flow force-drops.)
         """
         if not obj.is_deletable:
             raise PermissionDenied(
-                "Only decks that have been suspended for over a year (counted from "
-                "their first suspension notice) can be deleted."
+                "Only an armed deck can be deleted, and only once it has been suspended for over a "
+                "year (counted from its first suspension notice) or its owner has asked, or its "
+                "trial has ended without anyone ever signing in."
             )
+        if obj.deletion_eligibility == 'unused':
+            with tenant_context(obj):
+                signed_in = obj.get_last_staff_login()
+            if signed_in is not None:
+                raise PermissionDenied(
+                    "Someone has signed in to this deck since its stats were last refreshed, "
+                    "so it is no longer an unused trial."
+                )
         obj.delete(force_drop=True)  # delete the row AND drop the schema
 
     def _delete_view(self, request, object_id, extra_context):
