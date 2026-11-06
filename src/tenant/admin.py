@@ -536,7 +536,10 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         future code path that reaches here must fail closed too. For an unused
         trial it also asks the deck itself whether a teacher or owner has signed
         in: the eligibility reads the nightly cached Last staff login, and an
-        owner who signed in since then keeps their deck.
+        owner who signed in since then keeps their deck. That check and the drop
+        run in one transaction holding a SHARE lock on the deck's user table,
+        which a sign-in needs to write its last_login: a sign-in that finished
+        first is seen by the check, and one still in flight waits for the drop.
 
         For reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
         (auto_drop_schema stays False model-wide; only this admin flow force-drops.)
@@ -547,15 +550,19 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 "year (counted from its first suspension notice) or its owner has asked, or its "
                 "trial has ended without anyone ever signing in."
             )
-        if obj.deletion_eligibility == 'unused':
-            with tenant_context(obj):
-                signed_in = obj.get_last_staff_login()
-            if signed_in is not None:
-                raise PermissionDenied(
-                    "Someone has signed in to this deck since its stats were last refreshed, "
-                    "so it is no longer an unused trial."
-                )
-        obj.delete(force_drop=True)  # delete the row AND drop the schema
+        with transaction.atomic():
+            if obj.deletion_eligibility == 'unused':
+                with tenant_context(obj):
+                    user_table = connection.ops.quote_name(User._meta.db_table)
+                    with connection.cursor() as cursor:
+                        cursor.execute(f"LOCK TABLE {user_table} IN SHARE MODE")
+                    signed_in = obj.get_last_staff_login()
+                if signed_in is not None:
+                    raise PermissionDenied(
+                        "Someone has signed in to this deck since its stats were last refreshed, "
+                        "so it is no longer an unused trial."
+                    )
+            obj.delete(force_drop=True)  # delete the row AND drop the schema
 
     def _delete_view(self, request, object_id, extra_context):
         """Custom `_delete_view` method.

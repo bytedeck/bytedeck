@@ -78,6 +78,15 @@ class TenantModelTest(ByteDeckTenantTestCase):
         # should still return the staff user's last log in, ignoring the admin user
         self.assertEqual(self.tenant.last_staff_login, staff.last_login)
 
+    def test_get_last_staff_login__counts_the_deck_owner_even_if_not_staff(self):
+        """The deck owner's sign-in counts even when their staff flag has been cleared, so a
+        demoted owner's deck never reads as unused (it decides whether an ended trial can be
+        deleted)."""
+        owner = SiteConfig.get().deck_owner
+        signed_in = timezone.now() - timedelta(days=3)
+        User.objects.filter(pk=owner.pk).update(is_staff=False, last_login=signed_in)
+        self.assertEqual(self.tenant.get_last_staff_login(), signed_in)
+
 
 class CheckTenantNameTest(SimpleTestCase):
     """ A tenant's name is used for both the schema_name and as the subdomain in the

@@ -985,6 +985,24 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
         self.assertTrue(schema_exists("extra"))
 
+    def test_delete_model__unused_trial_locks_sign_ins_through_the_drop(self):
+        """Checking for a sign-in and dropping the schema happen under one lock on the deck's
+        user table, taken before the check: a sign-in that finished first is seen, and one
+        still writing its last_login waits until the deck is gone."""
+        from django.test.utils import CaptureQueriesContext
+
+        self.make_unused_trial()
+        # the admin deletes from the public schema, as a request to the deck list does
+        with tenant_context(self.public_tenant), CaptureQueriesContext(connection) as queries:
+            TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
+        statements = [query['sql'] for query in queries.captured_queries]
+        lock = next(i for i, sql in enumerate(statements) if sql.startswith('LOCK TABLE') and 'auth_user' in sql)
+        drop = next(i for i, sql in enumerate(statements) if 'DROP SCHEMA' in sql)
+        last_login_check = next(i for i, sql in enumerate(statements) if '"last_login" IS NOT NULL' in sql)
+        self.assertLess(lock, last_login_check)
+        self.assertLess(last_login_check, drop)
+        self.assertFalse(schema_exists("extra"))
+
     def test_deletable_text__names_an_unused_trial(self):
         """The deck list's "deletable" column names the unused-trial path."""
         self.make_unused_trial()

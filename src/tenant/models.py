@@ -869,9 +869,20 @@ class Tenant(TenantMixin):
 
     def get_last_staff_login(self):
         """
-        Returns the last time a staff member loggin in to the tenant. Excludes teh deck admin account which is owned by ByteDeck
+        Returns the last time a staff member, or the deck owner, signed in to the tenant. Excludes the deck
+        admin account, which is owned by ByteDeck.
+
+        The owner counts even when their staff flag has been cleared, so a demoted owner's deck never reads as
+        unused (``is_unused_trial`` decides from this whether an ended trial may be deleted).
         """
-        staff = User.objects.filter(last_login__isnull=False).filter(is_staff=True).exclude(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
+        site_config = SiteConfig.get()
+        owner_id = site_config.deck_owner_id if site_config else None
+        staff = (
+            User.objects.filter(last_login__isnull=False)
+            .filter(models.Q(is_staff=True) | models.Q(pk=owner_id))
+            .exclude(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        )
         last_staff_logged_in = staff.order_by('-last_login').first()
 
         if last_staff_logged_in:
