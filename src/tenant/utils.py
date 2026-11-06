@@ -372,8 +372,12 @@ def normalize_owner_email(tenant, apply_changes):
         (row for row in matches if row.email == canonical),
         next((row for row in matches if row.email == owner.email), matches[0] if matches else None),
     )
+    # The row must also be stored in lowercase: allauth's user_email() is lowercase, and the
+    # deck list's verified check compares the two, so a verified row kept with the capitals the
+    # owner typed reads as unverified. The save below lowercases it through full_clean().
     already_ok = (
-        email_address is not None and email_address.verified and email_address.primary
+        email_address is not None and email_address.email == canonical
+        and email_address.verified and email_address.primary
         and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
     )
     if already_ok:

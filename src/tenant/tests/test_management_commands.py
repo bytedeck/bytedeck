@@ -318,6 +318,23 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
 
         self.assertIn(' ok', self.deck_line(self.run_command()))
 
+    def test_backfill__apply_lowercases_a_verified_address_stored_with_capitals(self):
+        """A verified primary row stored with capitals isn't "ok": allauth compares addresses in
+        lowercase, so the deck list reads that owner as unverified. --apply rewrites the row in
+        lowercase, after which the deck reads as ok (decks created before the fix to deck creation
+        stored the address as the owner typed it)."""
+        owner = self.set_owner(email='Legacy.Owner@example.com')
+        EmailAddress.objects.create(user=owner, email='Legacy.Owner@example.com', verified=True, primary=True)
+
+        self.assertIn('would-fix', self.deck_line(self.run_command()))
+        self.assertIn(' fixed', self.deck_line(self.run_command('--apply')))
+
+        address = EmailAddress.objects.get(user=owner)
+        self.assertEqual(address.email, 'legacy.owner@example.com')
+        self.assertTrue(address.verified)
+        self.assertTrue(address.primary)
+        self.assertIn(' ok', self.deck_line(self.run_command()))
+
     def test_backfill__flags_owners_needing_a_human(self):
         """An owner with no email is reported with nothing written, and a deck
         still on the heuristic default owner account is flagged."""
