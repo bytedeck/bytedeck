@@ -372,8 +372,12 @@ def normalize_owner_email(tenant, apply_changes):
         (row for row in matches if row.email == canonical),
         next((row for row in matches if row.email == owner.email), matches[0] if matches else None),
     )
+    # The row must also be stored in lowercase: allauth's user_email() is lowercase, and the
+    # deck list's verified check compares the two, so a verified row kept with the capitals the
+    # owner typed reads as unverified. The save below lowercases it through full_clean().
     already_ok = (
-        email_address is not None and email_address.verified and email_address.primary
+        email_address is not None and email_address.email == canonical
+        and email_address.verified and email_address.primary
         and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
     )
     if already_ok:
@@ -382,8 +386,11 @@ def normalize_owner_email(tenant, apply_changes):
     # the DB allows one VERIFIED row per address across the whole schema
     # (unique_verified_email, from ACCOUNT_UNIQUE_EMAIL): if a different
     # account already verified this address, no write can succeed, and which
-    # account is really the owner's is a human call. Report and leave it.
-    if EmailAddress.objects.exclude(user=owner).filter(email=canonical, verified=True).exists():
+    # account is really the owner's is a human call. Report and leave it. The
+    # match ignores case: rows stored with the capitals an owner typed exist, and
+    # the constraint compares exact values, so an exact match could miss one and
+    # leave two verified rows for one address.
+    if EmailAddress.objects.exclude(user=owner).filter(email__iexact=canonical, verified=True).exists():
         notes.append("address already verified by another account on this deck")
         return 'skipped', owner.username, owner.email, '; '.join(notes)
 
