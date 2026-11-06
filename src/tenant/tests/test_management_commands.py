@@ -423,6 +423,18 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         self.assertTrue(other_row.verified)
         self.assertTrue(other_row.primary)
 
+    def test_backfill__skips_when_another_account_verified_the_address_with_capitals(self):
+        """The other account's verified row counts in any case: rows stored with capitals exist
+        (deck creation kept the case the owner typed), so an exact match would miss one, and the
+        repair would leave two verified rows for one address while reporting it fixed."""
+        owner = self.set_owner(email='shared@example.com')
+        EmailAddress.objects.create(user=baker.make(User), email='Shared@Example.com', verified=True, primary=True)
+
+        output = self.run_command('--apply')
+        self.assertIn('skipped', self.deck_line(output))
+        self.assertIn('verified by another account', self.deck_line(output))
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+
     def test_backfill__broken_schema_reported_as_error_line(self):
         """A Tenant row whose schema doesn't exist is reported as an ERROR line (and
         counted in the summary) without aborting the run for the remaining decks."""
