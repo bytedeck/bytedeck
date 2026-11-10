@@ -6412,6 +6412,21 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
         self.assertEqual(searched.context['num_matching_quests'], 1)
         self.assertGreater(searched.context['num_available'], 1)
 
+    def test_quest_list__the_archived_tab_marks_a_quest_expired_only_by_its_dates(self):
+        """The Archived tab colours a row as expired only when the quest's own dates have passed.
+
+        Archiving says nothing about a quest's dates, so an archived quest with no expiry reads
+        as current, and one whose expiry date has passed reads as expired (#2973).
+        """
+        no_expiry = baker.make(Quest, name='Archived, no expiry', archived=True, date_expired=None, time_expired=None)
+        past_expiry = baker.make(Quest, name='Archived, past expiry', archived=True, date_expired=date(2000, 1, 1))
+
+        response = self.client.get(reverse('quests:archived'))
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        self.assertNotIn('warning', soup.find(id=f'heading-quest-{no_expiry.id}')['class'])
+        self.assertIn('warning', soup.find(id=f'heading-quest-{past_expiry.id}')['class'])
+
 
 class SubmissionTabSortTests(ByteDeckTenantTestCase):
     """The approvals and submissions tabs order the whole tab, not one page of it.

@@ -464,7 +464,9 @@ class QuestQuerySet(models.QuerySet):
         Returns:
             QuerySet[Quest]: the same quests, each carrying a boolean ``is_expired``.
         """
-        not_expired = self.model.objects.filter(id=OuterRef("id")).not_expired().values("id")
+        # Archived quests are looked up too: expiry depends only on the dates and times, and
+        # the manager's default queryset leaves archived quests out (#2973).
+        not_expired = self.model.objects.all_including_archived().filter(id=OuterRef("id")).not_expired().values("id")
 
         return self.annotate(
             is_expired=ExpressionWrapper(~Exists(not_expired), output_field=BooleanField()),
@@ -974,8 +976,9 @@ class Quest(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMix
         # this for every quest in a list, so per-row queries add up quickly.
         if hasattr(self, "is_expired"):
             return self.is_expired
-        # utilize existing code in QuestQuerySet method not_expired()
-        return not Quest.objects.filter(id=self.id).not_expired().exists()
+        # utilize existing code in QuestQuerySet method not_expired(), looking among archived
+        # quests too, since archiving a quest doesn't change whether it has expired (#2973)
+        return not Quest.objects.all_including_archived().filter(id=self.id).not_expired().exists()
 
 
 # QuestSubmission ###############################################

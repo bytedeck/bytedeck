@@ -955,6 +955,32 @@ class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
         quest = baker.make(Quest, date_expired=None)
         self.assertFalse(quest.expired())
 
+    def test_expired__archived_quest_with_no_expiry(self):
+        """An archived quest with no expiry date or time hasn't expired.
+
+        Archiving takes a quest out of students' tabs and says nothing about its dates,
+        which are all that expiry depends on (#2973).
+        """
+        quest = baker.make(Quest, archived=True, date_expired=None, time_expired=None)
+        self.assertFalse(quest.expired())
+
+    def test_expired__archived_quest_past_its_expiry_date(self):
+        """An archived quest whose expiry date has passed has expired, as it would unarchived."""
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        quest = baker.make(Quest, archived=True, date_expired=yesterday)
+        self.assertTrue(quest.expired())
+
+    def test_with_is_expired__judges_archived_quests_by_their_dates(self):
+        """The ``is_expired`` annotation reads an archived quest's dates, as ``expired()`` does."""
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        no_expiry = baker.make(Quest, archived=True, date_expired=None, time_expired=None)
+        past_expiry = baker.make(Quest, archived=True, date_expired=yesterday)
+
+        quests = Quest.objects.all_including_archived().filter(pk__in=[no_expiry.pk, past_expiry.pk])
+        is_expired = dict(quests.with_is_expired().values_list('pk', 'is_expired'))
+
+        self.assertEqual(is_expired, {no_expiry.pk: False, past_expiry.pk: True})
+
 
 class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
     """The Drafts and Archived staff tabs render the same template rows as the
