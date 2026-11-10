@@ -1,3 +1,7 @@
+import os
+
+from django.contrib.auth.decorators import login_required
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
 from hackerspace_online.decorators import staff_member_required
@@ -5,7 +9,7 @@ from hackerspace_online.decorators import staff_member_required
 from notifications.signals import notify
 from tenant.views import non_public_only_view
 
-from .models import Comment
+from .models import Comment, Document
 
 
 @non_public_only_view
@@ -156,3 +160,82 @@ def flag(request, id):
 
 #     else:
 #         raise Http404
+
+
+def _may_download(user, comment):
+    """Whether this user may fetch an attachment on this comment.
+
+    Args:
+        user (User): the signed-in viewer.
+        comment (Comment): the comment the attachment hangs off, or None for an attachment on
+            no comment at all, which belongs to nobody and is nobody's to fetch.
+
+    Returns:
+        bool: True if they can already see the thread the attachment is part of.
+    """
+    from announcements.models import Announcement  # locally: announcements imports this app
+
+    if comment is None:
+        return False
+    if user.is_staff or comment.user_id == user.id:
+        return True
+    target = comment.target_object
+    # a submission belongs to one student, and every attachment on their own thread is theirs
+    # to open, including one their teacher attached
+    if getattr(target, "user_id", None) == user.id:
+        return True
+    # An announcement's thread is the whole deck's, so its attachments are everyone's, as long
+    # as the announcement is one they can actually see. A draft, an unreleased, an archived or
+    # an expired one is not on their announcements page, and this url carries a guessable id,
+    # so it must not be the way to reach what that page withholds.
+    return (
+        isinstance(target, Announcement)
+        and Announcement.objects.get_for_students().filter(pk=target.pk).exists()
+    )
+
+
+@non_public_only_view
+@login_required
+def document_download(request, id):
+    """Hand a script-capable attachment to the viewer as a download instead of opening it.
+
+    The submission comment's "Attach files" box takes web files, because whole cohorts of
+    quests ask students to hand in a page or a vector drawing through it. Served inline from
+    the app's own origin, such a file runs whatever script it carries in the session of
+    whoever follows the link, normally the teacher marking the work. Everything the app links
+    that could do that goes through here instead, and this responds with
+    ``Content-Disposition: attachment``, so following the link saves the file (#2726).
+
+    Who may follow it is everyone who can see the thread it hangs off: staff, whoever wrote the
+    comment, the student whose submission it is (so a teacher's attached example is still theirs
+    to open), and any signed-in member of the deck when the thread is that of an announcement
+    they can see, since an announcement is the whole deck's. Nobody reaches it signed out: the
+    view is behind login_required, which sends an anonymous visitor to the login page.
+
+    A url carrying a row id is guessable in a way a storage path is not, so this is checked
+    rather than left open, even though the stored file itself is reachable by anyone holding
+    its storage url.
+
+    Args:
+        request (HttpRequest): the request.
+        id (int): id of the Document to serve.
+
+    Returns:
+        FileResponse: the stored file, as an attachment.
+
+    Raises:
+        Http404: if the attachment is not one of the files served this way (an image is linked
+            at its storage url and must keep opening in a tab rather than downloading), or the
+            viewer is not one of the people above.
+    """
+    document = get_object_or_404(Document, pk=id)
+    if not document.is_script_capable:
+        raise Http404("That attachment is not served as a download.")
+    if not _may_download(request.user, document.comment):
+        raise Http404("I don't think you're supposed to be here....")
+
+    return FileResponse(
+        document.docfile.open("rb"),
+        as_attachment=True,
+        filename=os.path.basename(document.docfile.name),
+    )
