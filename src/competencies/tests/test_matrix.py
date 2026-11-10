@@ -116,14 +116,15 @@ class CourseMatrixTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
                 own = next(course for course in course_competencies(row.registration.user) if course.registration == row.registration)
                 self.assertEqual((row.competencies, row.average, row.level), (own.competencies, own.average, own.level))
 
-    def test_course_matrix__four_queries(self):
-        """ It takes four queries however many students and competencies there are """
+    def test_course_matrix__five_queries(self):
+        """ It takes five queries however many students, competencies, overrides and self-assessments there are """
         for _ in range(5):
             student = baker.make(User)
             self.register(student, self.block_a)
             for competency in (self.defining, self.making, self.retired):
                 self.assess(student, competency, ProficiencyLevel.PROFICIENT)
             CompetencyOverride.objects.create(user=student, competency=self.making, level=ProficiencyLevel.EMERGING, set_by=self.teacher)
+            CompetencyAssessment.objects.create(user=student, competency=self.defining, level=ProficiencyLevel.EXTENDING, assessed_by=student)
 
         with CaptureQueriesContext(connection) as queries:
             columns, rows = course_matrix(self.course)
@@ -132,7 +133,8 @@ class CourseMatrixTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(len(names), 7)
         self.assertEqual(len(setters), 5)
-        self.assertEqual(own_query_count(queries), 4)
+        self.assertEqual(sum(len(row.self_assessed) for row in rows), 5)
+        self.assertEqual(own_query_count(queries), 5)
 
 
 class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):

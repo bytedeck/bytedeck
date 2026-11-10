@@ -3,7 +3,8 @@
 Every page that shows a current level (the course levels on a student's profile, their competencies
 page, and the staff competency matrix with its CSV) reads it through current_levels, so the deck's
 roll-up strategy (SiteConfig.competency_rollup) changes them all alike, and a level a teacher has set
-(a CompetencyOverride) stands in place of the roll-up on all of them.
+(a CompetencyOverride) stands in place of the roll-up on all of them. A student's self-assessments are
+never part of it: they are shown beside the current level (latest_self_assessments), not counted.
 """
 
 from collections import Counter, defaultdict
@@ -62,8 +63,8 @@ def describe_rollup(config):
 
 def evidence_levels(**filters):
     """ Each student's level in each competency they have been assessed in, by the deck's roll-up
-    strategy, from the assessments matching the filters: their current level, unless a teacher has
-    set one (see current_levels).
+    strategy, from the teacher's assessments matching the filters (self-assessments aren't evidence):
+    their current level, unless a teacher has set one (see current_levels).
 
     It takes one query, which serves one student's profile or a whole class alike: each student's
     assessments of each competency are read oldest first (ties on the timestamp in the order they
@@ -79,7 +80,7 @@ def evidence_levels(**filters):
     """
     config = SiteConfig.get()
     assessed = defaultdict(lambda: defaultdict(list))
-    assessments = CompetencyAssessment.objects.filter(**filters).order_by('timestamp', 'pk')
+    assessments = CompetencyAssessment.objects.filter(**filters).teacher_evidence().order_by('timestamp', 'pk')
     for user_id, competency_id, level in assessments.values_list('user_id', 'competency_id', 'level'):
         assessed[user_id][competency_id].append(level)
 
@@ -111,3 +112,26 @@ def current_levels(**filters):
         overrides[override.user_id][override.competency_id] = override
         levels[override.user_id][override.competency_id] = override.level
     return levels, overrides
+
+
+def latest_self_assessments(**filters):
+    """ Each student's latest self-assessment of each competency they have assessed themself in, to
+    show beside their current level (it is never counted in it).
+
+    It is one query: the latest per student and competency is picked by a Postgres ``DISTINCT ON``
+    (timestamp ties going to the one recorded last).
+
+    Args:
+        **filters: CompetencyAssessment filters choosing the students and competencies, as for
+            current_levels.
+
+    Returns:
+        defaultdict: user pk to a dict of competency pk to the CompetencyAssessment.
+    """
+    latest = CompetencyAssessment.objects.filter(**filters).self_assessments().order_by(
+        'user_id', 'competency_id', '-timestamp', '-pk',
+    ).distinct('user_id', 'competency_id')
+    self_assessed = defaultdict(dict)
+    for assessment in latest:
+        self_assessed[assessment.user_id][assessment.competency_id] = assessment
+    return self_assessed
