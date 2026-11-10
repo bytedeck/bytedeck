@@ -216,10 +216,13 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
             owner.full_clean()
             owner.save()
 
-            # Mark email as verified and primary
+            # Mark email as verified and primary. allauth keeps addresses in lowercase
+            # (EmailAddress.clean() lowercases them, and user_email() compares that way),
+            # so the row is stored lowercase too: an address typed with capitals, as a
+            # phone often does, would otherwise read as unverified in the deck list.
             email_address, created = EmailAddress.objects.get_or_create(
                 user=owner,
-                email=owner.email,
+                email=owner.email.lower(),
                 defaults={'verified': True, 'primary': True}
             )
             if not created:
