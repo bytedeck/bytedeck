@@ -1,3 +1,5 @@
 # Builds the user guide (mkdocs.yml); not needed to run ByteDeck itself.
 mkdocs==1.6.1
 mkdocs-material==9.7.7
+# the guide's figure captions use its blocks.caption extension
+pymdown-extensions==12.3
