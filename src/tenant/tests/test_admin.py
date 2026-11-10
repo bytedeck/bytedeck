@@ -950,6 +950,65 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
             TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
         self.assertTrue(schema_exists("extra"))
 
+    def make_unused_trial(self):
+        """Turn the extra deck into an unused trial: never warned (so the year clock can't
+        apply), its stats refreshed, and no staff sign-in on record."""
+        DeckNotice.objects.filter(pk=self.suspended_warning.pk).delete()
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            last_staff_login=None, cached_fields_updated_on=timezone.now())
+        self.extra_tenant.refresh_from_db()
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__deletes_an_unused_trial_and_drops_its_schema(self):
+        """An armed deck whose trial ended without anyone ever signing in is deleted, schema
+        and all, without waiting out the year-long suspension clock."""
+        self.make_unused_trial()
+        self.assertEqual(self.extra_tenant.deletion_eligibility, 'unused')
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        post = self.client.post(delete_url, {"post": "yes", "confirmation": "owner/extra"})
+        self.assertRedirects(post, reverse("admin:index"))
+        self.assertFalse(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+        self.assertFalse(schema_exists("extra"))
+
+    def test_delete_model__unused_trial_refused_if_someone_signed_in_since_the_refresh(self):
+        """The cached Last staff login is a nightly snapshot, so delete_model checks the deck's
+        accounts itself before dropping an unused trial: an owner who signed in since the last
+        refresh keeps their deck."""
+        self.make_unused_trial()
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.get().deck_owner
+            User.objects.filter(pk=owner.pk).update(last_login=timezone.now())
+        with self.assertRaises(PermissionDenied):
+            TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+        self.assertTrue(schema_exists("extra"))
+
+    def test_delete_model__unused_trial_locks_sign_ins_through_the_drop(self):
+        """Checking for a sign-in and dropping the schema happen under one lock on the deck's
+        user table, taken before the check: a sign-in that finished first is seen, and one
+        still writing its last_login waits until the deck is gone."""
+        from django.test.utils import CaptureQueriesContext
+
+        self.make_unused_trial()
+        # the admin deletes from the public schema, as a request to the deck list does
+        with tenant_context(self.public_tenant), CaptureQueriesContext(connection) as queries:
+            TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
+        statements = [query['sql'] for query in queries.captured_queries]
+        lock = next(i for i, sql in enumerate(statements) if sql.startswith('LOCK TABLE') and 'auth_user' in sql)
+        drop = next(i for i, sql in enumerate(statements) if 'DROP SCHEMA' in sql)
+        last_login_check = next(i for i, sql in enumerate(statements) if '"last_login" IS NOT NULL' in sql)
+        self.assertLess(lock, last_login_check)
+        self.assertLess(last_login_check, drop)
+        self.assertFalse(schema_exists("extra"))
+
+    def test_deletable_text__names_an_unused_trial(self):
+        """The deck list's "deletable" column names the unused-trial path."""
+        self.make_unused_trial()
+        admin_obj = TenantAdmin(model=Tenant, admin_site=AdminSite())
+        self.assertEqual(admin_obj.deletable_text(self.extra_tenant), 'via unused trial')
+
     def test_delete_view__nonexistent_obj(self):
         """Deleting a nonexistent tenant redirects to the admin index with a not-found message."""
         self.client.force_login(self.deleteuser)
