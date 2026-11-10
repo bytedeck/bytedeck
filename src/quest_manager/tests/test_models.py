@@ -255,6 +255,65 @@ class QuestTestModel(ByteDeckTenantTestCase):
         q = baker.make(Quest, archived=True)
         self.assertFalse(q.active)
 
+    def assertReasons(self, quest, expected):
+        """Assert a quest's unavailable_reasons, and that ``active`` agrees with them (#2966)."""
+        self.assertEqual(quest.unavailable_reasons(), expected)
+        self.assertEqual(quest.active, not expected)
+
+    def test_unavailable_reasons__none_for_an_available_quest(self):
+        """A published quest that is open now has no reason to give, and is active."""
+        self.assertReasons(baker.make(Quest), [])
+
+    def test_unavailable_reasons__draft(self):
+        """A quest that isn't published says it's a draft (#2966)."""
+        self.assertReasons(baker.make(Quest, published=False), ["It's a draft: Published isn't ticked on its form."])
+
+    def test_unavailable_reasons__archived(self):
+        """An archived quest says so (#2966)."""
+        self.assertReasons(baker.make(Quest, archived=True), ["It's archived."])
+
+    def test_unavailable_reasons__unpublished_campaign(self):
+        """A quest in an unpublished campaign names the campaign (#2966)."""
+        campaign = baker.make(Category, title="Photography", published=False)
+        self.assertReasons(baker.make(Quest, campaign=campaign), ["Its campaign, Photography, isn't published."])
+
+    @freeze_time(datetime.datetime(2024, 1, 1, 6, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__not_open_yet(self):
+        """A quest whose available date and time haven't come says when it opens, on a later day or
+        later the same day (#2966)."""
+        later_day = baker.make(Quest, date_available=datetime.date(2024, 1, 3), time_available=datetime.time(8, 30))
+        self.assertReasons(later_day, ["It doesn't open until 8:30 a.m. on Jan. 3, 2024."])
+        later_today = baker.make(Quest, date_available=datetime.date(2024, 1, 1), time_available=datetime.time(9))
+        self.assertReasons(later_today, ["It doesn't open until 9 a.m. on Jan. 1, 2024."])
+
+    @freeze_time(datetime.datetime(2024, 1, 5, 12, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__expired(self):
+        """An expired quest says when it expired: at a time on its expiry date, at the end of that
+        date when it has no time, or every day at its time when it has no date (#2966)."""
+        self.assertReasons(
+            baker.make(Quest, date_expired=datetime.date(2024, 1, 4), time_expired=datetime.time(15)),
+            ["It expired at 3 p.m. on Jan. 4, 2024."],
+        )
+        self.assertReasons(
+            baker.make(Quest, date_expired=datetime.date(2024, 1, 4)),
+            ["It expired at the end of Jan. 4, 2024."],
+        )
+        self.assertReasons(
+            baker.make(Quest, time_expired=datetime.time(10)),
+            ["It closes at 10 a.m. every day, and opens again at midnight."],
+        )
+
+    def test_unavailable_reasons__several_at_once(self):
+        """Every reason that applies is given, so fixing one doesn't leave the quest closed for a
+        reason nobody was told about (#2966)."""
+        campaign = baker.make(Category, title="Photography", published=False)
+        quest = baker.make(Quest, published=False, archived=True, campaign=campaign)
+        self.assertReasons(quest, [
+            "It's archived.",
+            "It's a draft: Published isn't ticked on its form.",
+            "Its campaign, Photography, isn't published.",
+        ])
+
     def test_expired__date_blank(self):
         """If `date_expired` is blank, expire at `time_expired` every day
 
