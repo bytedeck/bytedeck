@@ -129,10 +129,8 @@ class QuestFormTest(ByteDeckTenantTestCase):
                 self.assertIn('django-select2', str(form[field_name]))
 
     def test_QuestForm__searchable_dropdowns_offer_the_same_choices(self):
-        """The searchable dropdowns offer only what the plain ones did: published campaigns,
-        active Common Quest Info and staff."""
-        baker.make(Category, title="Published Campaign", published=True)
-        baker.make(Category, title="Draft Campaign", published=False)
+        """The searchable dropdowns offer only what the plain ones did: active Common Quest Info
+        and staff."""
         baker.make(CommonData, title="Active Info", active=True)
         baker.make(CommonData, title="Retired Info", active=False)
         baker.make(User, username="teacher_one", is_staff=True)
@@ -140,15 +138,30 @@ class QuestFormTest(ByteDeckTenantTestCase):
 
         form = QuestForm()
 
-        campaign_html = str(form['campaign'])
-        self.assertIn("Published Campaign", campaign_html)
-        self.assertNotIn("Draft Campaign", campaign_html)
         common_data_html = str(form['common_data'])
         self.assertIn("Active Info", common_data_html)
         self.assertNotIn("Retired Info", common_data_html)
         teacher_html = str(form['specific_teacher_to_notify'])
         self.assertIn("teacher_one", teacher_html)
         self.assertNotIn("student_one", teacher_html)
+
+    def test_QuestForm__campaign_offers_unpublished_campaigns_marked(self):
+        """The Campaign dropdown offers unpublished campaigns too, so a teacher can add quests to a
+        campaign before publishing it, and marks them "(unpublished)" (#2965)."""
+        baker.make(Category, title="Published Campaign", published=True)
+        baker.make(Category, title="Draft Campaign", published=False)
+
+        campaign_html = str(QuestForm()['campaign'])
+
+        self.assertIn(">Published Campaign<", campaign_html)
+        self.assertIn(">Draft Campaign (unpublished)<", campaign_html)
+
+    def test_QuestForm__campaign_accepts_an_unpublished_campaign(self):
+        """A quest can be saved into an unpublished campaign (#2965)."""
+        draft = baker.make(Category, title="Draft Campaign", published=False)
+        form = QuestForm(data={**self.minimal_valid_data, 'campaign': draft.pk})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['campaign'], draft)
 
 
 class TAQuestFormTest(ByteDeckTenantTestCase):

@@ -157,6 +157,18 @@ class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
     def __str__(self):
         return self.title
 
+    @property
+    def title_with_status(self):
+        """The campaign's title, followed by "(unpublished)" when the campaign isn't published.
+
+        Used where staff pick or see a quest's campaign (the quest form's Campaign dropdown and the
+        quest's own page), which list unpublished campaigns too, since a teacher builds a
+        campaign's quests before publishing it (#2965). The mark says students can't see it yet.
+        """
+        if self.published:
+            return self.title
+        return f"{self.title} (unpublished)"
+
     def get_absolute_url(self):
         return reverse('quests:category_detail', kwargs={'pk': self.id})
 
