@@ -11,6 +11,7 @@ from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.text import slugify
 from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
@@ -35,6 +36,7 @@ from .forms import (
     ExcludedDateFormset, ExcludedDateFormsetHelper, class_days_changed,
 )
 from .models import Block, Course, CourseStudent, ExcludedDate, Rank, Semester, MarkRange, semester_for
+from .report_cards import group_roster, report_card_data, student_key_csv
 
 from django.db import transaction
 from django.db.models import ProtectedError, Q
@@ -1066,6 +1068,76 @@ class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
         context['population'] = course_student_qs.count()
         context['populated'] = course_student_qs.exists()
         return context
+
+
+def _report_card_attachment(response, block, name, extension):
+    """Have a response download as one of a group's report card files, named for the group and the day.
+
+    Args:
+        response (HttpResponse): the response holding the file.
+        block (Block): the group the file is for.
+        name (str): what the file is, e.g. "report-card-data".
+        extension (str): the file's extension, without its dot.
+
+    Returns:
+        HttpResponse: the response, with its Content-Disposition header set.
+    """
+    filename = f"{name}-{slugify(block.name)}-{timezone.localdate().isoformat()}.{extension}"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ReportCardData(NonPublicOnlyViewMixin, DetailView):
+    """Staff-only page offering a group's report card data: what its current students have done
+    this semester, for a teacher to give to an AI model as the basis for report card comments.
+
+    It offers two downloads, kept apart so the first can be shared and the second need not be:
+    the students' data, which names no one (ReportCardDataFile), and the key that says which
+    student each code in it stands for (ReportCardKeyFile).
+    """
+    model = Block
+    template_name = 'courses/report_card_data.html'
+
+    def get_context_data(self, **kwargs):
+        """Adds how many students the downloads will cover, so an empty group offers none."""
+        context = super().get_context_data(**kwargs)
+        context['student_count'] = len(group_roster(self.object))
+        return context
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ReportCardDataFile(NonPublicOnlyViewMixin, View):
+    """Downloads a group's report card data as JSON (see courses.report_cards.report_card_data)."""
+
+    def get(self, request, pk):
+        """Returns the data file for the group in the URL.
+
+        Raises:
+            Http404: if there is no such group.
+        """
+        block = get_object_or_404(Block, pk=pk)
+        # indented, and with accented letters as themselves, so a teacher can skim the file
+        # before sharing it
+        response = JsonResponse(report_card_data(block), json_dumps_params={'indent': 1, 'ensure_ascii': False})
+        return _report_card_attachment(response, block, "report-card-data", "json")
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ReportCardKeyFile(NonPublicOnlyViewMixin, View):
+    """Downloads the key to a group's report card data as CSV (see courses.report_cards.student_key_csv)."""
+
+    def get(self, request, pk):
+        """Returns the key file for the group in the URL.
+
+        Raises:
+            Http404: if there is no such group.
+        """
+        block = get_object_or_404(Block, pk=pk)
+        # utf-8-sig starts the file with a byte order mark, which is what has a spreadsheet
+        # read accented names as UTF-8
+        response = HttpResponse(student_key_csv(block).encode('utf-8-sig'), content_type='text/csv; charset=utf-8')
+        return _report_card_attachment(response, block, "report-card-key", "csv")
 
 
 @method_decorator(staff_member_required, name='dispatch')

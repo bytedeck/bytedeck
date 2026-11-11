@@ -1,0 +1,51 @@
+{% extends "courses/base.html" %}
+{% load utility_tags %}
+
+{% block head_title %}Report card data | {% endblock %}
+{% block heading_inner %}Report card data: {{ object.name }}{% endblock %}
+
+{% block content %}
+{% group_name as group %}
+<p>This page is visible to staff only.</p>
+{% if student_count %}
+<p>
+  Download what the {{ student_count }} {{ config.custom_name_for_student|lower }}{{ student_count|pluralize }}
+  currently in this {{ group|lower }} {{ student_count|pluralize:"has,have" }} done this semester, to give to an
+  AI model as the basis for report card comments. It comes as two files, so that you can share the first without
+  the second.
+</p>
+
+<h3>1. {{ config.custom_name_for_student }} data</h3>
+<p>
+  A record for each {{ config.custom_name_for_student|lower }}: their courses, XP and marks, the campaigns and
+  quests they have worked on with the conversation on each one, and their badges.
+</p>
+<p>
+  <strong>It names no one.</strong> Each {{ config.custom_name_for_student|lower }} is known by a code such as
+  <code>S42</code>, and the names of your current {{ config.custom_name_for_student|lower }}s are replaced
+  wherever they appear in a comment, along with web and email addresses. Replacing names is a best effort: a
+  nickname, or a name typed without its capital letter, is not caught, so look through the file before you share it.
+</p>
+<p>
+  <a class="btn btn-primary" href="{% url 'courses:report_card_data_file' object.pk %}">
+    <i class="fa fa-download"></i> Download {{ config.custom_name_for_student|lower }} data (JSON)
+  </a>
+</p>
+
+<h3>2. Key</h3>
+<p>
+  A spreadsheet that says which {{ config.custom_name_for_student|lower }} each code stands for.
+  <strong>Keep this file to yourself:</strong> anyone holding both files can tell whose record is whose.
+</p>
+<p>
+  <a class="btn btn-default" href="{% url 'courses:report_card_key_file' object.pk %}">
+    <i class="fa fa-download"></i> Download key (CSV)
+  </a>
+</p>
+{% else %}
+<p>No {{ config.custom_name_for_student|lower }}s are currently in this {{ group|lower }}, so there is nothing to download.</p>
+{% endif %}
+<p>
+  <a href="{% url 'profiles:profile_list_block' object.pk %}">Back to this {{ group|lower }}</a>
+</p>
+{% endblock %}
