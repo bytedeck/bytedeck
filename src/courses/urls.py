@@ -21,6 +21,7 @@ urlpatterns = [
     path('blocks/<pk>/delete/', views.BlockDelete.as_view(), name='block_delete'),
     path('blocks/<int:pk>/report-card-data/', views.ReportCardData.as_view(), name='report_card_data'),
     path('blocks/<int:pk>/report-card-data/students.json', views.ReportCardDataFile.as_view(), name='report_card_data_file'),
+    path('blocks/<int:pk>/report-card-data/students.zip', views.ReportCardStudentFiles.as_view(), name='report_card_student_files'),
     path('blocks/<int:pk>/report-card-data/key.csv', views.ReportCardKeyFile.as_view(), name='report_card_key_file'),
 
     # CourseStudent

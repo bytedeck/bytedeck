@@ -4,6 +4,7 @@ import csv
 import datetime
 import io
 import json
+import zipfile
 
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
@@ -348,7 +349,6 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         second_question = baker.make(Question, quest=quest, ordinal=2, instructions='Anything else?')
         baker.make(QuestionSubmission, quest_submission=submission, question=second_question, comment=handed_in, response_text='No')
         self._comment(submission, self.teacher, "<p>Lovely work Jamie.</p><p>The <b>Helper</b> badge was granted for this quest</p>")
-        self._comment(submission, SiteConfig.get().deck_ai, "Approved automatically")
         self._comment(submission, self.will, "nice one")
         # a comment on someone else's attempt is not part of this conversation
         self._comment(self._submission(quest, user=self.will), self.will, "mine")
@@ -357,7 +357,7 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         jamie = self._jamie(report_card_data(self.block))
 
         conversation = jamie["quests"][0]["conversation"]
-        self.assertEqual([entry["from"] for entry in conversation], ['student', 'teacher', 'automated', 'other'])
+        self.assertEqual([entry["from"] for entry in conversation], ['student', 'teacher', 'other'])
         self.assertEqual(conversation[0], {
             "from": 'student',
             "on": '2026-10-14',
@@ -391,12 +391,16 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         talent = baker.make(Badge, name='Coder', xp=5, short_description='<p>Wrote some code</p>',
                             badge_type=BadgeType.objects.get_or_create(name='Talent')[0])
         talent.tags.add('code')
+        talent.add_simple_prereqs([baker.make(Quest)])
         award = baker.make(Badge, name='Helper', xp=10, badge_type=BadgeType.objects.get_or_create(name='Award')[0])
         award.tags.add('code')
         deck_ai = SiteConfig.get().deck_ai
         first = baker.make(BadgeAssertion, badge=talent, user=self.jamie, semester=self.semester, issued_by=deck_ai)
         baker.make(BadgeAssertion, badge=talent, user=self.jamie, semester=self.semester, issued_by=None, ordinal=2, do_not_grant_xp=True)
         baker.make(BadgeAssertion, badge=award, user=self.jamie, semester=self.semester, issued_by=self.teacher)
+        # the deck's own account is a member of staff, who can grant by hand a badge that has no prerequisites
+        manual = baker.make(Badge, name='Kind', xp=0, badge_type=award.badge_type)
+        baker.make(BadgeAssertion, badge=manual, user=self.jamie, semester=self.semester, issued_by=deck_ai)
         # not this semester's, and not Jamie's
         baker.make(BadgeAssertion, badge=award, user=self.jamie, issued_by=self.teacher,
                    semester=baker.make(Semester, status=Semester.Status.ARCHIVED))
@@ -410,6 +414,7 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
             {"badge": 'Coder', "type": 'Talent', "description": 'Wrote some code', "xp_each": 5, "granted_by": 'automatic',
              "granted_on": ['2026-10-01', today]},
             {"badge": 'Helper', "type": 'Award', "xp_each": 10, "granted_by": 'teacher', "granted_on": [today]},
+            {"badge": 'Kind', "type": 'Award', "xp_each": 0, "granted_by": 'teacher', "granted_on": [today]},
         ])
         # the badge granted without XP adds nothing
         self.assertEqual(jamie["xp_by_tag"], {'code': 15})
@@ -441,13 +446,17 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
                    semester=SiteConfig.get().active_semester)
         cls.page = reverse('courses:report_card_data', args=[cls.block.pk])
         cls.data_file = reverse('courses:report_card_data_file', args=[cls.block.pk])
+        cls.student_files = reverse('courses:report_card_student_files', args=[cls.block.pk])
         cls.key_file = reverse('courses:report_card_key_file', args=[cls.block.pk])
 
-    #: The names of the page's URL and of the two downloads'.
-    URL_NAMES = ('courses:report_card_data', 'courses:report_card_data_file', 'courses:report_card_key_file')
+    #: The names of the page's URL and of its downloads'.
+    URL_NAMES = (
+        'courses:report_card_data', 'courses:report_card_data_file', 'courses:report_card_student_files',
+        'courses:report_card_key_file',
+    )
 
     def test_views__staff_only(self):
-        """The page and both downloads send an anonymous visitor to sign in and refuse a student."""
+        """The page and its downloads send an anonymous visitor to sign in and refuse a student."""
         for name in self.URL_NAMES:
             self.assertRedirectsLogin(name, args=[self.block.pk])
         self.client.force_login(self.student)
@@ -455,18 +464,19 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
             self.assert403(name, args=[self.block.pk])
 
     def test_views__no_such_group(self):
-        """A group that does not exist is a 404 on the page and on both downloads."""
+        """A group that does not exist is a 404 on the page and on each download."""
         self.client.force_login(self.teacher)
         for name in self.URL_NAMES:
             self.assert404(name, args=[self.block.pk + 1000])
 
     def test_report_card_data__offers_both_files(self):
-        """The page says how many students the files cover and links to both downloads."""
+        """The page says how many students the files cover and links to each download."""
         self.client.force_login(self.teacher)
         response = self.client.get(self.page)
         self.assertContains(response, "Report card data: A Block")
         self.assertContains(response, "the 1 student")
         self.assertContains(response, self.data_file)
+        self.assertContains(response, self.student_files)
         self.assertContains(response, self.key_file)
 
     def test_report_card_data__empty_group(self):
@@ -489,6 +499,25 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
         data = json.loads(response.content)
         self.assertEqual([student["student_code"] for student in data["students"]], [student_code(self.student.pk)])
         self.assertEqual(data["about"]["group"], 'A Block')
+        # accented letters are written as themselves, and the file is indented, to be readable
+        self.assertIn('\n "students": [', response.content.decode())
+
+    def test_report_card_student_files__downloads_zip(self):
+        """The file per student downloads as a zip, each file holding the same "about" as the whole
+        data file and its one student's record."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.student_files)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/zip')
+        self.assertEqual(
+            response['Content-Disposition'],
+            f'attachment; filename="report-card-data-a-block-{timezone.localdate().isoformat()}.zip"',
+        )
+        whole = json.loads(self.client.get(self.data_file).content)
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            self.assertEqual(archive.namelist(), [f"{student_code(self.student.pk)}.json"])
+            one = json.loads(archive.read(archive.namelist()[0]))
+        self.assertEqual(one, {"about": whole["about"], "student": whole["students"][0]})
 
     def test_report_card_key_file__downloads_csv(self):
         """The key file downloads as a CSV a spreadsheet reads as UTF-8, named for the group and the day."""

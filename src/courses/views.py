@@ -36,7 +36,7 @@ from .forms import (
     ExcludedDateFormset, ExcludedDateFormsetHelper, class_days_changed,
 )
 from .models import Block, Course, CourseStudent, ExcludedDate, Rank, Semester, MarkRange, semester_for
-from .report_cards import group_roster, report_card_data, student_key_csv
+from .report_cards import group_roster, report_card_data, student_files_zip, student_key_csv, to_json
 
 from django.db import transaction
 from django.db.models import ProtectedError, Q
@@ -1092,9 +1092,9 @@ class ReportCardData(NonPublicOnlyViewMixin, DetailView):
     """Staff-only page offering a group's report card data: what its current students have done
     this semester, for a teacher to give to an AI model as the basis for report card comments.
 
-    It offers two downloads, kept apart so the first can be shared and the second need not be:
-    the students' data, which names no one (ReportCardDataFile), and the key that says which
-    student each code in it stands for (ReportCardKeyFile).
+    The students' data, which names no one, comes as one file (ReportCardDataFile) or as a file
+    per student (ReportCardStudentFiles). The key that says which student each code in it stands
+    for is a download of its own (ReportCardKeyFile), so the data can be shared without it.
     """
     model = Block
     template_name = 'courses/report_card_data.html'
@@ -1117,10 +1117,24 @@ class ReportCardDataFile(NonPublicOnlyViewMixin, View):
             Http404: if there is no such group.
         """
         block = get_object_or_404(Block, pk=pk)
-        # indented, and with accented letters as themselves, so a teacher can skim the file
-        # before sharing it
-        response = JsonResponse(report_card_data(block), json_dumps_params={'indent': 1, 'ensure_ascii': False})
+        response = HttpResponse(to_json(report_card_data(block)), content_type='application/json')
         return _report_card_attachment(response, block, "report-card-data", "json")
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ReportCardStudentFiles(NonPublicOnlyViewMixin, View):
+    """Downloads a group's report card data as a zip of one JSON file per student (see
+    courses.report_cards.student_files_zip)."""
+
+    def get(self, request, pk):
+        """Returns the zip for the group in the URL.
+
+        Raises:
+            Http404: if there is no such group.
+        """
+        block = get_object_or_404(Block, pk=pk)
+        response = HttpResponse(student_files_zip(report_card_data(block)), content_type='application/zip')
+        return _report_card_attachment(response, block, "report-card-data", "zip")
 
 
 @method_decorator(staff_member_required, name='dispatch')

@@ -9,8 +9,10 @@ stays with the teacher.
 
 import csv
 import io
+import json
 import os
 import re
+import zipfile
 from collections import defaultdict
 from datetime import timedelta
 
@@ -19,8 +21,9 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Prefetch, Sum
 from django.utils import timezone
 
-from badges.models import BadgeAssertion
+from badges.models import Badge, BadgeAssertion
 from comments.models import Comment
+from prerequisites.models import Prereq
 from profile_manager.models import Profile
 from quest_manager.models import Category, Quest, QuestSubmission
 from questions.models import QuestionSubmission
@@ -71,7 +74,8 @@ HOW_TO_READ = {
                  "this file have worked in, and how many quests and how much XP it offers.",
     "badges": "Recognition for an accomplishment. 'granted_by' is 'automatic' when the badge came from meeting "
               "its prerequisites and 'teacher' when a teacher chose to grant it. A badge a teacher granted while "
-              "approving a quest is also noted in that quest's conversation.",
+              "approving a quest is also noted in that quest's conversation ('The ... badge was granted for this "
+              "quest').",
     "mark_percent": "The course mark so far: the student's XP as a percentage of the XP expected by this point "
                     "in the semester for 100% ('xp_for_100_percent' is the full semester's). Absent for a course "
                     "that runs on XP alone.",
@@ -331,26 +335,22 @@ def _xp_earned(submission):
     return max(submission.quest.xp, submission.xp_requested)
 
 
-def _author(comment, student_id, deck_ai_id):
+def _author(comment, student_id):
     """Who wrote a comment, as their part in the conversation.
 
     Args:
         comment (Comment): the comment, with its user loaded.
         student_id (int): the User pk of the student whose work the comment is on.
-        deck_ai_id (int or None): the User pk of the deck's own account, which signs what the deck
-            does by itself.
 
     Returns:
-        str: "student", "automated", "teacher", or "other" for anyone else (another student).
+        str: "student", "teacher", or "other" for anyone else (another student).
     """
     if comment.user_id == student_id:
         return "student"
-    if comment.user_id == deck_ai_id:
-        return "automated"
     return "teacher" if comment.user.is_staff else "other"
 
 
-def _conversation(comments, student_id, scrubber, deck_ai_id):
+def _conversation(comments, student_id, scrubber):
     """The comments on one attempt at a quest, ready for the data file.
 
     Args:
@@ -358,7 +358,6 @@ def _conversation(comments, student_id, scrubber, deck_ai_id):
             published answers prefetched.
         student_id (int): the User pk of the student whose attempt it is.
         scrubber (NameScrubber): replaces names in what was written.
-        deck_ai_id (int or None): see _author.
 
     Returns:
         list[dict]: an entry per comment.
@@ -376,7 +375,7 @@ def _conversation(comments, student_id, scrubber, deck_ai_id):
             for answer in comment.question_submissions.all()
         ]
         entries.append(_compact({
-            "from": _author(comment, student_id, deck_ai_id),
+            "from": _author(comment, student_id),
             "on": _day(comment.timestamp),
             "text": scrubber.clean(comment.text, student_id),
             "files": [_file_type(document.docfile) for document in comment.document_set.all()],
@@ -385,7 +384,7 @@ def _conversation(comments, student_id, scrubber, deck_ai_id):
     return entries
 
 
-def _quest_entries(submissions, comments, student_id, scrubber, deck_ai_id):
+def _quest_entries(submissions, comments, student_id, scrubber):
     """A student's attempts at quests, ready for the data file.
 
     Args:
@@ -393,7 +392,6 @@ def _quest_entries(submissions, comments, student_id, scrubber, deck_ai_id):
         comments (dict): the comments on each attempt, by the attempt's pk.
         student_id (int): the student's User pk.
         scrubber (NameScrubber): replaces names in what was written.
-        deck_ai_id (int or None): see _author.
 
     Returns:
         list[dict]: an entry per attempt.
@@ -417,7 +415,7 @@ def _quest_entries(submissions, comments, student_id, scrubber, deck_ai_id):
             "handed_in_on": _day(submission.time_completed),
             "returned_on": _day(submission.time_returned),
             "approved_on": _day(submission.time_approved),
-            "conversation": _conversation(comments.get(submission.pk, []), student_id, scrubber, deck_ai_id),
+            "conversation": _conversation(comments.get(submission.pk, []), student_id, scrubber),
         }))
     return entries
 
@@ -481,13 +479,19 @@ def _campaign_entries(submissions):
     ]
 
 
-def _badge_entries(assertions, deck_ai_id):
+def _badge_entries(assertions, deck_ai_id, badges_with_prerequisites):
     """The badges a student has been granted, each listed once however often it was granted.
+
+    A badge counts as granted automatically when it has prerequisites to meet and came from the
+    deck's own account. The account alone does not say so: it is one of the staff's (the deck's
+    first, unless the deck chose another), who may grant badges by hand as well, and a badge with
+    no prerequisites is only ever granted by hand.
 
     Args:
         assertions (list[BadgeAssertion]): the student's badges, oldest first.
         deck_ai_id (int or None): the User pk of the deck's own account, which grants the badges
             that come from meeting their prerequisites.
+        badges_with_prerequisites (set): the pks of the badges that have prerequisites.
 
     Returns:
         list[dict]: an entry per badge, with every day it was granted.
@@ -495,7 +499,7 @@ def _badge_entries(assertions, deck_ai_id):
     badges = {}
     for assertion in assertions:
         badge = assertion.badge
-        automatic = assertion.issued_by_id in (None, deck_ai_id)
+        automatic = assertion.issued_by_id in (None, deck_ai_id) and badge.pk in badges_with_prerequisites
         entry = badges.setdefault((badge.pk, automatic), {
             "badge": badge.name,
             "type": badge.badge_type.name,
@@ -676,6 +680,10 @@ def report_card_data(block):
     ).select_related('badge__badge_type').prefetch_related('badge__tags').order_by('timestamp', 'pk')
     for assertion in granted:
         assertions[assertion.user_id].append(assertion)
+    badges_with_prerequisites = set(Prereq.objects.filter(
+        parent_content_type=ContentType.objects.get_for_model(Badge),
+        parent_object_id__in={assertion.badge_id for mine in assertions.values() for assertion in mine},
+    ).values_list('parent_object_id', flat=True))
 
     students = []
     campaign_ids = set()
@@ -691,8 +699,43 @@ def report_card_data(block):
             "work_summary": _work_summary(mine),
             "campaigns": _campaign_entries(mine),
             "xp_by_tag": _xp_by_tag(mine, assertions[profile.user_id]),
-            "badges": _badge_entries(assertions[profile.user_id], deck_ai_id),
-            "quests": _quest_entries(mine, comments, profile.user_id, scrubber, deck_ai_id),
+            "badges": _badge_entries(assertions[profile.user_id], deck_ai_id, badges_with_prerequisites),
+            "quests": _quest_entries(mine, comments, profile.user_id, scrubber),
         }))
 
     return {"about": _about(block, roster, campaign_ids), "students": students}
+
+
+def to_json(data):
+    """A data file, or one student's part of it, as JSON text.
+
+    It is indented, with accented letters as themselves, so a teacher can look through it before
+    sharing it.
+
+    Args:
+        data (dict): the data (see report_card_data).
+
+    Returns:
+        str: the JSON.
+    """
+    return json.dumps(data, indent=1, ensure_ascii=False)
+
+
+def student_files_zip(data):
+    """A data file split into a file per student, zipped, for an AI model that cannot take a whole
+    group at once, or a teacher who wants to hand it a few students at a time.
+
+    Each file stands alone: it carries the same "about" as the whole data file, then its one
+    student's record under "student".
+
+    Args:
+        data (dict): the group's data file (see report_card_data).
+
+    Returns:
+        bytes: a zip archive holding "<student code>.json" for each student.
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for student in data["students"]:
+            archive.writestr(f'{student["student_code"]}.json', to_json({"about": data["about"], "student": student}))
+    return buffer.getvalue()

@@ -11,8 +11,8 @@
 <p>
   Download what the {{ student_count }} {{ config.custom_name_for_student|lower }}{{ student_count|pluralize }}
   currently in this {{ group|lower }} {{ student_count|pluralize:"has,have" }} done this semester, to give to an
-  AI model as the basis for report card comments. It comes as two files, so that you can share the first without
-  the second.
+  AI model as the basis for report card comments. The data and its key are separate downloads, so that you can
+  share the first without the second.
 </p>
 
 <h3>1. {{ config.custom_name_for_student }} data</h3>
@@ -28,8 +28,15 @@
 </p>
 <p>
   <a class="btn btn-primary" href="{% url 'courses:report_card_data_file' object.pk %}">
-    <i class="fa fa-download"></i> Download {{ config.custom_name_for_student|lower }} data (JSON)
+    <i class="fa fa-download"></i> Download as one file (JSON)
   </a>
+  <a class="btn btn-default" href="{% url 'courses:report_card_student_files' object.pk %}">
+    <i class="fa fa-download"></i> Download a file per {{ config.custom_name_for_student|lower }} (ZIP)
+  </a>
+</p>
+<p class="help-block">
+  Both hold the same records. Use the file per {{ config.custom_name_for_student|lower }} if your AI tool says the
+  single file is too large, or to give it a few {{ config.custom_name_for_student|lower }}s at a time.
 </p>
 
 <h3>2. Key</h3>
