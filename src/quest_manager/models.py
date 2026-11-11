@@ -13,6 +13,7 @@ from django.db.models import BooleanField, Count, DateTimeField, Exists, Express
 from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format, time_format
 
 from siteconfig.models import SiteConfig
 
@@ -155,6 +156,18 @@ class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def title_with_status(self):
+        """The campaign's title, followed by "(unpublished)" when the campaign isn't published.
+
+        Used where staff pick or see a quest's campaign (the quest form's Campaign dropdown and the
+        quest's own page), which list unpublished campaigns too, since a teacher builds a
+        campaign's quests before publishing it (#2965). The mark says students can't see it yet.
+        """
+        if self.published:
+            return self.title
+        return f"{self.title} (unpublished)"
 
     def get_absolute_url(self):
         return reverse('quests:category_detail', kwargs={'pk': self.id})
@@ -322,30 +335,62 @@ class XPItem(models.Model):
         Available as a property to make compatible with Badge.published attribute
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
-        # XPItem is not active if it is not published (i.e. a draft), or archived
-        if not self.published or self.archived:
-            return False
+        # Active means there is no reason to keep it from every student. Only the first reason is
+        # worked out, so this stops at the first setting that closes the item, and it can never
+        # disagree with the reasons a teacher is shown (#2966).
+        return next(self.iter_unavailable_reasons(), None) is None
 
-        # XPItem/Quest object is inactive if it's a part of an inactive campaign
-        if hasattr(self, 'campaign') and self.campaign and not self.campaign.published:
-            return False
+    def iter_unavailable_reasons(self):
+        """Yield each reason this item is closed to every student, as a sentence for a teacher.
 
-        if self.expired():
-            return False
+        These are the item's own settings, which close it to everyone; a student's prerequisites,
+        submissions and course are checked separately by ``is_available``. ``active`` is True when
+        this yields nothing, and ``unavailable_reasons`` lists everything it yields.
 
-        time_now = timezone.localtime().time()
-        date_now = timezone.localdate()
+        Yields:
+            str: one sentence per reason, such as "It's archived.".
+        """
+        if self.archived:
+            yield "It's archived."
 
-        # an XPItem object is inactive if its availability date is in the future
-        if self.date_available > date_now:
-            return False
+        if not self.published:
+            yield "It's a draft: Published isn't ticked on its form."
 
-        # an XPItem object is inactive on the day it's made available if its availability time is in the future
-        if self.date_available == date_now and self.time_available > time_now:
-            return False
+        campaign = getattr(self, 'campaign', None)
+        if campaign and not campaign.published:
+            yield f"Its campaign, {campaign.title}, isn't published."
 
-        # If survived all the conditions, then it's active
-        return True
+        # expired() looks the quest up among unarchived quests, so it finds every archived one
+        # expired whatever its dates (#2973); for an archived quest, being archived is the reason given.
+        if not self.archived and self.expired():
+            yield self.expired_reason()
+
+        # Closed until its available date, and on that date until its available time.
+        now = timezone.localtime()
+        if self.date_available > now.date() or (self.date_available == now.date() and self.time_available > now.time()):
+            yield f"It doesn't open until {time_format(self.time_available)} on {date_format(self.date_available)}."
+
+    def unavailable_reasons(self):
+        """Every reason this item is closed to every student, for the banner a teacher sees on its
+        page (#2966). Empty when students can get it, subject to their own prerequisites.
+
+        Returns:
+            list[str]: the sentences ``iter_unavailable_reasons`` yields, in its order.
+        """
+        return list(self.iter_unavailable_reasons())
+
+    def expired_reason(self):
+        """Say when an expired item expired, following the rules ``QuestQuerySet.not_expired`` applies.
+
+        Returns:
+            str: the sentence, for an item whose ``expired()`` is True.
+        """
+        if self.date_expired and self.time_expired:
+            return f"It expired at {time_format(self.time_expired)} on {date_format(self.date_expired)}."
+        if self.date_expired:
+            return f"It expired at the end of {date_format(self.date_expired)}."
+        # With no date, it expires at its time every day and comes back at midnight.
+        return f"It closes at {time_format(self.time_expired)} every day, and opens again at midnight."
 
     def is_available(self, user, blocking=True):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
@@ -821,6 +866,15 @@ class Quest(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMix
                                                    help_text="Allows student to view and submit this quest without "
                                                              "having joined a course.  E.g. for quests you might "
                                                              "still want available to past students.")
+    # db_default as well as default: during a deploy the outgoing version still inserts quests
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and the
+    # deploy window").
+    competency_self_assessment = models.BooleanField(
+        default=False, db_default=False, verbose_name="Ask for a self-assessment",
+        help_text="When handing in this quest, students may choose the level they think their work shows in "
+                  "each of its competencies. You see their self-assessment beside your own levels; it never "
+                  "counts toward their current level.",
+    )
     # categories = models.ManyToManyField(Category, blank=True)
     specific_teacher_to_notify = models.ForeignKey(
         settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True}, blank=True, null=True,

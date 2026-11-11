@@ -318,6 +318,23 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
 
         self.assertIn(' ok', self.deck_line(self.run_command()))
 
+    def test_backfill__apply_lowercases_a_verified_address_stored_with_capitals(self):
+        """A verified primary row stored with capitals isn't "ok": allauth compares addresses in
+        lowercase, so the deck list reads that owner as unverified. --apply rewrites the row in
+        lowercase, after which the deck reads as ok (decks created before the fix to deck creation
+        stored the address as the owner typed it)."""
+        owner = self.set_owner(email='Legacy.Owner@example.com')
+        EmailAddress.objects.create(user=owner, email='Legacy.Owner@example.com', verified=True, primary=True)
+
+        self.assertIn('would-fix', self.deck_line(self.run_command()))
+        self.assertIn(' fixed', self.deck_line(self.run_command('--apply')))
+
+        address = EmailAddress.objects.get(user=owner)
+        self.assertEqual(address.email, 'legacy.owner@example.com')
+        self.assertTrue(address.verified)
+        self.assertTrue(address.primary)
+        self.assertIn(' ok', self.deck_line(self.run_command()))
+
     def test_backfill__flags_owners_needing_a_human(self):
         """An owner with no email is reported with nothing written, and a deck
         still on the heuristic default owner account is flagged."""
@@ -405,6 +422,18 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         other_row.refresh_from_db()
         self.assertTrue(other_row.verified)
         self.assertTrue(other_row.primary)
+
+    def test_backfill__skips_when_another_account_verified_the_address_with_capitals(self):
+        """The other account's verified row counts in any case: rows stored with capitals exist
+        (deck creation kept the case the owner typed), so an exact match would miss one, and the
+        repair would leave two verified rows for one address while reporting it fixed."""
+        owner = self.set_owner(email='shared@example.com')
+        EmailAddress.objects.create(user=baker.make(User), email='Shared@Example.com', verified=True, primary=True)
+
+        output = self.run_command('--apply')
+        self.assertIn('skipped', self.deck_line(output))
+        self.assertIn('verified by another account', self.deck_line(output))
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
 
     def test_backfill__broken_schema_reported_as_error_line(self):
         """A Tenant row whose schema doesn't exist is reported as an ERROR line (and

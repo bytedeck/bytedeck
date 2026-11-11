@@ -40,10 +40,13 @@ from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
 from competencies.assessments import (
     assessments_comment_html,
+    describe_self_assessments,
     level_changes,
+    posted_self_assessments,
     prefetch_submission_levels,
     record_approval_assessments,
     record_level_changes,
+    record_self_assessments,
 )
 from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
@@ -2572,7 +2575,12 @@ def complete(request, submission_id):
     # while the earlier comment still shows the old. Only a hand-in records them, since that is
     # the only time they take effect: a comment on work already handed in changes neither.
     choices = []
+    self_assessed = []
     if "complete" in request.POST:
+        # levels the student chose for their self-assessment, when the quest asks for one: listed
+        # with the other choices, and recorded once the quest is handed in, below
+        self_assessed = posted_self_assessments(submission, request.POST)
+        choices.extend(escape(text) for text in describe_self_assessments(self_assessed))
         if isinstance(form, SubmissionFormCustomXP):
             xp_requested = form.cleaned_data.get("xp_requested")
             choices.append(f"XP requested: {xp_requested}")
@@ -2679,6 +2687,7 @@ def complete(request, submission_id):
         submission.registration = form.cleaned_data.get('registration')
 
         submission.mark_completed(xp_requested)
+        record_self_assessments(submission, self_assessed)
         if not submission.quest.verification_required:
             # No teacher approves this quest, so its competency evidence is recorded at each
             # link's default level with no assessor (system-assessed): once, not again for a

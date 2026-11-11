@@ -363,6 +363,40 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
             self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
 
     @patch("tenant.models.Tenant.full_clean")
+    def test_form_valid__capitalized_email_reads_as_verified(self, mock_full_clean):
+        """An owner who typed their address with capitals (a phone capitalizes the first letter)
+        verified it through the emailed link like anyone else, so the deck list must show it
+        verified. allauth compares addresses in lowercase, so the verified EmailAddress row has to
+        be stored that way too, or the owner reads as unverified and the admin's owner emails skip
+        them."""
+        from allauth.account.models import EmailAddress
+        from django.contrib.admin.sites import AdminSite
+
+        from tenant.admin import TenantAdmin
+
+        data = {**self.form_data, "email": "John.Doe@Example.com"}
+        nonce = DeckRequestService.create_request("John", "Doe", data["email"])
+        request = self.factory.post(reverse("tenant:new"), data=data)
+        request.user = AnonymousUser()
+        request.session = {"verified_deck_request": {**data, "nonce": nonce}}
+        view = TenantCreate()
+        view.setup(request)
+        form = TenantForm(data=data, verified_data=data)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        with tenant_context(self.public_tenant):
+            view.form_valid(form)
+            tenant = form.instance
+            self.assertTrue(TenantAdmin(Tenant, AdminSite()).owner_email_verified_boolean(tenant))
+
+        with tenant_context(tenant):
+            owner = SiteConfig.objects.get().deck_owner
+            address = EmailAddress.objects.get(user=owner)
+            self.assertEqual(address.email, "john.doe@example.com")
+            self.assertTrue(address.verified)
+            self.assertTrue(address.primary)
+
+    @patch("tenant.models.Tenant.full_clean")
     @patch("tenant.views.EmailAddress.objects.get_or_create")
     def test_form_valid__existing_email_address_marked_verified_and_primary(self, mock_get_or_create, mock_full_clean):
         """When the owner already has an EmailAddress, form_valid explicitly marks that
