@@ -1,13 +1,18 @@
 from unittest.mock import patch
 
+from django.conf import settings
+from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.auth import get_user_model
+from django.forms.models import model_to_dict
 from django.template.loader import render_to_string
 from django.urls import reverse
 
 from model_bakery import baker
 
 from badges.models import BadgeAssertion
-from competencies.assessments import queue_conditions_update, record_approval_assessments, record_level_changes
+from competencies.assessments import (
+    queue_conditions_update, queue_conditions_update_for_everyone, record_approval_assessments, record_level_changes,
+)
 from competencies.forms import competency_level_field_name
 from competencies.models import Competency, CompetencyAssessment, CompetencyOverride, ProficiencyLevel, QuestCompetency, RollupStrategy
 from competencies.templatetags.competency_tags import competency_prereq_levels
@@ -17,7 +22,7 @@ from djcytoscape.models import CytoElement, CytoScape
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.forms import PrereqFormInline
 from prerequisites.models import IsAPrereqMixin, Prereq
-from prerequisites.tasks import update_quest_conditions_for_user
+from prerequisites.tasks import update_quest_conditions_all_users, update_quest_conditions_for_user
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from utilities.widgets import GFKSelect2Widget
@@ -292,6 +297,100 @@ class ConditionsUpdateTest(CompetencyPrerequisiteMixin, ByteDeckTenantTestCase):
         with patch('competencies.views.queue_conditions_update') as queued:
             self.client.post(reverse('competencies:override', args=[self.student.pk, self.defining.pk]), {'level': EXT, 'note': ''})
             queued.assert_called_once_with(self.student.pk)
+
+
+class ConditionsUpdateElsewhereTest(CompetencyPrerequisiteMixin, ByteDeckTenantTestCase):
+    """ Levels changed outside the approval and override forms (in the admin, or by the deck's roll-up
+    settings) queue the recalculation too, when a prerequisite asks for a competency level. """
+
+    def setUp(self):
+        """ Adds a second student, and a prerequisite on the competency. """
+        super().setUp()
+        self.other = User.objects.create_user('prereq_other_student')
+        self.require(PRF)
+
+    def queued_students(self, queued):
+        """ The students a patched apply_async was queued for, in order. """
+        return [call.kwargs['args'][0] for call in queued.call_args_list]
+
+    def test_queue_conditions_update__several_students_at_once(self):
+        """ Every student given is queued; none given queues nothing """
+        with patch.object(update_quest_conditions_for_user, 'apply_async') as queued:
+            queue_conditions_update()
+            queued.assert_not_called()
+            queue_conditions_update(self.student.pk, self.other.pk)
+
+        self.assertEqual(self.queued_students(queued), [self.student.pk, self.other.pk])
+
+    def test_queue_conditions_update_for_everyone__only_with_a_competency_prerequisite(self):
+        """ The recalculation for every student is queued while a prerequisite asks for a competency, and
+        not once none does """
+        with patch.object(update_quest_conditions_all_users, 'apply_async') as queued:
+            queue_conditions_update_for_everyone()
+            queued.assert_called_once_with(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+
+            Prereq.objects.all().delete()
+            queue_conditions_update_for_everyone()
+            self.assertEqual(queued.call_count, 1)
+
+    def test_admin__adding_changing_and_deleting_records_queue_the_update(self):
+        """ In the admin, adding or changing an override or an assessment queues its student (both students
+        when it moves to another), and deleting one, or several at once, queues each student once """
+        self.client.force_login(User.objects.create_user('prereq_admin', is_staff=True, is_superuser=True))
+        override = CompetencyOverride.objects.create(user=self.student, competency=self.defining, level=PRF, set_by=self.teacher)
+        assessments = [self.assess(DEV), self.assess(EMG), CompetencyAssessment.objects.create(
+            user=self.other, competency=self.defining, level=EXT, assessed_by=self.teacher,
+        )]
+        change_url = reverse('admin:competencies_competencyoverride_change', args=[override.pk])
+
+        with patch.object(update_quest_conditions_for_user, 'apply_async') as queued:
+            data = {**model_to_dict(override), 'set_by': self.teacher.pk, 'level': EXT}
+            self.assertEqual(self.client.post(change_url, data).status_code, 302)
+            self.assertEqual(self.queued_students(queued), [self.student.pk])
+
+            queued.reset_mock()
+            self.client.post(change_url, {**data, 'user': self.other.pk})
+            self.assertEqual(sorted(self.queued_students(queued)), sorted([self.student.pk, self.other.pk]))
+
+            queued.reset_mock()
+            response = self.client.post(reverse('admin:competencies_competencyoverride_delete', args=[override.pk]), {'post': 'yes'})
+            self.assertEqual(response.status_code, 302)
+            self.assertFalse(CompetencyOverride.objects.exists())
+            self.assertEqual(self.queued_students(queued), [self.other.pk])
+
+            queued.reset_mock()
+            add_data = {'user': self.student.pk, 'competency': self.defining.pk, 'level': PRF, 'assessed_by': self.teacher.pk}
+            self.assertEqual(self.client.post(reverse('admin:competencies_competencyassessment_add'), add_data).status_code, 302)
+            self.assertEqual(self.queued_students(queued), [self.student.pk])
+
+            queued.reset_mock()
+            action = {'action': 'delete_selected', ACTION_CHECKBOX_NAME: [str(a.pk) for a in assessments], 'post': 'yes'}
+            self.assertEqual(self.client.post(reverse('admin:competencies_competencyassessment_changelist'), action).status_code, 302)
+            self.assertEqual(CompetencyAssessment.objects.count(), 1)
+            self.assertEqual(sorted(self.queued_students(queued)), sorted([self.student.pk, self.other.pk]))
+
+    def test_site_config__changing_the_roll_up_queues_the_update_for_everyone(self):
+        """ Saving the deck's settings with a new roll-up strategy or count queues the recalculation for
+        every student; saving them with other changes doesn't """
+        config = SiteConfig.get()
+        self.client.force_login(config.deck_owner)
+        data = model_to_dict(config, exclude=[
+            'banner_image', 'banner_image_dark', 'site_logo', 'default_icon', 'favicon', 'custom_stylesheet', 'custom_javascript',
+        ])
+        data = {key: value for key, value in data.items() if value is not None}
+        url = reverse('config:site_config_update_own')
+
+        with patch.object(update_quest_conditions_all_users, 'apply_async') as queued:
+            self.assertEqual(self.client.post(url, {**data, 'site_name': "Renamed Deck"}).status_code, 302)
+            queued.assert_not_called()
+
+            self.client.post(url, {**data, 'competency_rollup': RollupStrategy.HIGHEST})
+            self.assertEqual(queued.call_count, 1)
+
+            self.client.post(url, {**data, 'competency_rollup': RollupStrategy.HIGHEST, 'competency_rollup_count': 5})
+            self.assertEqual(queued.call_count, 2)
+
+        self.assertEqual(SiteConfig.get().competency_rollup_count, 5)
 
 
 class CompetencyPrerequisiteMapTest(CompetencyPrerequisiteMixin, ByteDeckTenantTestCase):

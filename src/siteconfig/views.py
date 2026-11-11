@@ -2,6 +2,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView
 
+from competencies.assessments import queue_conditions_update_for_everyone
 from hackerspace_online.decorators import staff_member_required
 
 from .models import SiteConfig
@@ -23,6 +24,14 @@ class SiteConfigUpdate(SuccessMessageMixin, UpdateView):
     def get_context_data(self, **kwargs):
         kwargs['submit_btn_value'] = 'Update'
         return super().get_context_data(**kwargs)
+
+    def form_valid(self, form):
+        """ Saves the settings. A change to how competency levels roll up changes every student's current
+        levels, so their available quests are recalculated when a prerequisite asks for a level. """
+        response = super().form_valid(form)
+        if {'competency_rollup', 'competency_rollup_count'} & set(form.changed_data):
+            queue_conditions_update_for_everyone()
+        return response
 
 
 class SiteConfigUpdateOwn(SiteConfigUpdate):

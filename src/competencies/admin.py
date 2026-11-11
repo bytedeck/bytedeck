@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
+from .assessments import queue_conditions_update
 from .models import Competency, CompetencyAssessment, CompetencyOverride, QuestCompetency
 
 
@@ -20,7 +21,36 @@ class QuestCompetencyAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin
     search_fields = ('quest__name', 'competency__name')
 
 
-class CompetencyAssessmentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+class RecalculateConditionsAdminMixin:
+    """ For the admins of records a student's current level is worked out from (assessments and
+    overrides): adding, changing or deleting one can change the level, so the student's available
+    quests are recalculated, as when a teacher records a level through the app
+    (competencies.assessments.queue_conditions_update). """
+
+    def save_model(self, request, obj, form, change):
+        """ Saves the record, then recalculates for its student, and for the student it belonged to
+        before when the change moved it to someone else. """
+        super().save_model(request, obj, form, change)
+        user_ids = {obj.user_id}
+        if change and 'user' in form.changed_data:
+            user_ids.add(form.initial['user'])
+        queue_conditions_update(*user_ids)
+
+    def delete_model(self, request, obj):
+        """ Deletes the record, then recalculates for its student. """
+        user_id = obj.user_id
+        super().delete_model(request, obj)
+        queue_conditions_update(user_id)
+
+    def delete_queryset(self, request, queryset):
+        """ Deletes the selected records (the changelist's bulk delete), then recalculates once for each
+        of their students, read before the records are gone. """
+        user_ids = set(queryset.values_list('user_id', flat=True))
+        super().delete_queryset(request, queryset)
+        queue_conditions_update(*user_ids)
+
+
+class CompetencyAssessmentAdmin(RecalculateConditionsAdminMixin, NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     """ Admin for assessment evidence records.
 
     The changelist shows the raw source_content_type and source_object_id halves of the
@@ -35,7 +65,7 @@ class CompetencyAssessmentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.Model
     date_hierarchy = 'timestamp'
 
 
-class CompetencyOverrideAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+class CompetencyOverrideAdmin(RecalculateConditionsAdminMixin, NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     """ Admin for teachers' overrides of students' levels: every record, including those since replaced
     or cleared (a record with no level), so the history of overrides can be audited. """
     list_display = ('user', 'competency', 'level', 'set_by', 'timestamp', 'note')
