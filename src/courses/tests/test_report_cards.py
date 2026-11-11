@@ -89,7 +89,7 @@ class NameScrubberTests(ByteDeckTenantTestCase):
 class ReportCardHelperTests(ByteDeckTenantTestCase):
     """The small pure helpers behind the files."""
 
-    def test_student_code(self):
+    def test_student_code__made_from_the_account_id(self):
         """A student's code is made from their id."""
         self.assertEqual(student_code(42), "S42")
 
