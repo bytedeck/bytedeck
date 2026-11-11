@@ -1,4 +1,5 @@
 from django import template
+from django.contrib.contenttypes.models import ContentType
 
 from siteconfig.models import SiteConfig
 
@@ -6,7 +7,7 @@ from ..assessments import (
     approval_links, posted_level, posted_self_level, self_assessment_links, starting_level, submission_levels, submission_self_levels,
 )
 from ..forms import competency_level_field_name, self_assessment_field_name
-from ..models import ProficiencyLevel
+from ..models import Competency, ProficiencyLevel
 from ..summaries import course_competencies
 
 register = template.Library()
@@ -157,3 +158,23 @@ def competency_self_assessment(context, submission):
             'skipped': chosen is None,
         })
     return {'rows': rows}
+
+
+@register.simple_tag
+def competency_prereq_levels():
+    """ What the advanced prerequisites form needs to offer a competency's minimum level in place of
+    a count (competencies/js/prereq-levels.js): the competency content type and the deck's levels.
+
+    Returns:
+        dict or None: 'content_type_id', 'levels' as [level, label] pairs, and 'default_level'
+        (Proficient), or None when the deck has competencies disabled.
+    """
+    config = SiteConfig.get()
+    if config is None or not config.enable_competencies:
+        return None
+    labels = config.get_competency_scale_labels()
+    return {
+        'content_type_id': ContentType.objects.get_for_model(Competency).pk,
+        'levels': [[level, labels[level]] for level in ProficiencyLevel.values],
+        'default_level': ProficiencyLevel.PROFICIENT,
+    }

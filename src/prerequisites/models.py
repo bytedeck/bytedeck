@@ -135,6 +135,40 @@ class IsAPrereqMixin:
         """
         raise NotImplementedError(f"{self.__class__.__name__} model must implement a condition_met_as_prerequisite() method")
 
+    def prereq_label(self, count):
+        """ How this object reads as a prerequisite that must be met ``count`` times, in a prerequisite's
+        description (Prereq.__str__). Override it where the count means something else, as a
+        competency's minimum level does.
+
+        Args:
+            count (int): the prerequisite's count.
+
+        Returns:
+            str: e.g. "Nickel x3", or just the object for a count of 1.
+        """
+        return f"{self} x{count}" if count > 1 else str(self)
+
+    def prereq_choice_label(self):
+        """ How this object is named among the choices of a prerequisite form's search. Override it
+        where the plain name is ambiguous.
+
+        Returns:
+            str: the object's name.
+        """
+        return str(self)
+
+    def prereq_count_error(self, count):
+        """ What is wrong with a prerequisite's count for this object, for the prerequisite form to
+        refuse it; most objects take any count. Override it where only some counts make sense.
+
+        Args:
+            count (int or None): the count entered.
+
+        Returns:
+            str or None: the error, or None for a count that is fine.
+        """
+        return None
+
     def is_used_prereq(self):
         """
         :return: True if this object has been assigned as a prerequisite to at least one another object.
@@ -472,18 +506,30 @@ class Prereq(IsAPrereqMixin, models.Model):
         if self.prereq_invert:
             s += "NOT "
         s += "(" + self.prereq_content_type.name + ") "
-        s += str(self.get_prereq())
-        if self.prereq_count > 1:
-            s += " x" + str(self.prereq_count)
+        s += self.target_label(self.get_prereq(), self.prereq_count)
         if self.or_prereq_object_id and self.or_prereq_content_type:
             s += " OR "
             if self.or_prereq_invert:
                 s += "NOT "
             s += "(" + self.or_prereq_content_type.name + ") "
-            s += str(self.get_or_prereq())
-            if self.or_prereq_count > 1:
-                s += " x" + str(self.or_prereq_count)
+            s += self.target_label(self.get_or_prereq(), self.or_prereq_count)
         return s
+
+    @staticmethod
+    def target_label(target, count):
+        """ One side of a prerequisite's description: the object with its count, as the object puts it
+        (IsAPrereqMixin.prereq_label), or "None" for an object since deleted.
+
+        Args:
+            target (IsAPrereqMixin or None): the prerequisite object, or alternate.
+            count (int): its count.
+
+        Returns:
+            str: the label.
+        """
+        if target is None:
+            return "None"
+        return target.prereq_label(count)
 
     def parent(self):
         """:return the parent as its object"""

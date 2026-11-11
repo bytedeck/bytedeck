@@ -175,7 +175,10 @@ class GFKSelect2Mixin:
         return result
 
     def label_from_instance(self, obj):
-        return str(obj)
+        """ The option's text: the object's prerequisite choice label where it has one (see
+        prerequisites.models.IsAPrereqMixin.prereq_choice_label), else its name. """
+        choice_label = getattr(obj, 'prereq_choice_label', None)
+        return choice_label() if choice_label else str(obj)
 
 
 class GFKSelect2Widget(GFKSelect2Mixin, HeavySelect2Widget):

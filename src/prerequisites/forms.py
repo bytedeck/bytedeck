@@ -60,6 +60,17 @@ class PrereqFormInline(FutureModelForm):
         self.fields['prereq_count'].widget.attrs.update(count_attrs)
         self.fields['or_prereq_count'].widget.attrs.update(count_attrs)
 
+    def clean(self):
+        """ Refuse a count that makes no sense for its element (IsAPrereqMixin.prereq_count_error),
+        such as a competency's minimum level off the scale. """
+        cleaned_data = super().clean()
+        for object_field, count_field in (('prereq_object', 'prereq_count'), ('or_prereq_object', 'or_prereq_count')):
+            target = cleaned_data.get(object_field)
+            error = target.prereq_count_error(cleaned_data.get(count_field)) if target is not None else None
+            if error:
+                self.add_error(count_field, error)
+        return cleaned_data
+
 
 class PrereqFormsetHelper(FormHelper):
     """Lays out the prereq formset as a table of rows, with the controls that save it,
