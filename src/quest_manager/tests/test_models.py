@@ -313,6 +313,15 @@ class QuestTestModel(ByteDeckTenantTestCase):
             ["It closes at 10 a.m. every day, and opens again at midnight."],
         )
 
+    @freeze_time(datetime.datetime(2024, 1, 5, 12, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__archived_and_expired(self):
+        """An archived quest whose expiry has passed gives both reasons, since unarchiving it
+        would still leave it closed (#2973)."""
+        self.assertReasons(
+            baker.make(Quest, archived=True, date_expired=datetime.date(2024, 1, 4)),
+            ["It's archived.", "It expired at the end of Jan. 4, 2024."],
+        )
+
     def test_unavailable_reasons__several_at_once(self):
         """Every reason that applies is given, so fixing one doesn't leave the quest closed for a
         reason nobody was told about (#2966)."""

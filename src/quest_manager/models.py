@@ -360,9 +360,7 @@ class XPItem(models.Model):
         if campaign and not campaign.published:
             yield f"Its campaign, {campaign.title}, isn't published."
 
-        # expired() looks the quest up among unarchived quests, so it finds every archived one
-        # expired whatever its dates (#2973); for an archived quest, being archived is the reason given.
-        if not self.archived and self.expired():
+        if self.expired():
             yield self.expired_reason()
 
         # Closed until its available date, and on that date until its available time.
