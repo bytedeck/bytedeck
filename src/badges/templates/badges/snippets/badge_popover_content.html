@@ -16,7 +16,7 @@ Prerequisites:
 
 <ul class='left-aligned'>
 {% for p in badge.prereqs %}
-  <li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>
+  {% with url=p.get_prereq.get_absolute_url %}<li>{% if url %}<a href='{{ url }}'>{{ p }}</a>{% else %}{{ p }}{% endif %}</li>{% endwith %}
 {% empty %}
   <li>None (granted manually)</li>
 {% endfor %}

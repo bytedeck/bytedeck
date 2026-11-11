@@ -20,13 +20,15 @@ kept apart from the teacher's level, which it never replaces or counts toward.
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
 from django.template.defaultfilters import truncatechars
 from django.utils.html import format_html, format_html_join
 
+from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 
 from .forms import competency_level_field_name, self_assessment_field_name
-from .models import CompetencyAssessment, ProficiencyLevel
+from .models import Competency, CompetencyAssessment, ProficiencyLevel
 
 
 def approval_links(quest):
@@ -162,6 +164,22 @@ def competencies_enabled():
     return config is not None and config.enable_competencies
 
 
+def queue_conditions_update(user_id):
+    """ Queue the recalculation of which quests the student can start, after their level in a
+    competency changed, when any prerequisite on the deck asks for a competency level (a new level can
+    open or close a quest; see Competency.condition_met_as_prerequisite). Without such a
+    prerequisite, no level changes anything, so nothing is queued.
+
+    Args:
+        user_id (int): the student's pk.
+    """
+    from prerequisites.tasks import update_quest_conditions_for_user  # locally: the task imports quest_manager, which imports this module
+
+    competency_type = ContentType.objects.get_for_model(Competency)
+    if Prereq.objects.filter(Q(prereq_content_type=competency_type) | Q(or_prereq_content_type=competency_type)).exists():
+        update_quest_conditions_for_user.apply_async(args=[user_id], queue='default')
+
+
 def record_level(submission, link, level, assessed_by):
     """ Record the submission's level in a link's competency, replacing the one it had.
 
@@ -209,10 +227,13 @@ def record_approval_assessments(submission, assessed_by=None, data=None):
     if not competencies_enabled():
         return []
     current = submission_levels(submission)
-    return [
+    recorded = [
         record_level(submission, link, posted_level(data, link, starting_level(link, current)), assessed_by)
         for link in approval_links(submission.quest)
     ]
+    if recorded:
+        queue_conditions_update(submission.user_id)
+    return recorded
 
 
 def level_changes(submission, data):
@@ -250,7 +271,10 @@ def record_level_changes(submission, assessed_by, data):
     Returns:
         list[CompetencyAssessment]: the assessments created, one per changed competency.
     """
-    return [record_level(submission, link, level, assessed_by) for link, level in level_changes(submission, data)]
+    recorded = [record_level(submission, link, level, assessed_by) for link, level in level_changes(submission, data)]
+    if recorded:
+        queue_conditions_update(submission.user_id)
+    return recorded
 
 
 def self_assessment_links(submission):

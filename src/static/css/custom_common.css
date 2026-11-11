@@ -1733,6 +1733,13 @@ table[data-toggle="table"].bt-reveal {
     margin: 0 3px;
 }
 
+/* A competency's minimum level, in place of the count on the advanced prerequisites form
+   (competencies/js/prereq-levels.js): wide enough for the level's name. */
+.competency-prereq-level {
+    width: auto;
+    min-width: 110px;
+}
+
 /* The staff competency matrix (competencies/matrix.html): a course's students by its competencies.
    The competency names stand on end over their narrow columns (cut short, in full in the title),
    under their categories, and each cell holds one fixed-width level code. */

@@ -4,6 +4,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from prerequisites.models import IsAPrereqMixin
+
 
 class ProficiencyLevel(models.IntegerChoices):
     """ The BC 4-point proficiency scale: https://curriculum.gov.bc.ca/
@@ -34,9 +36,13 @@ class CompetencyQuerySet(models.QuerySet):
         return self.filter(active=True)
 
 
-class Competency(models.Model):
+class Competency(IsAPrereqMixin, models.Model):
     """ A deck-level library of competencies (learning standards) that can be attached to quests
     and assessed on the 4-point proficiency scale.
+
+    A competency can also be a prerequisite (IsAPrereqMixin), with the prerequisite's count as the
+    minimum level: "Proficient in X" opens a quest once the student's current level in X is
+    Proficient or higher.
     """
 
     name = models.CharField(max_length=255)
@@ -94,6 +100,64 @@ class Competency(models.Model):
         """ The name with its course and category in front, e.g. "Core: Communication: Collaborating",
         so competencies from different courses can be told apart in a picker. """
         return ": ".join(part for part in (self.course_and_category, self.name) if part)
+
+    def condition_met_as_prerequisite(self, user, num_required=1):
+        """ Whether the student meets this competency as a prerequisite: their current level in it
+        (competencies.rollup.current_levels: the deck's roll-up of their teacher's evidence, or a
+        level a teacher set) is at least the prerequisite's count, which is the minimum level.
+
+        Args:
+            user (User): the student.
+            num_required (int): the minimum level, 1 (Emerging) to 4 (Extending).
+
+        Returns:
+            bool: True when their current level reaches it; a competency they have no level in is 0.
+        """
+        from .rollup import current_levels  # locally: rollup imports this module
+
+        levels, _overrides = current_levels(user=user, competency=self)
+        return levels[user.pk].get(self.pk, 0) >= num_required
+
+    def prereq_label(self, count):
+        """ This competency as a prerequisite, with its count as the minimum level, e.g. "Proficient in
+        ADST 9: Defining: Choose a design opportunity", by the deck's labels.
+
+        Args:
+            count (int): the minimum level.
+
+        Returns:
+            str: the label.
+        """
+        from siteconfig.models import SiteConfig  # locally: siteconfig imports this module
+
+        level = SiteConfig.get().get_competency_scale_labels().get(count, f"Level {count}")
+        return f"{level} in {self.qualified_name}"
+
+    def prereq_choice_label(self):
+        """ The competency among a prerequisite form's choices: its qualified name, since courses
+        share wording. """
+        return self.qualified_name
+
+    def prereq_count_error(self, count):
+        """ A competency's count is a level, so only 1 to 4 make sense.
+
+        Args:
+            count (int or None): the count entered.
+
+        Returns:
+            str or None: the error, or None for a level on the scale.
+        """
+        from siteconfig.models import SiteConfig  # locally: siteconfig imports this module
+
+        if count not in ProficiencyLevel.values:
+            labels = SiteConfig.get().get_competency_scale_labels()
+            return f"For a competency, the count is the minimum level: 1 ({labels[1]}) to 4 ({labels[4]})."
+        return None
+
+    @staticmethod
+    def gfk_search_fields():
+        """ A prerequisite form's search finds a competency by its name, course or category. """
+        return ["name__icontains", "course__icontains", "category__icontains"]
 
 
 class QuestCompetencyManager(models.Manager):
