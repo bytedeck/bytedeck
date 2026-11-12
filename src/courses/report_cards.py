@@ -15,15 +15,16 @@ import re
 import zipfile
 from collections import defaultdict
 from datetime import timedelta
+from html import unescape
 
-from bs4 import BeautifulSoup
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Prefetch, Sum
+from django.db.models import Count, Sum
+from django.db.models.functions import Left, Length
 from django.utils import timezone
 
 from badges.models import Badge, BadgeAssertion
 from competencies.models import ProficiencyLevel
-from comments.models import Comment
+from comments.models import Comment, Document
 from prerequisites.models import Prereq
 from profile_manager.models import Profile
 from quest_manager.models import Category, Quest, QuestSubmission
@@ -47,6 +48,10 @@ EMAIL_PLACEHOLDER = "[email]"
 MAX_TEXT_LENGTH = 2000
 #: Ends a piece of writing that was longer than MAX_TEXT_LENGTH.
 CUT_MARKER = " [cut short]"
+#: The most characters of one piece of writing's HTML that are read from the database. Its text is
+#: cut to MAX_TEXT_LENGTH anyway, and markup seldom outweighs the words it holds tenfold, while a
+#: pasted picture or page can run to megabytes that a whole class's worth of would not fit in memory.
+MAX_HTML_LENGTH = 10 * MAX_TEXT_LENGTH
 
 #: The columns of the key file (see student_key_csv).
 KEY_COLUMNS = (
@@ -73,6 +78,10 @@ _HANDLE_RE = re.compile(r"[\w.@+-]+")
 _HANDLE_PUNCTUATION_RE = re.compile(r"([.@+-]+)")
 _URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\S+@\S+\.\S+")
+#: What html_to_text() takes out of HTML: a comment, a script or a stylesheet with what is in it,
+#: and any tag, including one cut off before its end (see MAX_HTML_LENGTH). A "<" that starts no
+#: tag ("a < b") is left alone.
+_MARKUP_RE = re.compile(r"<!--.*?(?:-->|$)|<(script|style)\b.*?(?:</\1\s*>|$)|<[/!?a-zA-Z][^>]*(?:>|$)", re.DOTALL | re.IGNORECASE)
 
 #: What the file tells its reader about itself, so the AI model reading it needs nothing explained.
 HOW_TO_READ = {
@@ -128,14 +137,17 @@ def student_code(user_id):
 def html_to_text(html):
     """The words of a piece of HTML that a person typed, on one line.
 
+    The markup is taken out with a regular expression, which is safe here because the result is
+    kept as plain text and never shown as HTML, and is many times quicker than parsing each of a
+    class's thousands of comments.
+
     Args:
         html (str or None): the HTML, e.g. a comment's text.
 
     Returns:
         str: its text with the tags gone and every run of whitespace collapsed to one space.
     """
-    soup = BeautifulSoup(html or "", "html.parser")
-    return " ".join(soup.get_text(" ").split())
+    return " ".join(unescape(_MARKUP_RE.sub(" ", html or "")).split())
 
 
 class NameScrubber:
@@ -178,11 +190,13 @@ class NameScrubber:
         }
         self._usernames = {
             username.lower(): user_id for user_id, username, *_names in students
-            if len(username) > 2 and username.lower() not in name_words
+            if len(username) > 2 and username.lower() not in name_words and _WORD_RE.search(username)
         }
         # The most words and stretches of punctuation any username is made of, which is as far
         # as scrub() has to look from any one place in a run for a username.
         self._longest_username = max((len(_HANDLE_PUNCTUATION_RE.split(username)) for username in self._usernames), default=0)
+        # The word each username starts with. Text without that word cannot hold the username.
+        self._username_words = {_WORD_RE.search(username).group() for username in self._usernames}
 
     def scrub(self, text, student_id):
         """Replace names and addresses in a piece of text.
@@ -227,21 +241,29 @@ class NameScrubber:
 
         text = _URL_RE.sub(LINK_PLACEHOLDER, text)
         text = _EMAIL_RE.sub(EMAIL_PLACEHOLDER, text)
-        text = _HANDLE_RE.sub(replace_username, text)
-        return _WORD_RE.sub(replace, text)
+        # The two passes below call back for every word of the text, and most of what a class
+        # writes names nobody, so each is only made over text that holds a word it looks for.
+        words = set(_WORD_RE.findall(text.lower()))
+        if not words.isdisjoint(self._username_words):
+            text = _HANDLE_RE.sub(replace_username, text)
+        if not words.isdisjoint(self._owners):
+            text = _WORD_RE.sub(replace, text)
+        return text
 
-    def clean(self, html, student_id):
+    def clean(self, html, student_id, cut=False):
         """A piece of typed HTML as text that is ready for the data file.
 
         Args:
             html (str or None): the HTML, e.g. a comment's text.
             student_id (int): the User pk of the student it belongs to (see scrub).
+            cut (bool): whether the HTML is only the start of what was written (see MAX_HTML_LENGTH).
 
         Returns:
-            str: its text with names and addresses replaced, cut to MAX_TEXT_LENGTH.
+            str: its text with names and addresses replaced, cut to MAX_TEXT_LENGTH, and ending
+            with CUT_MARKER when any of it was left out.
         """
         text = self.scrub(html_to_text(html), student_id)
-        if len(text) > MAX_TEXT_LENGTH:
+        if cut or len(text) > MAX_TEXT_LENGTH:
             text = text[:MAX_TEXT_LENGTH].rstrip() + CUT_MARKER
         return text
 
@@ -274,17 +296,17 @@ def _day(moment):
     return timezone.localtime(moment).date().isoformat() if moment else None
 
 
-def _file_type(file):
+def _file_type(name):
     """The type of an attached file, which is all the data file says about it (its name is left
     out, since a student's files are so often named after them).
 
     Args:
-        file: a FieldFile.
+        name (str): the file's name as it is stored.
 
     Returns:
         str: the file's extension in lower case without its dot, or "file" when it has none.
     """
-    return os.path.splitext(file.name)[1].lstrip(".").lower() or "file"
+    return os.path.splitext(name)[1].lstrip(".").lower() or "file"
 
 
 def proficiency_scale(xp_by_level=None):
@@ -445,27 +467,74 @@ def _xp_earned(submission):
     return max(submission.quest.xp, submission.xp_requested)
 
 
+def _conversations(submission_ids, draft_ids):
+    """The comments on a group's attempts at quests, read from the database with their attached
+    files and the answers handed in with them.
+
+    They are read as plain rows of the few columns the data file uses, each piece of writing no
+    further than MAX_HTML_LENGTH, in three queries however many there are: a class writes
+    thousands of comments in a semester, and building a model object for each, with its author's
+    and every prefetched one beside it, took most of the time and memory a download cost.
+
+    Args:
+        submission_ids (list): the pks of the attempts (QuestSubmission).
+        draft_ids (set): the pks of the comments that are drafts: what a student has typed but not
+            yet handed in, which is not part of the conversation.
+
+    Returns:
+        dict: for each attempt's pk that has any, its comments, oldest first, each a dict of
+        "user_id", "is_staff", "timestamp", "text", "cut" (whether the text is only its start),
+        "files" (the stored names of its attached files) and "answers" (each a dict of "question",
+        "answer", "cut", "file" and "is_correct", in the order of their questions).
+    """
+    comments = {}
+    conversations = defaultdict(list)
+    rows = Comment.objects.filter(
+        target_content_type=ContentType.objects.get_for_model(QuestSubmission), target_object_id__in=submission_ids,
+    ).exclude(pk__in=draft_ids).order_by('timestamp', 'pk').values_list(
+        'pk', 'target_object_id', 'user_id', 'user__is_staff', 'timestamp', Left('text', MAX_HTML_LENGTH), Length('text'),
+    )
+    for pk, submission_id, user_id, is_staff, timestamp, text, length in rows:
+        comments[pk] = {
+            "user_id": user_id, "is_staff": is_staff, "timestamp": timestamp, "text": text,
+            "cut": length > MAX_HTML_LENGTH, "files": [], "answers": [],
+        }
+        conversations[submission_id].append(comments[pk])
+
+    for comment_id, name in Document.objects.filter(comment_id__in=list(comments)).order_by('pk').values_list('comment_id', 'docfile'):
+        comments[comment_id]["files"].append(name)
+
+    answers = QuestionSubmission.objects.filter(comment_id__in=list(comments)).order_by('question__ordinal', 'pk').values_list(
+        'comment_id', 'question__instructions', Left('response_text', MAX_HTML_LENGTH), Length('response_text'),
+        'response_file', 'is_correct',
+    )
+    for comment_id, question, answer, length, file, is_correct in answers:
+        comments[comment_id]["answers"].append({
+            "question": question, "answer": answer, "cut": length > MAX_HTML_LENGTH, "file": file, "is_correct": is_correct,
+        })
+    return conversations
+
+
 def _author(comment, student_id):
     """Who wrote a comment, as their part in the conversation.
 
     Args:
-        comment (Comment): the comment, with its user loaded.
+        comment (dict): the comment (see _conversations).
         student_id (int): the User pk of the student whose work the comment is on.
 
     Returns:
         str: "student", "teacher", or "other" for anyone else (another student).
     """
-    if comment.user_id == student_id:
+    if comment["user_id"] == student_id:
         return "student"
-    return "teacher" if comment.user.is_staff else "other"
+    return "teacher" if comment["is_staff"] else "other"
 
 
 def _conversation(comments, student_id, scrubber):
     """The comments on one attempt at a quest, ready for the data file.
 
     Args:
-        comments (list[Comment]): the comments, oldest first, with their documents and their
-            published answers prefetched.
+        comments (list[dict]): the comments, oldest first (see _conversations).
         student_id (int): the User pk of the student whose attempt it is.
         scrubber (NameScrubber): replaces names in what was written.
 
@@ -477,18 +546,18 @@ def _conversation(comments, student_id, scrubber):
         answers = [
             _compact({
                 # a question deleted since leaves its answers behind (QuestionSubmission.question)
-                "question": scrubber.clean(answer.question.instructions, student_id) if answer.question else None,
-                "answer": scrubber.clean(answer.response_text, student_id),
-                "file": _file_type(answer.response_file) if answer.response_file else None,
-                "marked": {True: "correct", False: "wrong"}.get(answer.is_correct),
+                "question": scrubber.clean(answer["question"], student_id),
+                "answer": scrubber.clean(answer["answer"], student_id, cut=answer["cut"]),
+                "file": _file_type(answer["file"]) if answer["file"] else None,
+                "marked": {True: "correct", False: "wrong"}.get(answer["is_correct"]),
             })
-            for answer in comment.question_submissions.all()
+            for answer in comment["answers"]
         ]
         entries.append(_compact({
             "from": _author(comment, student_id),
-            "on": _day(comment.timestamp),
-            "text": scrubber.clean(comment.text, student_id),
-            "files": [_file_type(document.docfile) for document in comment.document_set.all()],
+            "on": _day(comment["timestamp"]),
+            "text": scrubber.clean(comment["text"], student_id, cut=comment["cut"]),
+            "files": [_file_type(name) for name in comment["files"]],
             "answers": answers,
         }))
     return entries
@@ -499,7 +568,7 @@ def _quest_entries(submissions, comments, student_id, scrubber):
 
     Args:
         submissions (list[QuestSubmission]): the student's attempts, oldest first.
-        comments (dict): the comments on each attempt, by the attempt's pk.
+        comments (dict): the comments on each attempt, by the attempt's pk (see _conversations).
         student_id (int): the student's User pk.
         scrubber (NameScrubber): replaces names in what was written.
 
@@ -513,7 +582,7 @@ def _quest_entries(submissions, comments, student_id, scrubber):
         entries.append(_compact({
             "quest": quest.name,
             "campaign": quest.campaign.title if quest.campaign else None,
-            "tags": [tag.name for tag in quest.tags.all()],
+            "tags": quest.tag_names,
             "status": _submission_status(submission),
             "xp_earned": _xp_earned(submission),
             # a quest that can be repeated is listed once per attempt
@@ -628,7 +697,8 @@ def _xp_by_tag(submissions, assertions):
     """A student's XP by topic, from the tags on the quests and badges that earned it.
 
     Args:
-        submissions (list[QuestSubmission]): the student's attempts, with their quests' tags prefetched.
+        submissions (list[QuestSubmission]): the student's attempts, with their quests' tag_names set
+            (see _group_submissions).
         assertions (list[BadgeAssertion]): the student's badges, with their badges' tags prefetched.
 
     Returns:
@@ -636,8 +706,8 @@ def _xp_by_tag(submissions, assertions):
     """
     totals = defaultdict(int)
     for submission in submissions:
-        for tag in submission.quest.tags.all():
-            totals[tag.name] += _xp_earned(submission)
+        for name in submission.quest.tag_names:
+            totals[name] += _xp_earned(submission)
     for assertion in assertions:
         if not assertion.do_not_grant_xp:
             for tag in assertion.badge.tags.all():
@@ -742,6 +812,45 @@ def _about(block, roster, campaign_ids, scale, scrubber):
     }
 
 
+def _group_submissions(student_ids):
+    """A group's attempts at quests in an open semester, read from the database.
+
+    Each attempt is given its quest as an object holding only what the data file uses of it (its
+    name, XP and campaign), with its tags' names as a list in `tag_names`. A quest's row holds
+    pages of instructions, and reading it once for every attempt at it (a class makes thousands)
+    is what a download's time and memory mostly went on.
+
+    Args:
+        student_ids (list): the User pks of the group's students.
+
+    Returns:
+        tuple: (dict of each student's attempts by their User pk, oldest first; set of the pks of
+        the comments that are those attempts' drafts).
+    """
+    submissions = defaultdict(list)
+    draft_ids = set()
+    # Work on a quest that has since been archived or unpublished is still work the student did.
+    in_semester = QuestSubmission.objects.get_queryset(
+        exclude_archived_quests=False, exclude_quests_not_published=False, include_related=False,
+    ).filter(
+        user_id__in=student_ids, semester__status=Semester.Status.OPEN,
+    ).select_related('registration__course').order_by('timestamp', 'pk')
+    for submission in in_semester:
+        submissions[submission.user_id].append(submission)
+        if submission.draft_comment_id:
+            draft_ids.add(submission.draft_comment_id)
+
+    quests = Quest.objects.get_queryset(include_archived=True).filter(
+        pk__in={submission.quest_id for mine in submissions.values() for submission in mine},
+    ).select_related('campaign').only('name', 'xp', 'campaign', 'campaign__title').prefetch_related('tags').in_bulk()
+    for quest in quests.values():
+        quest.tag_names = [tag.name for tag in quest.tags.all()]
+    for mine in submissions.values():
+        for submission in mine:
+            submission.quest = quests[submission.quest_id]
+    return submissions, draft_ids
+
+
 def report_card_data(block, scale=None):
     """Everything the students currently in a group have done this semester, as the data file.
 
@@ -771,30 +880,8 @@ def report_card_data(block, scale=None):
     )
     deck_ai_id = SiteConfig.get().deck_ai_id
 
-    # Work on a quest that has since been archived or unpublished is still work the student did.
-    submissions = defaultdict(list)
-    drafts = set()
-    in_semester = QuestSubmission.objects.get_queryset(
-        exclude_archived_quests=False, exclude_quests_not_published=False,
-    ).filter(
-        user_id__in=student_ids, semester__status=Semester.Status.OPEN,
-    ).select_related('registration__course').order_by('timestamp', 'pk')
-    for submission in in_semester:
-        submissions[submission.user_id].append(submission)
-        if submission.draft_comment_id:
-            drafts.add(submission.draft_comment_id)
-
-    # A draft is what a student has typed but not yet handed in, so it is not part of the conversation.
-    comments = defaultdict(list)
-    on_submissions = Comment.objects.filter(
-        target_content_type=ContentType.objects.get_for_model(QuestSubmission),
-        target_object_id__in=[submission.pk for mine in submissions.values() for submission in mine],
-    ).exclude(pk__in=drafts).prefetch_related(
-        'document_set',
-        Prefetch('question_submissions', queryset=QuestionSubmission.objects.select_related('question')),
-    ).order_by('timestamp', 'pk')
-    for comment in on_submissions:
-        comments[comment.target_object_id].append(comment)
+    submissions, draft_ids = _group_submissions(student_ids)
+    comments = _conversations([submission.pk for mine in submissions.values() for submission in mine], draft_ids)
 
     assertions = defaultdict(list)
     granted = BadgeAssertion.objects.filter(

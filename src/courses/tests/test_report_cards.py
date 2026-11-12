@@ -7,7 +7,9 @@ import json
 import zipfile
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.shortcuts import reverse
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from model_bakery import baker
@@ -20,7 +22,7 @@ from competencies.models import ProficiencyLevel
 from courses.forms import ProficiencyScaleForm
 from courses.report_cards import (
     CUT_MARKER, DEFAULT_PROFICIENCY_XP, EMAIL_PLACEHOLDER, INSUFFICIENT_EVIDENCE, KEY_COLUMNS, LINK_PLACEHOLDER,
-    MAX_TEXT_LENGTH, PEER_PLACEHOLDER, STUDENT_PLACEHOLDER, NameScrubber, group_roster, html_to_text, proficiency_level,
+    MAX_HTML_LENGTH, MAX_TEXT_LENGTH, PEER_PLACEHOLDER, STUDENT_PLACEHOLDER, NameScrubber, group_roster, html_to_text, proficiency_level,
     proficiency_scale, report_card_data, student_code, student_key_csv,
 )
 from courses.tests.utils import patch_registration_xp
@@ -118,9 +120,31 @@ class NameScrubberTests(ByteDeckTenantTestCase):
         text = self.scrubber.clean("x" * (MAX_TEXT_LENGTH + 50), 1)
         self.assertEqual(text, "x" * MAX_TEXT_LENGTH + CUT_MARKER)
 
+    def test_clean__marks_text_that_was_only_read_in_part(self):
+        """Text whose HTML was only read as far as its start ends with the cut marker, short as it is."""
+        self.assertEqual(self.scrubber.clean("<p>The start</p>", 1, cut=True), "The start" + CUT_MARKER)
+
+    def test_scrub__username_with_no_letter_or_digit_is_not_learned(self):
+        """A username made of nothing but punctuation has no word to look for, and is left alone."""
+        scrubber = NameScrubber([(9, "___", "Under", "Score")])
+        self.assertEqual(scrubber._usernames, {})
+        self.assertEqual(scrubber.scrub("___ was here", 1), "___ was here")
+
     def test_html_to_text__nothing(self):
         """No HTML at all is no text."""
         self.assertEqual(html_to_text(None), "")
+
+    def test_html_to_text__takes_out_markup_and_keeps_the_words(self):
+        """Tags go, with a space where they were so the words either side stay apart, entities
+        become the characters they stand for, and a "<" that starts no tag is kept."""
+        html = '<p>One&nbsp;<b>two</b></p>\n<ul><li>three &amp; four</li></ul><p>5 &lt; 6 and 7 < 8</p><img src="a>b.png">'
+        self.assertEqual(html_to_text(html), 'One two three & four 5 < 6 and 7 < 8 b.png">')
+
+    def test_html_to_text__leaves_out_what_is_not_writing(self):
+        """A comment, a script and a stylesheet go with what is in them, and so does a tag that
+        was cut off before its end, such as a pasted picture too long to read whole."""
+        html = 'a<!-- hidden > text -->b<script>var x = "<p>";</script>c<STYLE>p { color: red }</style>d<img src="data:image/png;base64,AAAA'
+        self.assertEqual(html_to_text(html), 'a b c d')
 
 
 class ReportCardHelperTests(ByteDeckTenantTestCase):
@@ -499,6 +523,63 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         self.assertEqual(conversation[1]["text"], f"Lovely work {STUDENT_PLACEHOLDER}. The Helper badge was granted for this quest")
         self.assertNotIn("files", conversation[1])
         self.assertNotIn("answers", conversation[1])
+
+    def test_report_card_data__long_writing_is_read_only_in_part(self):
+        """A comment or an answer whose HTML is longer than is read from the database keeps the
+        text before the cut and is marked as cut, so a pasted picture costs no more than its start."""
+        quest = baker.make(Quest, name='Screenshot')
+        submission = self._submission(quest, is_completed=True)
+        picture = '<img src="data:image/png;base64,' + 'A' * MAX_HTML_LENGTH + '">'
+        comment = self._comment(submission, self.jamie, f"<p>My screenshot</p>{picture}<p>and what it shows</p>")
+        baker.make(QuestionSubmission, quest_submission=submission, question=baker.make(Question, quest=quest, instructions='Explain'),
+                   comment=comment, response_text='Because ' + 'x' * MAX_HTML_LENGTH)
+
+        entry = self._jamie(report_card_data(self.block))["quests"][0]["conversation"][0]
+
+        self.assertEqual(entry["text"], "My screenshot" + CUT_MARKER)
+        self.assertEqual(entry["answers"][0]["answer"], ("Because " + "x" * MAX_TEXT_LENGTH)[:MAX_TEXT_LENGTH] + CUT_MARKER)
+
+    def test_report_card_data__reads_no_quest_instructions(self):
+        """Building the file never reads a quest's instructions or its other pages of text: with
+        thousands of attempts in a class, reading them for each one is what made a download run
+        out of time and memory."""
+        quest = baker.make(Quest, name='Long read', instructions='<p>' + 'word ' * 500 + '</p>')
+        self._comment(self._submission(quest, is_completed=True, is_approved=True), self.jamie, "done")
+
+        with CaptureQueriesContext(connection) as queries:
+            data = report_card_data(self.block)
+
+        self.assertEqual(self._jamie(data)["quests"][0]["quest"], 'Long read')
+        for query in queries:
+            for column in ('instructions', 'submission_details', 'instructor_notes'):
+                self.assertNotIn(f'"quest_manager_quest"."{column}"', query['sql'])
+
+    def test_report_card_data__queries_do_not_grow_with_the_work(self):
+        """The file takes the same number of queries however many attempts, comments, attached
+        files and answers the students have."""
+        def add_work(count):
+            """Give each of the group's students that many more attempts, each with a comment, a file and an answer."""
+            for student in (self.jamie, self.will):
+                for _n in range(count):
+                    quest = baker.make(Quest, campaign=self.campaign)
+                    quest.tags.add('tagged')
+                    submission = self._submission(quest, user=student, is_completed=True, is_approved=True)
+                    comment = self._comment(submission, student, "<p>Done</p>")
+                    Document.objects.create(comment=comment, docfile='documents/work.pdf')
+                    baker.make(QuestionSubmission, quest_submission=submission, comment=comment, response_text='An answer',
+                               question=baker.make(Question, quest=quest, instructions='Why?'))
+
+        self.campaign = baker.make(Category, title='Unit 1')
+        add_work(1)
+        report_card_data(self.block)  # the first time also fills caches (content types, ranks), which the next does not
+        with CaptureQueriesContext(connection) as few:
+            report_card_data(self.block)
+        add_work(4)
+        with CaptureQueriesContext(connection) as many:
+            data = report_card_data(self.block)
+
+        self.assertEqual(len(self._jamie(data)["quests"]), 5)
+        self.assertEqual(len(many), len(few))
 
     def test_report_card_data__draft_comment_is_left_out(self):
         """What a student has typed but not handed in is not part of the conversation."""
