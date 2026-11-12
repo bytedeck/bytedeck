@@ -735,6 +735,13 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
         self.assertEqual(first_sub, second_sub.get_previous())
 
+    def test_get_previous__none_when_the_earlier_submission_was_dropped(self):
+        """A dropped submission leaves a gap in the ordinals, so a repeat whose predecessor was
+        dropped has no previous submission rather than raising (#2970)."""
+        repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
+        repeat = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester, ordinal=2)
+        self.assertIsNone(repeat.get_previous())
+
     def test_get_previous__fixes_duplicate_ordinals(self):
         """Submissions that have the same ordinals will be automatically fixed"""
         repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)

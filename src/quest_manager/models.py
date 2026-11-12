@@ -1844,6 +1844,9 @@ class QuestSubmission(models.Model):
 
         try:
             return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
+        except QuestSubmission.DoesNotExist:
+            # Dropping a submission leaves a gap in the ordinals, so the one before may be gone.
+            return None
         except QuestSubmission.MultipleObjectsReturned:
             self._fix_ordinal()
 

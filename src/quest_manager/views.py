@@ -1489,6 +1489,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission_form": self.form,
             "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
+            "show_past_work": _shows_past_work(self.request.user, self.submission),
             # Carried through the correction, so the resubmission lands where the first
             # attempt was going to.
             "next": self.safe_next(),
@@ -2511,6 +2512,7 @@ def complete(request, submission_id):
             "question_formset": question_formset,
             "form_media": _submission_page_media(page_form, question_formset),
             "anchor": "submission-form-" + str(submission.quest.id),
+            "show_past_work": _shows_past_work(request.user, submission),
         }
         return render(request, "quest_manager/submission.html", context)
 
