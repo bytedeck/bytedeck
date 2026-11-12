@@ -1347,16 +1347,16 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         self.assertNotIn("onerror", notes)
         self.assertNotIn("<script>", notes)
 
-    def test_quest_detail__questions_panel_follows_quest_details(self):
-        """Staff see the Submission Questions panel right after Quest Details, ahead of the
-        Submission Instructions and Instructor Notes (#2922)."""
+    def test_quest_detail__questions_panel_follows_submission_instructions(self):
+        """Staff see the Submission Questions panel after the Submission Instructions, the order a
+        student meets them on their submission page, and ahead of the Instructor Notes (#2969)."""
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
 
         content = response.content.decode()
         panels = [f'id="{name}-{self.quest.id}"' for name in
-                  ("quest-instructions", "quest-questions", "submission-instructions", "instructor-notes")]
+                  ("quest-instructions", "submission-instructions", "quest-questions", "instructor-notes")]
         positions = [content.index(panel) for panel in panels]
         self.assertEqual(positions, sorted(positions))
 
