@@ -33,7 +33,7 @@ from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import (
     BlockForm, CourseForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
-    ExcludedDateFormset, ExcludedDateFormsetHelper, class_days_changed,
+    ExcludedDateFormset, ExcludedDateFormsetHelper, ProficiencyScaleForm, class_days_changed,
 )
 from .models import Block, Course, CourseStudent, ExcludedDate, Rank, Semester, MarkRange, semester_for
 from .report_cards import group_roster, report_card_data, student_files_zip, student_key_csv, to_json
@@ -1088,70 +1088,132 @@ def _report_card_attachment(response, block, name, extension):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class ReportCardData(NonPublicOnlyViewMixin, DetailView):
+class ReportCardData(NonPublicOnlyViewMixin, View):
     """Staff-only page offering a group's report card data: what its current students have done
     this semester, for a teacher to give to an AI model as the basis for report card comments.
 
-    The students' data, which names no one, comes as one file (ReportCardDataFile) or as a file
-    per student (ReportCardStudentFiles). The key that says which student each code in it stands
-    for is a download of its own (ReportCardKeyFile), so the data can be shared without it.
+    The page holds a form for the proficiency scale each student's XP is placed on
+    (ProficiencyScaleForm), sent by GET with each download. The students' data, which names no
+    one, comes as one file (ReportCardDataFile) or as a file per student (ReportCardStudentFiles).
+    The key that says which student each code in it stands for is a download of its own
+    (ReportCardKeyFile), so the data can be shared without it.
+
+    The downloads are subclasses, since each starts the same way: find the group, read the scale,
+    and show the page again with the form's errors when the scale makes no sense.
     """
-    model = Block
     template_name = 'courses/report_card_data.html'
 
-    def get_context_data(self, **kwargs):
-        """Adds how many students the downloads will cover, so an empty group offers none."""
-        context = super().get_context_data(**kwargs)
-        context['student_count'] = len(group_roster(self.object))
-        return context
-
-
-@method_decorator(staff_member_required, name='dispatch')
-class ReportCardDataFile(NonPublicOnlyViewMixin, View):
-    """Downloads a group's report card data as JSON (see courses.report_cards.report_card_data)."""
-
     def get(self, request, pk):
-        """Returns the data file for the group in the URL.
+        """Responds for the group in the URL, on the proficiency scale in the query string.
+
+        Args:
+            request (HttpRequest): the request. Its query string holds the scale, or nothing for
+                the default scale.
+            pk (int): the group's pk.
+
+        Returns:
+            HttpResponse: this view's response (see respond), or the page with the form's errors
+            and status 400 when the scale sent is not valid.
 
         Raises:
             Http404: if there is no such group.
         """
         block = get_object_or_404(Block, pk=pk)
-        response = HttpResponse(to_json(report_card_data(block)), content_type='application/json')
+        form = ProficiencyScaleForm(request.GET or None)
+        if form.is_bound and not form.is_valid():
+            return self.page(block, form, status=400)
+        return self.respond(block, form)
+
+    def respond(self, block, form):
+        """What this view answers with once the group and a usable scale are in hand: the page.
+
+        Args:
+            block (Block): the group.
+            form (ProficiencyScaleForm): the scale's form, valid or not sent.
+
+        Returns:
+            HttpResponse: the page.
+        """
+        return self.page(block, form)
+
+    def page(self, block, form, status=200):
+        """The Report card data page.
+
+        Args:
+            block (Block): the group.
+            form (ProficiencyScaleForm): the scale's form, to show with its values and any errors.
+            status (int): the response's HTTP status.
+
+        Returns:
+            HttpResponse: the page, saying how many students the downloads cover (an empty group
+            is offered none) and, for each of their courses that uses marks, the XP that is 100%
+            today, which is what a teacher choosing a scale measures it against.
+        """
+        roster = group_roster(block)
+        targets = {}
+        for _profile, registrations in roster:
+            for registration in registrations:
+                course = registration.course
+                if course and course.uses_marks:
+                    targets[(course.pk, registration.semester_id)] = (
+                        course.title, round(course.xp_for_100_percent * registration.semester.fraction_complete()),
+                    )
+        context = {'object': block, 'form': form, 'student_count': len(roster), 'course_targets': list(targets.values())}
+        return render(self.request, self.template_name, context, status=status)
+
+
+class ReportCardDataFile(ReportCardData):
+    """Downloads a group's report card data as JSON (see courses.report_cards.report_card_data)."""
+
+    def respond(self, block, form):
+        """Returns the data file for the group.
+
+        Args:
+            block (Block): the group.
+            form (ProficiencyScaleForm): the scale's form, valid or not sent.
+
+        Returns:
+            HttpResponse: the JSON file, as a download.
+        """
+        response = HttpResponse(to_json(report_card_data(block, form.scale())), content_type='application/json')
         return _report_card_attachment(response, block, "report-card-data", "json")
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class ReportCardStudentFiles(NonPublicOnlyViewMixin, View):
+class ReportCardStudentFiles(ReportCardData):
     """Downloads a group's report card data as a zip of one JSON file per student (see
     courses.report_cards.student_files_zip)."""
 
-    def get(self, request, pk):
-        """Returns the zip for the group in the URL.
+    def respond(self, block, form):
+        """Returns the zip for the group.
 
-        Raises:
-            Http404: if there is no such group.
+        Args:
+            block (Block): the group.
+            form (ProficiencyScaleForm): the scale's form, valid or not sent.
+
+        Returns:
+            HttpResponse: the zip file, as a download.
         """
-        block = get_object_or_404(Block, pk=pk)
-        response = HttpResponse(student_files_zip(report_card_data(block)), content_type='application/zip')
+        response = HttpResponse(student_files_zip(report_card_data(block, form.scale())), content_type='application/zip')
         return _report_card_attachment(response, block, "report-card-data", "zip")
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class ReportCardKeyFile(NonPublicOnlyViewMixin, View):
+class ReportCardKeyFile(ReportCardData):
     """Downloads the key to a group's report card data as CSV (see courses.report_cards.student_key_csv)."""
 
-    def get(self, request, pk):
-        """Returns the key file for the group in the URL.
+    def respond(self, block, form):
+        """Returns the key file for the group.
 
-        Raises:
-            Http404: if there is no such group.
+        Args:
+            block (Block): the group.
+            form (ProficiencyScaleForm): the scale's form, valid or not sent.
+
+        Returns:
+            HttpResponse: the CSV file, as a download.
         """
-        block = get_object_or_404(Block, pk=pk)
         # utf-8-sig starts the file with a byte order mark, which is what has a spreadsheet
         # read accented names as UTF-8
-        response = HttpResponse(student_key_csv(block).encode('utf-8-sig'), content_type='text/csv; charset=utf-8')
-        return _report_card_attachment(response, block, "report-card-key", "csv")
+        content = student_key_csv(block, form.scale()).encode('utf-8-sig')
+        return _report_card_attachment(HttpResponse(content, content_type='text/csv; charset=utf-8'), block, "report-card-key", "csv")
 
 
 @method_decorator(staff_member_required, name='dispatch')

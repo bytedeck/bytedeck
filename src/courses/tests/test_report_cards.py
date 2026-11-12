@@ -16,10 +16,14 @@ from badges.models import Badge, BadgeAssertion, BadgeType
 from comments.models import Comment, Document
 from courses import report_cards
 from courses.models import Block, Course, CourseStudent, Grade, MarkRange, Rank, Semester
+from competencies.models import ProficiencyLevel
+from courses.forms import ProficiencyScaleForm
 from courses.report_cards import (
-    CUT_MARKER, EMAIL_PLACEHOLDER, KEY_COLUMNS, LINK_PLACEHOLDER, MAX_TEXT_LENGTH, PEER_PLACEHOLDER,
-    STUDENT_PLACEHOLDER, NameScrubber, group_roster, html_to_text, report_card_data, student_code, student_key_csv,
+    CUT_MARKER, DEFAULT_PROFICIENCY_XP, EMAIL_PLACEHOLDER, INSUFFICIENT_EVIDENCE, KEY_COLUMNS, LINK_PLACEHOLDER,
+    MAX_TEXT_LENGTH, PEER_PLACEHOLDER, STUDENT_PLACEHOLDER, NameScrubber, group_roster, html_to_text, proficiency_level,
+    proficiency_scale, report_card_data, student_code, student_key_csv,
 )
+from courses.tests.utils import patch_registration_xp
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Category, Quest, QuestSubmission
 from questions.models import Question, QuestionSubmission
@@ -38,10 +42,14 @@ class NameScrubberTests(ByteDeckTenantTestCase):
     """Replacing students' names, and addresses, in what was written."""
 
     def setUp(self):
-        """A scrubber that knows two students: 1 is Jamie Smith-Lee (jsmith24), 2 is Will Brown."""
+        """A scrubber that knows five students: 1 is Jamie Smith-Lee (jsmith24), 2 is Will Brown
+        (wbrown), 3 is Grace Lee (grace), 4 is Alex Kim (al) and 5 is Dana Reyes (dana.reyes7)."""
         self.scrubber = NameScrubber([
-            (1, "Jamie", "Smith-Lee", "J", "jsmith24"),
-            (2, "Will", "Brown", None, "wbrown"),
+            (1, "jsmith24", "Jamie", "Smith-Lee", "J"),
+            (2, "wbrown", "Will", "Brown", None),
+            (3, "grace", "Grace", "Lee", ""),
+            (4, "al", "Alex", "Kim", None),
+            (5, "dana.reyes7", "Dana", "Reyes", None),
         ])
 
     def test_scrub__own_name_becomes_student_placeholder(self):
@@ -60,8 +68,23 @@ class NameScrubberTests(ByteDeckTenantTestCase):
         self.assertEqual(self.scrubber.scrub("I will fix the brown border.", 1), "I will fix the brown border.")
 
     def test_scrub__word_with_a_digit_is_replaced_in_lower_case(self):
-        """A username holding a digit is replaced however it is typed, since it is no ordinary word."""
-        self.assertEqual(self.scrubber.scrub("my login is jsmith24", 1), f"my login is {STUDENT_PLACEHOLDER}")
+        """A part of a username that holds a digit is replaced in lower case, since it is no ordinary word."""
+        self.assertEqual(self.scrubber.scrub("reyes7 was here", 1), f"{PEER_PLACEHOLDER} was here")
+
+    def test_scrub__username_is_replaced_however_it_is_typed(self):
+        """A username is replaced whole in any case, keeping the punctuation around it: usernames
+        are kept in lower case, so the rule for names would let them through."""
+        text = self.scrubber.scrub("my login is jsmith24. Ask wbrown, @WBrown or dana.reyes7!", 1)
+        self.assertEqual(text, f"my login is {STUDENT_PLACEHOLDER}. Ask {PEER_PLACEHOLDER}, @{PEER_PLACEHOLDER} or {PEER_PLACEHOLDER}!")
+
+    def test_scrub__username_that_is_only_a_name_follows_the_rule_for_names(self):
+        """A username that is nothing more than a student's name is only replaced where it is
+        capitalized, so the ordinary word it also is survives."""
+        self.assertEqual(self.scrubber.scrub("grace under pressure, says Grace", 1), f"grace under pressure, says {PEER_PLACEHOLDER}")
+
+    def test_scrub__short_username_is_left_alone(self):
+        """A username of a letter or two is not replaced, being too easily an ordinary word."""
+        self.assertEqual(self.scrubber.scrub("pasta al dente...", 1), "pasta al dente...")
 
     def test_scrub__single_letter_name_is_not_learned(self):
         """A one-letter name (an initial) is not replaced, or every sentence starting with it would be."""
@@ -97,6 +120,34 @@ class ReportCardHelperTests(ByteDeckTenantTestCase):
         """Entries that say nothing are dropped, but a zero says something and stays."""
         record = {"a": 0, "b": None, "c": False, "d": "", "e": [], "f": {}, "g": "x"}
         self.assertEqual(report_cards._compact(record), {"a": 0, "g": "x"})
+
+    def test_proficiency_scale__default(self):
+        """Unless told otherwise, the scale starts each level at the default XP, under the deck's
+        names for the levels, with Insufficient Evidence below the first."""
+        self.assertEqual(proficiency_scale(), [
+            (0, INSUFFICIENT_EVIDENCE), (100, 'Emerging'), (250, 'Developing'), (330, 'Proficient'), (430, 'Extending'),
+        ])
+
+    def test_proficiency_scale__own_xp_and_deck_labels(self):
+        """The scale uses the XP it is given and whatever the deck calls each level."""
+        config = SiteConfig.get()
+        config.competency_label_level_1 = 'Beginning'
+        config.save()
+        scale = proficiency_scale({
+            ProficiencyLevel.EMERGING: 5, ProficiencyLevel.DEVELOPING: 10, ProficiencyLevel.PROFICIENT: 15, ProficiencyLevel.EXTENDING: 20,
+        })
+        self.assertEqual(scale, [(0, INSUFFICIENT_EVIDENCE), (5, 'Beginning'), (10, 'Developing'), (15, 'Proficient'), (20, 'Extending')])
+
+    def test_proficiency_level__each_level_starts_at_its_xp(self):
+        """XP is at a level from the XP the level starts at up to the next level's, and XP below
+        zero is at the lowest."""
+        scale = proficiency_scale()
+        expected = {
+            -20: INSUFFICIENT_EVIDENCE, 0: INSUFFICIENT_EVIDENCE, 99.5: INSUFFICIENT_EVIDENCE, 100: 'Emerging', 249: 'Emerging',
+            250: 'Developing', 329: 'Developing', 330: 'Proficient', 429: 'Proficient', 430: 'Extending', 5000: 'Extending',
+        }
+        for xp, level in expected.items():
+            self.assertEqual(proficiency_level(xp, scale), level, xp)
 
     def test_csv_cell__formula_is_defused(self):
         """A value a spreadsheet would run as a formula gets a leading apostrophe; others are untouched."""
@@ -149,6 +200,12 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         """A comment on an attempt."""
         return Comment.objects.create_comment(user=user, text=text, path='/x/', target=submission)
 
+    @staticmethod
+    def _xp(xp_by_registration):
+        """For patch_registration_xp: gives each registration the XP it is paired with."""
+        by_pk = {registration.pk: xp for registration, xp in xp_by_registration.items()}
+        return lambda registration: by_pk[registration.pk]
+
     def _jamie(self, data):
         """Jamie's record in a data file."""
         return next(student for student in data["students"] if student["student_code"] == student_code(self.jamie.pk))
@@ -179,18 +236,40 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
 
     def test_student_key_csv__names_each_student(self):
         """The key file has a row per student giving the name behind their code, with their grade
-        from this group's registration and all of their courses."""
-        rows = list(csv.reader(io.StringIO(student_key_csv(self.block))))
+        from this group's registration, and for each of their courses their XP in it and the level
+        that XP reaches on the default scale."""
+        with patch_registration_xp(self._xp({self.jamie_registration: 340, self.jamie_other_registration: -5, self.will_registration: 430})):
+            rows = list(csv.reader(io.StringIO(student_key_csv(self.block))))
         self.assertEqual(tuple(rows[0]), KEY_COLUMNS)
-        self.assertEqual(rows[1], [student_code(self.jamie.pk), 'Smith', 'Jamie', 'Jay', 'jsmith24', '9', 'ADST 9; Clubhouse'])
-        self.assertEqual(rows[2], [student_code(self.will.pk), 'Brown', 'Will', '', 'wbrown', '', 'ADST 9'])
+        self.assertEqual(rows[1], [
+            student_code(self.jamie.pk), 'Smith', 'Jamie', 'Jay', 'jsmith24', '9', 'ADST 9; Clubhouse', '340; -5',
+            f'Proficient; {INSUFFICIENT_EVIDENCE}',
+        ])
+        self.assertEqual(rows[2], [student_code(self.will.pk), 'Brown', 'Will', '', 'wbrown', '', 'ADST 9', '430', 'Extending'])
         self.assertEqual(len(rows), 3)
+
+    def test_student_key_csv__own_scale(self):
+        """The key file places students on the scale it is given."""
+        scale = [(0, INSUFFICIENT_EVIDENCE), (400, 'Emerging'), (500, 'Developing')]
+        with patch_registration_xp(430):
+            rows = list(csv.reader(io.StringIO(student_key_csv(self.block, scale))))
+        self.assertEqual(rows[2][-1], 'Emerging')
 
     def test_student_key_csv__registration_without_a_course(self):
         """A registration whose course is gone adds nothing to the student's courses."""
         CourseStudent.objects.filter(pk=self.will_registration.pk).update(course=None)
         rows = list(csv.reader(io.StringIO(student_key_csv(self.block))))
-        self.assertEqual(rows[2][-1], '')
+        self.assertEqual(rows[2][6], '')
+
+    def test_student_key_csv__name_that_reads_as_a_formula(self):
+        """A name a spreadsheet would run as a formula is made safe, while a student's XP below
+        zero is left as the number it is."""
+        self.will.first_name = '=HYPERLINK("http://example.com")'
+        self.will.save()
+        with patch_registration_xp(-10):
+            rows = list(csv.reader(io.StringIO(student_key_csv(self.block))))
+        self.assertEqual(rows[2][2], '\'=HYPERLINK("http://example.com")')
+        self.assertEqual(rows[2][7], '-10')
 
     def test_report_card_data__about(self):
         """The file starts by saying what it is, how to read it, and what the deck's semester,
@@ -217,6 +296,10 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         }])
         # the XP-only course has no XP that makes 100%
         self.assertEqual(about["courses"], [{"course": 'ADST 9', "xp_for_100_percent": 1000}, {"course": 'Clubhouse'}])
+        self.assertEqual(about["proficiency_scale"], [
+            {"level": INSUFFICIENT_EVIDENCE, "from_xp": 0}, {"level": 'Emerging', "from_xp": 100}, {"level": 'Developing', "from_xp": 250},
+            {"level": 'Proficient', "from_xp": 330}, {"level": 'Extending', "from_xp": 430},
+        ])
         self.assertEqual(about["ranks"], [{"rank": rank.name, "from_xp": rank.xp} for rank in Rank.objects.get_ranks_cached()])
         self.assertIn({"mark_range": 'Passing', "from_percent": 49.5}, about["mark_ranges"])
         # only the campaign a student in the file has worked in, counting only its published, unarchived quests
@@ -241,6 +324,7 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         self.assertEqual(adst["group"], 'A Block')
         self.assertEqual(adst["semester"], str(self.semester))
         self.assertEqual(adst["xp"], round(split[self.jamie_registration]))
+        self.assertEqual(adst["proficiency_level"], proficiency_level(split[self.jamie_registration], proficiency_scale()))
         self.assertEqual(adst["mark_percent"], round(self.jamie_registration.mark(xp=split[self.jamie_registration]), 1))
         self.assertGreater(adst["mark_percent"], 0)
         self.assertEqual(adst["mark_range"], MarkRange.objects.get_range(adst["mark_percent"], [self.course]).name)
@@ -251,6 +335,20 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         self.assertEqual(clubhouse["course"], 'Clubhouse')
         for absent in ("mark_percent", "mark_range", "xp_adjustment", "xp_adjustment_reason"):
             self.assertNotIn(absent, clubhouse)
+
+    def test_report_card_data__proficiency_level(self):
+        """Each course's XP is placed on the default proficiency scale, or on the scale given, which
+        the file then describes."""
+        xp = self._xp({self.jamie_registration: 340, self.jamie_other_registration: 90, self.will_registration: 430})
+        with patch_registration_xp(xp):
+            default = self._jamie(report_card_data(self.block))
+            own = report_card_data(self.block, [(0, INSUFFICIENT_EVIDENCE), (50, 'Emerging'), (400, 'Developing')])
+
+        self.assertEqual([course["proficiency_level"] for course in default["courses"]], ['Proficient', INSUFFICIENT_EVIDENCE])
+        self.assertEqual([course["proficiency_level"] for course in self._jamie(own)["courses"]], ['Emerging', 'Emerging'])
+        self.assertEqual(own["about"]["proficiency_scale"], [
+            {"level": INSUFFICIENT_EVIDENCE, "from_xp": 0}, {"level": 'Emerging', "from_xp": 50}, {"level": 'Developing', "from_xp": 400},
+        ])
 
     def test_report_card_data__registration_without_a_course_or_grade(self):
         """A student whose registration has lost its course is still in the file, with no course
@@ -433,17 +531,70 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         self.assertIn(student_code(self.jamie.pk), text)
 
 
+class ProficiencyScaleFormTests(ByteDeckTenantTestCase):
+    """The form a teacher sets the proficiency scale with on the Report card data page."""
+
+    #: A scale that makes sense, as the page sends it.
+    VALID = {"level_1": 50, "level_2": 120, "level_3": 200, "level_4": 300}
+
+    def test_fields__one_per_level_with_the_default_xp(self):
+        """There is a field for each level, labelled with the deck's name for it and starting at
+        its default XP."""
+        form = ProficiencyScaleForm()
+        self.assertEqual(
+            [(name, field.label, field.initial) for name, field in form.fields.items()],
+            [("level_1", "Emerging from", 100), ("level_2", "Developing from", 250), ("level_3", "Proficient from", 330),
+             ("level_4", "Extending from", 430)],
+        )
+        self.assertEqual(form.below_first_level, INSUFFICIENT_EVIDENCE)
+
+    def test_scale__not_sent_is_the_default_scale(self):
+        """A form that was not sent stands for the default scale."""
+        self.assertEqual(ProficiencyScaleForm().scale(), proficiency_scale())
+        self.assertEqual(ProficiencyScaleForm(None).scale(), proficiency_scale(DEFAULT_PROFICIENCY_XP))
+
+    def test_scale__sent(self):
+        """A form that was filled in gives the scale with its numbers."""
+        form = ProficiencyScaleForm(self.VALID)
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.scale(), [
+            (0, INSUFFICIENT_EVIDENCE), (50, 'Emerging'), (120, 'Developing'), (200, 'Proficient'), (300, 'Extending'),
+        ])
+
+    def test_clean__levels_out_of_order(self):
+        """A level that starts at no more XP than the one before it is refused, whether lower or equal."""
+        for level_3 in (100, 120):
+            form = ProficiencyScaleForm({**self.VALID, "level_3": level_3})
+            self.assertFalse(form.is_valid())
+            self.assertEqual(form.non_field_errors(), ["Each level has to start at more XP than the level before it."])
+
+    def test_clean__missing_or_negative_number(self):
+        """A level with no number, or one below zero, is an error on that field alone."""
+        form = ProficiencyScaleForm({**self.VALID, "level_1": "", "level_2": -5})
+        self.assertFalse(form.is_valid())
+        self.assertEqual(set(form.errors), {"level_1", "level_2"})
+
+
 class ReportCardViewTests(ByteDeckTenantTestCase):
-    """The staff page that offers a group's report card files, and the two downloads."""
+    """The staff page that offers a group's report card files, and its downloads."""
 
     @classmethod
     def setUpTestData(cls):
-        """A teacher, and a group with one student in it."""
+        """A teacher, and a group with two students in it: one in a course that uses marks, one in
+        a course that runs on XP alone."""
         cls.teacher = User.objects.create_user('ms_teacher', is_staff=True)
         cls.student = User.objects.create_user('jsmith24', first_name='Zoë', last_name='Smith')
+        cls.other_student = User.objects.create_user('wbrown')
         cls.block = baker.make(Block, name='A Block')
-        baker.make(CourseStudent, user=cls.student, course=baker.make(Course), block=cls.block,
-                   semester=SiteConfig.get().active_semester)
+        cls.semester = SiteConfig.get().active_semester
+        # a semester that is partway through whatever day the tests run on
+        cls.semester.first_day = timezone.localdate() - datetime.timedelta(days=30)
+        cls.semester.last_day = timezone.localdate() + datetime.timedelta(days=30)
+        cls.semester.save()
+        cls.course = baker.make(Course, title='ADST 9', xp_for_100_percent=1000)
+        cls.registration = baker.make(CourseStudent, user=cls.student, course=cls.course, block=cls.block, semester=cls.semester)
+        baker.make(CourseStudent, user=cls.other_student, course=baker.make(Course, title='Clubhouse', uses_marks=False),
+                   block=cls.block, semester=cls.semester)
         cls.page = reverse('courses:report_card_data', args=[cls.block.pk])
         cls.data_file = reverse('courses:report_card_data_file', args=[cls.block.pk])
         cls.student_files = reverse('courses:report_card_student_files', args=[cls.block.pk])
@@ -474,10 +625,52 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.teacher)
         response = self.client.get(self.page)
         self.assertContains(response, "Report card data: A Block")
-        self.assertContains(response, "the 1 student")
+        self.assertContains(response, "the 2 students")
         self.assertContains(response, self.data_file)
         self.assertContains(response, self.student_files)
         self.assertContains(response, self.key_file)
+
+    def test_report_card_data__proficiency_scale_form(self):
+        """The page offers the scale with its default XP, and says what 100% is today in each
+        course that uses marks, which is what the scale is measured against."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.page)
+        for name, xp in (("level_1", 100), ("level_2", 250), ("level_3", 330), ("level_4", 430)):
+            self.assertContains(response, f'name="{name}" value="{xp}"')
+        target = round(1000 * self.semester.fraction_complete())
+        self.assertGreater(target, 0)
+        self.assertContains(response, f"In ADST 9, a mark of 100% is {target} XP today.")
+        self.assertNotContains(response, "In Clubhouse")
+
+    def test_report_card_data__keeps_the_scale_sent(self):
+        """The page sent a scale shows it again with those numbers."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.page, {"level_1": 50, "level_2": 120, "level_3": 200, "level_4": 300})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="level_2" value="120"')
+
+    def test_views__scale_that_makes_no_sense(self):
+        """A scale with its levels out of order gets the page back with the reason, from the page
+        and from each download, and no file."""
+        self.client.force_login(self.teacher)
+        for url in (self.page, self.data_file, self.student_files, self.key_file):
+            response = self.client.get(url, {"level_1": 300, "level_2": 120, "level_3": 200, "level_4": 400})
+            self.assertContains(response, "Each level has to start at more XP than the level before it.", status_code=400)
+            self.assertNotIn('Content-Disposition', response)
+
+    def test_downloads__use_the_scale_sent(self):
+        """The data file and the key file place students on the scale sent with the download."""
+        self.client.force_login(self.teacher)
+        scale = {"level_1": 50, "level_2": 120, "level_3": 200, "level_4": 300}
+        with patch_registration_xp(150):
+            data = json.loads(self.client.get(self.data_file, scale).content)
+            key = list(csv.reader(io.StringIO(self.client.get(self.key_file, scale).content.decode('utf-8-sig'))))
+            with zipfile.ZipFile(io.BytesIO(self.client.get(self.student_files, scale).content)) as archive:
+                one = json.loads(archive.read(f"{student_code(self.student.pk)}.json"))
+        self.assertEqual(data["about"]["proficiency_scale"][2], {"level": 'Developing', "from_xp": 120})
+        self.assertEqual(data["students"][0]["courses"][0]["proficiency_level"], 'Developing')
+        self.assertEqual(one["student"]["courses"][0]["proficiency_level"], 'Developing')
+        self.assertEqual(key[1][-2:], ['150', 'Developing'])
 
     def test_report_card_data__empty_group(self):
         """A group with no current students offers no downloads."""
@@ -497,7 +690,10 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
             f'attachment; filename="report-card-data-a-block-{timezone.localdate().isoformat()}.json"',
         )
         data = json.loads(response.content)
-        self.assertEqual([student["student_code"] for student in data["students"]], [student_code(self.student.pk)])
+        self.assertEqual(
+            [student["student_code"] for student in data["students"]],
+            [student_code(self.student.pk), student_code(self.other_student.pk)],
+        )
         self.assertEqual(data["about"]["group"], 'A Block')
         # accented letters are written as themselves, and the file is indented, to be readable
         self.assertIn('\n "students": [', response.content.decode())
@@ -515,7 +711,8 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
         )
         whole = json.loads(self.client.get(self.data_file).content)
         with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
-            self.assertEqual(archive.namelist(), [f"{student_code(self.student.pk)}.json"])
+            self.assertEqual(
+                archive.namelist(), [f"{student_code(self.student.pk)}.json", f"{student_code(self.other_student.pk)}.json"])
             one = json.loads(archive.read(archive.namelist()[0]))
         self.assertEqual(one, {"about": whole["about"], "student": whole["students"][0]})
 

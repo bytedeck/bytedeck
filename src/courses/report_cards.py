@@ -22,6 +22,7 @@ from django.db.models import Count, Prefetch, Sum
 from django.utils import timezone
 
 from badges.models import Badge, BadgeAssertion
+from competencies.models import ProficiencyLevel
 from comments.models import Comment
 from prerequisites.models import Prereq
 from profile_manager.models import Profile
@@ -48,9 +49,26 @@ MAX_TEXT_LENGTH = 2000
 CUT_MARKER = " [cut short]"
 
 #: The columns of the key file (see student_key_csv).
-KEY_COLUMNS = ("student_code", "last_name", "first_name", "preferred_name", "username", "grade", "courses")
+KEY_COLUMNS = (
+    "student_code", "last_name", "first_name", "preferred_name", "username", "grade", "courses", "xp", "proficiency_level",
+)
+
+#: What a student with less XP than the proficiency scale's first level is given.
+INSUFFICIENT_EVIDENCE = "Insufficient Evidence"
+
+#: The XP at which each level of the proficiency scale starts, unless the teacher downloading the
+#: files says otherwise (see proficiency_scale). XP is earned as a semester goes on, so the right
+#: numbers depend on the course and on how much of the semester has passed.
+DEFAULT_PROFICIENCY_XP = {
+    ProficiencyLevel.EMERGING: 100,
+    ProficiencyLevel.DEVELOPING: 250,
+    ProficiencyLevel.PROFICIENT: 330,
+    ProficiencyLevel.EXTENDING: 430,
+}
 
 _WORD_RE = re.compile(r"[^\W_]+")
+#: A run of the characters a username can hold (letters, digits and @ . + - _).
+_HANDLE_RE = re.compile(r"[\w.@+-]+")
 _URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\S+@\S+\.\S+")
 
@@ -76,6 +94,10 @@ HOW_TO_READ = {
               "its prerequisites and 'teacher' when a teacher chose to grant it. A badge a teacher granted while "
               "approving a quest is also noted in that quest's conversation ('The ... badge was granted for this "
               "quest').",
+    "proficiency_level": "Where the student's XP in the course falls on the proficiency scale in "
+                         "'about.proficiency_scale', which their teacher set when making this file: each level "
+                         "starts at its 'from_xp'. It is a starting point drawn from XP alone, for report cards "
+                         "that use the proficiency scale.",
     "mark_percent": "The course mark so far: the student's XP as a percentage of the XP expected by this point "
                     "in the semester for 100% ('xp_for_100_percent' is the full semester's). Absent for a course "
                     "that runs on XP alone.",
@@ -120,8 +142,12 @@ class NameScrubber:
     A word is replaced when it is one of the words in a current student's first name, last name,
     preferred name or username, and it starts with a capital letter or holds a digit. Words that
     start in lower case are left alone, since so many names are also ordinary words (will, mark,
-    grace) that replacing those would take the sense out of what was written. Web and email
-    addresses are replaced whole, since they often carry a name.
+    grace) that replacing those would take the sense out of what was written.
+
+    A username is replaced whole as well, however it is typed, since usernames are kept in lower
+    case and "ask jsmith" would get through the rule above. That leaves out a username that is
+    nothing more than one of a student's names (it follows the rule for names), and one of only
+    a letter or two. Web and email addresses are replaced whole, since they often carry a name.
 
     It is a best effort: a nickname, a misspelling, or a name typed without its capital is not
     caught.
@@ -130,9 +156,10 @@ class NameScrubber:
     def __init__(self, students):
         """
         Args:
-            students (iterable): a (user_id, name, ...) tuple for each student whose names are to
-                be replaced. A name may be None or empty.
+            students (iterable): a (user_id, username, name, ...) tuple for each student whose
+                names are to be replaced. A name may be None or empty.
         """
+        students = list(students)
         self._owners = {}
         for user_id, *names in students:
             for name in names:
@@ -140,6 +167,14 @@ class NameScrubber:
                     # a single letter (an initial) would match every sentence that starts with it
                     if len(word) > 1:
                         self._owners.setdefault(word.lower(), set()).add(user_id)
+
+        name_words = {
+            word.lower() for _user_id, _username, *names in students for name in names for word in _WORD_RE.findall(name or "")
+        }
+        self._usernames = {
+            username.lower(): user_id for user_id, username, *_names in students
+            if len(username) > 2 and username.lower() not in name_words
+        }
 
     def scrub(self, text, student_id):
         """Replace names and addresses in a piece of text.
@@ -160,8 +195,19 @@ class NameScrubber:
                 return word
             return STUDENT_PLACEHOLDER if student_id in owners else PEER_PLACEHOLDER
 
+        def replace_username(match):
+            """The run of characters with the username in it replaced, when it is a student's
+            username with at most some punctuation around it (a full stop after it, an @ before)."""
+            run = match.group()
+            username = run.strip(".@+-")
+            owner = self._usernames.get(username.lower())
+            if owner is None:
+                return run
+            return run.replace(username, STUDENT_PLACEHOLDER if owner == student_id else PEER_PLACEHOLDER, 1)
+
         text = _URL_RE.sub(LINK_PLACEHOLDER, text)
         text = _EMAIL_RE.sub(EMAIL_PLACEHOLDER, text)
+        text = _HANDLE_RE.sub(replace_username, text)
         return _WORD_RE.sub(replace, text)
 
     def clean(self, html, student_id):
@@ -219,6 +265,36 @@ def _file_type(file):
         str: the file's extension in lower case without its dot, or "file" when it has none.
     """
     return os.path.splitext(file.name)[1].lstrip(".").lower() or "file"
+
+
+def proficiency_scale(xp_by_level=None):
+    """The proficiency scale a download places students on.
+
+    Args:
+        xp_by_level (dict or None): the XP at which each ProficiencyLevel starts. Defaults to
+            DEFAULT_PROFICIENCY_XP.
+
+    Returns:
+        list[tuple]: (from_xp, label) for INSUFFICIENT_EVIDENCE, from no XP, then for each level
+        in order under the deck's own name for it.
+    """
+    xp_by_level = xp_by_level or DEFAULT_PROFICIENCY_XP
+    labels = SiteConfig.get().get_competency_scale_labels()
+    return [(0, INSUFFICIENT_EVIDENCE)] + [(xp_by_level[level], labels[level]) for level in sorted(xp_by_level)]
+
+
+def proficiency_level(xp, scale):
+    """Where an amount of XP falls on a proficiency scale.
+
+    Args:
+        xp (float): a student's XP in a course.
+        scale (list[tuple]): the scale (see proficiency_scale).
+
+    Returns:
+        str: the label of the highest level whose XP it reaches, the lowest for XP below zero
+        (which an XP adjustment can leave a student with).
+    """
+    return [label for from_xp, label in scale if max(xp, 0) >= from_xp][-1]
 
 
 def group_roster(block):
@@ -280,26 +356,38 @@ def _csv_cell(value):
     return "'" + text if text.startswith(("=", "+", "-", "@")) else text
 
 
-def student_key_csv(block):
-    """The key file: who each code in the group's data file stands for.
+def student_key_csv(block, scale=None):
+    """The key file: who each code in the group's data file stands for, with where each stands.
+
+    It is the one file that names the students, so it is also where their teacher reads the XP
+    and proficiency level the data file gives each of them.
 
     Args:
         block (Block): the group.
+        scale (list[tuple] or None): the proficiency scale to place students on (see
+            proficiency_scale). Defaults to the default scale.
 
     Returns:
-        str: a CSV with a row per student, in the order of the data file, under KEY_COLUMNS.
+        str: a CSV with a row per student, in the order of the data file, under KEY_COLUMNS. A
+        student in several courses has an entry for each in the last three columns, in the same
+        order, separated by semicolons.
     """
+    scale = scale or proficiency_scale()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(KEY_COLUMNS)
     for profile, registrations in group_roster(block):
         user = profile.user
-        courses = "; ".join(str(registration.course) for registration in registrations if registration.course)
-        row = (
-            student_code(user.pk), user.last_name, user.first_name, profile.preferred_name, user.username,
-            _grade(registrations, block), courses,
-        )
-        writer.writerow([_csv_cell(value) for value in row])
+        shares = CourseStudent.objects.xp_across(user, registrations, profile=profile)
+        # the names are the student's own to choose, so they are the cells to make safe
+        names = (user.last_name, user.first_name, profile.preferred_name, user.username)
+        writer.writerow((
+            student_code(user.pk), *(_csv_cell(name) for name in names),
+            _grade(registrations, block),
+            "; ".join(str(registration.course or "") for registration, _xp in shares),
+            "; ".join(str(round(xp)) for _registration, xp in shares),
+            "; ".join(proficiency_level(xp, scale) for _registration, xp in shares),
+        ))
     return output.getvalue()
 
 
@@ -533,13 +621,14 @@ def _xp_by_tag(submissions, assertions):
     return {name: xp for name, xp in sorted(totals.items(), key=lambda item: (-item[1], item[0])) if xp}
 
 
-def _course_entries(profile, registrations, scrubber):
+def _course_entries(profile, registrations, scrubber, scale):
     """Where a student stands in each of their courses.
 
     Args:
         profile (Profile): the student's profile.
         registrations (list[CourseStudent]): their current registrations.
         scrubber (NameScrubber): replaces names in a teacher's note on an XP adjustment.
+        scale (list[tuple]): the proficiency scale to place the student on (see proficiency_scale).
 
     Returns:
         list[dict]: an entry per registration, with its share of the student's XP and its mark.
@@ -555,6 +644,7 @@ def _course_entries(profile, registrations, scrubber):
             "group": str(registration.block) if registration.block else None,
             "semester": str(registration.semester),
             "xp": round(xp),
+            "proficiency_level": proficiency_level(xp, scale),
             "mark_percent": None if mark is None else round(mark, 1),
             "mark_range": mark_range.name if mark_range else None,
             "xp_per_class_day": round(registration.xp_per_day_ave(xp), 1),
@@ -564,17 +654,18 @@ def _course_entries(profile, registrations, scrubber):
     return entries
 
 
-def _about(block, roster, campaign_ids):
+def _about(block, roster, campaign_ids, scale):
     """What the data file says about itself and about the deck, ahead of the students.
 
     Args:
         block (Block): the group the file is for.
         roster (list[tuple]): the group's students (see group_roster).
         campaign_ids (set): the pks of the campaigns those students have worked in.
+        scale (list[tuple]): the proficiency scale the students were placed on (see proficiency_scale).
 
     Returns:
-        dict: the file's purpose and how to read it, then the semester, courses, ranks, mark ranges
-        and campaigns its students' records refer to.
+        dict: the file's purpose and how to read it, then the semester, courses, proficiency scale,
+        ranks, mark ranges and campaigns its students' records refer to.
     """
     registrations = [registration for _profile, mine in roster for registration in mine]
     semesters = {registration.semester_id: registration.semester for registration in registrations}
@@ -606,6 +697,7 @@ def _about(block, roster, campaign_ids):
             _compact({"course": course.title, "xp_for_100_percent": course.xp_for_100_percent if course.uses_marks else None})
             for course in courses.values()
         ],
+        "proficiency_scale": [{"level": label, "from_xp": from_xp} for from_xp, label in scale],
         "ranks": [{"rank": rank.name, "from_xp": rank.xp} for rank in Rank.objects.get_ranks_cached()],
         "mark_ranges": [
             {"mark_range": mark_range.name, "from_percent": mark_range.minimum_mark}
@@ -623,7 +715,7 @@ def _about(block, roster, campaign_ids):
     }
 
 
-def report_card_data(block):
+def report_card_data(block, scale=None):
     """Everything the students currently in a group have done this semester, as the data file.
 
     A student's work is everything of theirs that belongs to an open semester, whichever of their
@@ -635,16 +727,19 @@ def report_card_data(block):
 
     Args:
         block (Block): the group.
+        scale (list[tuple] or None): the proficiency scale to place students on (see
+            proficiency_scale). Defaults to the default scale.
 
     Returns:
         dict: "about" (see _about), then "students": a record per student, in the order of the key
         file (see student_key_csv).
     """
+    scale = scale or proficiency_scale()
     roster = group_roster(block)
     student_ids = [profile.user_id for profile, _registrations in roster]
     scrubber = NameScrubber(
         Profile.objects.all_in_open_semesters().values_list(
-            'user_id', 'user__first_name', 'user__last_name', 'preferred_name', 'user__username',
+            'user_id', 'user__username', 'user__first_name', 'user__last_name', 'preferred_name',
         )
     )
     deck_ai_id = SiteConfig.get().deck_ai_id
@@ -695,7 +790,7 @@ def report_card_data(block):
             "grade": _grade(registrations, block),
             "total_xp": profile.xp_cached,
             "rank": Rank.objects.get_rank(profile.xp_cached).name,
-            "courses": _course_entries(profile, registrations, scrubber),
+            "courses": _course_entries(profile, registrations, scrubber, scale),
             "work_summary": _work_summary(mine),
             "campaigns": _campaign_entries(mine),
             "xp_by_tag": _xp_by_tag(mine, assertions[profile.user_id]),
@@ -703,7 +798,7 @@ def report_card_data(block):
             "quests": _quest_entries(mine, comments, profile.user_id, scrubber),
         }))
 
-    return {"about": _about(block, roster, campaign_ids), "students": students}
+    return {"about": _about(block, roster, campaign_ids, scale), "students": students}
 
 
 def to_json(data):
