@@ -51,7 +51,8 @@
     <strong>It names no one.</strong> Each {{ config.custom_name_for_student|lower }} is known by a code such as
     <code>S42</code>, and the names of your current {{ config.custom_name_for_student|lower }}s are replaced
     wherever they appear in a comment, along with web and email addresses. Replacing names is a best effort: a
-    nickname, or a name typed without its capital letter, is not caught, so look through the file before you share it.
+    nickname, or a name typed without its capital letter, is not caught, and the titles you gave your quests,
+    campaigns and badges are left as you wrote them. Look through the file before you share it.
   </p>
   <p>
     <button type="submit" class="btn btn-primary" formaction="{% url 'courses:report_card_data_file' object.pk %}">

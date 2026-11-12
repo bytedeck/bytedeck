@@ -86,8 +86,10 @@ Students' names also turn up in what people write ("Great work, Jamie!"), so the
 
 The names replaced are the first name, last name, preferred name and username of every student currently registered in a course on your deck. A word is only replaced when it starts with a capital letter or contains a digit, so that "I will fix it" survives a student named Will. A username of three or more characters is replaced however it is typed, unless it is simply one of the student's names.
 
+This is done to what people typed at length: comments, answers, the explanation of an XP adjustment, and the descriptions of badges and campaigns. The titles you gave your quests, campaigns, badges, courses and groups go into the file exactly as you wrote them, so a quest called "Jamie's Project" would name a student.
+
 !!! warning "Look through the file before you share it"
-    Replacing names is a best effort. A nickname, a misspelled name, or a name typed without its capital letter is not caught. Search the file for a few of your students' names before you give it to anyone, and only use an AI tool your school or district allows for student work.
+    Replacing names is a best effort. A nickname, a misspelled name, or a name typed without its capital letter is not caught, and titles are not changed at all. Search the file for a few of your students' names before you give it to anyone, and only use an AI tool your school or district allows for student work.
 
 ## Drafting comments with it
 

@@ -77,6 +77,12 @@ class NameScrubberTests(ByteDeckTenantTestCase):
         text = self.scrubber.scrub("my login is jsmith24. Ask wbrown, @WBrown or dana.reyes7!", 1)
         self.assertEqual(text, f"my login is {STUDENT_PLACEHOLDER}. Ask {PEER_PLACEHOLDER}, @{PEER_PLACEHOLDER} or {PEER_PLACEHOLDER}!")
 
+    def test_scrub__username_joined_to_something_else(self):
+        """A username is replaced where it is joined to other words by the punctuation a username
+        can hold, such as in a file's name, and one that holds punctuation itself is found whole."""
+        text = self.scrubber.scrub("see wbrown.pdf, final-jsmith24.v2 and dana.reyes7.zip but not brown.pdf", 1)
+        self.assertEqual(text, f"see {PEER_PLACEHOLDER}.pdf, final-{STUDENT_PLACEHOLDER}.v2 and {PEER_PLACEHOLDER}.zip but not brown.pdf")
+
     def test_scrub__username_that_is_only_a_name_follows_the_rule_for_names(self):
         """A username that is nothing more than a student's name is only replaced where it is
         capitalized, so the ordinary word it also is survives."""
@@ -255,6 +261,15 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
             rows = list(csv.reader(io.StringIO(student_key_csv(self.block, scale))))
         self.assertEqual(rows[2][-1], 'Emerging')
 
+    def test_student_key_csv__level_agrees_with_the_xp_shown(self):
+        """A share of XP that is shown rounded up to where a level starts is at that level, in the
+        key and in the data, so nobody reads 100 XP beside the level below it."""
+        with patch_registration_xp(99.5):
+            rows = list(csv.reader(io.StringIO(student_key_csv(self.block))))
+            course = report_card_data(self.block)["students"][1]["courses"][0]
+        self.assertEqual(rows[2][-2:], ['100', 'Emerging'])
+        self.assertEqual((course["xp"], course["proficiency_level"]), (100, 'Emerging'))
+
     def test_student_key_csv__registration_without_a_course(self):
         """A registration whose course is gone adds nothing to the student's courses."""
         CourseStudent.objects.filter(pk=self.will_registration.pk).update(course=None)
@@ -262,19 +277,21 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         self.assertEqual(rows[2][6], '')
 
     def test_student_key_csv__name_that_reads_as_a_formula(self):
-        """A name a spreadsheet would run as a formula is made safe, while a student's XP below
-        zero is left as the number it is."""
+        """Text a spreadsheet would run as a formula is made safe, whether a student's name or a
+        course's title, while a student's XP below zero is left as the number it is."""
         self.will.first_name = '=HYPERLINK("http://example.com")'
         self.will.save()
+        Course.objects.filter(pk=self.course.pk).update(title='+ADST')
         with patch_registration_xp(-10):
             rows = list(csv.reader(io.StringIO(student_key_csv(self.block))))
         self.assertEqual(rows[2][2], '\'=HYPERLINK("http://example.com")')
+        self.assertEqual(rows[2][6], "'+ADST")
         self.assertEqual(rows[2][7], '-10')
 
     def test_report_card_data__about(self):
         """The file starts by saying what it is, how to read it, and what the deck's semester,
         courses, ranks, mark ranges and campaigns are."""
-        campaign = baker.make(Category, title='Web Design', short_description='Build a site')
+        campaign = baker.make(Category, title='Web Design', short_description='Build a site like Jamie did')
         baker.make(Quest, name='HTML Basics', campaign=campaign, xp=30)
         self._submission(baker.make(Quest, name='CSS Basics', campaign=campaign, xp=20))
         baker.make(Quest, name='Old one', campaign=campaign, xp=500, archived=True)
@@ -303,7 +320,10 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
         self.assertEqual(about["ranks"], [{"rank": rank.name, "from_xp": rank.xp} for rank in Rank.objects.get_ranks_cached()])
         self.assertIn({"mark_range": 'Passing', "from_percent": 49.5}, about["mark_ranges"])
         # only the campaign a student in the file has worked in, counting only its published, unarchived quests
-        self.assertEqual(about["campaigns"], [{"campaign": 'Web Design', "description": 'Build a site', "quests": 2, "xp_available": 50}])
+        # a student named in its description is nobody's own name here, so a peer
+        self.assertEqual(about["campaigns"], [
+            {"campaign": 'Web Design', "description": f'Build a site like {PEER_PLACEHOLDER} did', "quests": 2, "xp_available": 50},
+        ])
 
     def test_report_card_data__student_standing(self):
         """A student's record gives their grade, XP and rank, and for each course its share of
@@ -486,7 +506,7 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
     def test_report_card_data__badges(self):
         """A student's badges from this semester are listed once each with every day they were
         granted, saying whether a teacher chose to grant them, and their XP counts toward their tags."""
-        talent = baker.make(Badge, name='Coder', xp=5, short_description='<p>Wrote some code</p>',
+        talent = baker.make(Badge, name='Coder', xp=5, short_description='<p>Wrote some code with Will</p>',
                             badge_type=BadgeType.objects.get_or_create(name='Talent')[0])
         talent.tags.add('code')
         talent.add_simple_prereqs([baker.make(Quest)])
@@ -509,7 +529,7 @@ class ReportCardDataTests(ByteDeckTenantTestCase):
 
         today = timezone.localdate().isoformat()
         self.assertEqual(jamie["badges"], [
-            {"badge": 'Coder', "type": 'Talent', "description": 'Wrote some code', "xp_each": 5, "granted_by": 'automatic',
+            {"badge": 'Coder', "type": 'Talent', "description": f'Wrote some code with {PEER_PLACEHOLDER}', "xp_each": 5, "granted_by": 'automatic',
              "granted_on": ['2026-10-01', today]},
             {"badge": 'Helper', "type": 'Award', "xp_each": 10, "granted_by": 'teacher', "granted_on": [today]},
             {"badge": 'Kind', "type": 'Award', "xp_each": 0, "granted_by": 'teacher', "granted_on": [today]},

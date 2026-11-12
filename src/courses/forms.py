@@ -511,6 +511,9 @@ class ProficiencyScaleForm(forms.Form):
     def clean(self):
         """Checks that the levels are in order.
 
+        Returns:
+            dict: the form's cleaned data, unchanged.
+
         Raises:
             ValidationError: if a level starts at no more XP than the level before it.
         """

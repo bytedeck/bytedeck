@@ -69,6 +69,8 @@ DEFAULT_PROFICIENCY_XP = {
 _WORD_RE = re.compile(r"[^\W_]+")
 #: A run of the characters a username can hold (letters, digits and @ . + - _).
 _HANDLE_RE = re.compile(r"[\w.@+-]+")
+#: The punctuation among them, which also joins a username to what is beside it ("jsmith.pdf").
+_HANDLE_PUNCTUATION_RE = re.compile(r"([.@+-]+)")
 _URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\S+@\S+\.\S+")
 
@@ -150,7 +152,10 @@ class NameScrubber:
     a letter or two. Web and email addresses are replaced whole, since they often carry a name.
 
     It is a best effort: a nickname, a misspelling, or a name typed without its capital is not
-    caught.
+    caught. What it is used on is what people typed at length: comments, answers, descriptions and
+    notes. The names teachers gave their quests, campaigns, badges, courses and groups go into the
+    file as written, since a title's words are all capitalized and so many of them would be taken
+    for names.
     """
 
     def __init__(self, students):
@@ -196,14 +201,24 @@ class NameScrubber:
             return STUDENT_PLACEHOLDER if student_id in owners else PEER_PLACEHOLDER
 
         def replace_username(match):
-            """The run of characters with the username in it replaced, when it is a student's
-            username with at most some punctuation around it (a full stop after it, an @ before)."""
-            run = match.group()
-            username = run.strip(".@+-")
-            owner = self._usernames.get(username.lower())
-            if owner is None:
-                return run
-            return run.replace(username, STUDENT_PLACEHOLDER if owner == student_id else PEER_PLACEHOLDER, 1)
+            """The run of characters with each student's username in it replaced, whatever it is
+            joined to: a full stop after it, an @ before it, a file's extension ("jsmith.pdf")."""
+            # the words of the run and the punctuation between them, in turn
+            parts = _HANDLE_PUNCTUATION_RE.split(match.group())
+            replaced = []
+            start = 0
+            while start < len(parts):
+                # the longest stretch from here that is a username, since one can hold punctuation itself
+                for end in range(len(parts), start, -1):
+                    owner = self._usernames.get("".join(parts[start:end]).lower())
+                    if owner is not None:
+                        replaced.append(STUDENT_PLACEHOLDER if owner == student_id else PEER_PLACEHOLDER)
+                        start = end
+                        break
+                else:
+                    replaced.append(parts[start])
+                    start += 1
+            return "".join(replaced)
 
         text = _URL_RE.sub(LINK_PLACEHOLDER, text)
         text = _EMAIL_RE.sub(EMAIL_PLACEHOLDER, text)
@@ -379,14 +394,16 @@ def student_key_csv(block, scale=None):
     for profile, registrations in group_roster(block):
         user = profile.user
         shares = CourseStudent.objects.xp_across(user, registrations, profile=profile)
-        # the names are the student's own to choose, so they are the cells to make safe
-        names = (user.last_name, user.first_name, profile.preferred_name, user.username)
-        writer.writerow((
-            student_code(user.pk), *(_csv_cell(name) for name in names),
-            _grade(registrations, block),
+        text_cells = (
+            user.last_name, user.first_name, profile.preferred_name, user.username, _grade(registrations, block),
             "; ".join(str(registration.course or "") for registration, _xp in shares),
+        )
+        writer.writerow((
+            student_code(user.pk), *(_csv_cell(cell) for cell in text_cells),
+            # left as the numbers they are: XP below zero starts with a minus sign
             "; ".join(str(round(xp)) for _registration, xp in shares),
-            "; ".join(proficiency_level(xp, scale) for _registration, xp in shares),
+            # from the XP as it is shown, so the two columns always agree
+            _csv_cell("; ".join(proficiency_level(round(xp), scale) for _registration, xp in shares)),
         ))
     return output.getvalue()
 
@@ -567,7 +584,7 @@ def _campaign_entries(submissions):
     ]
 
 
-def _badge_entries(assertions, deck_ai_id, badges_with_prerequisites):
+def _badge_entries(assertions, deck_ai_id, badges_with_prerequisites, scrubber, student_id):
     """The badges a student has been granted, each listed once however often it was granted.
 
     A badge counts as granted automatically when it has prerequisites to meet and came from the
@@ -580,6 +597,8 @@ def _badge_entries(assertions, deck_ai_id, badges_with_prerequisites):
         deck_ai_id (int or None): the User pk of the deck's own account, which grants the badges
             that come from meeting their prerequisites.
         badges_with_prerequisites (set): the pks of the badges that have prerequisites.
+        scrubber (NameScrubber): replaces names in a badge's description.
+        student_id (int): the student's User pk.
 
     Returns:
         list[dict]: an entry per badge, with every day it was granted.
@@ -591,7 +610,7 @@ def _badge_entries(assertions, deck_ai_id, badges_with_prerequisites):
         entry = badges.setdefault((badge.pk, automatic), {
             "badge": badge.name,
             "type": badge.badge_type.name,
-            "description": html_to_text(badge.short_description),
+            "description": scrubber.clean(badge.short_description, student_id),
             "xp_each": badge.xp,
             "granted_by": "automatic" if automatic else "teacher",
             "granted_on": [],
@@ -644,7 +663,8 @@ def _course_entries(profile, registrations, scrubber, scale):
             "group": str(registration.block) if registration.block else None,
             "semester": str(registration.semester),
             "xp": round(xp),
-            "proficiency_level": proficiency_level(xp, scale),
+            # from the XP as it is shown, so the two always agree
+            "proficiency_level": proficiency_level(round(xp), scale),
             "mark_percent": None if mark is None else round(mark, 1),
             "mark_range": mark_range.name if mark_range else None,
             "xp_per_class_day": round(registration.xp_per_day_ave(xp), 1),
@@ -654,7 +674,7 @@ def _course_entries(profile, registrations, scrubber, scale):
     return entries
 
 
-def _about(block, roster, campaign_ids, scale):
+def _about(block, roster, campaign_ids, scale, scrubber):
     """What the data file says about itself and about the deck, ahead of the students.
 
     Args:
@@ -662,6 +682,8 @@ def _about(block, roster, campaign_ids, scale):
         roster (list[tuple]): the group's students (see group_roster).
         campaign_ids (set): the pks of the campaigns those students have worked in.
         scale (list[tuple]): the proficiency scale the students were placed on (see proficiency_scale).
+        scrubber (NameScrubber): replaces names in a campaign's description, every student's with
+            PEER_PLACEHOLDER since this part of the file belongs to none of them.
 
     Returns:
         dict: the file's purpose and how to read it, then the semester, courses, proficiency scale,
@@ -706,7 +728,7 @@ def _about(block, roster, campaign_ids, scale):
         "campaigns": [
             _compact({
                 "campaign": campaign.title,
-                "description": campaign.short_description,
+                "description": scrubber.clean(campaign.short_description, None),
                 "quests": offered.get(campaign.pk, {}).get('quests', 0),
                 "xp_available": offered.get(campaign.pk, {}).get('xp', 0),
             })
@@ -794,11 +816,11 @@ def report_card_data(block, scale=None):
             "work_summary": _work_summary(mine),
             "campaigns": _campaign_entries(mine),
             "xp_by_tag": _xp_by_tag(mine, assertions[profile.user_id]),
-            "badges": _badge_entries(assertions[profile.user_id], deck_ai_id, badges_with_prerequisites),
+            "badges": _badge_entries(assertions[profile.user_id], deck_ai_id, badges_with_prerequisites, scrubber, profile.user_id),
             "quests": _quest_entries(mine, comments, profile.user_id, scrubber),
         }))
 
-    return {"about": _about(block, roster, campaign_ids, scale), "students": students}
+    return {"about": _about(block, roster, campaign_ids, scale, scrubber), "students": students}
 
 
 def to_json(data):
