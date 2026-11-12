@@ -83,6 +83,14 @@ class NameScrubberTests(ByteDeckTenantTestCase):
         text = self.scrubber.scrub("see wbrown.pdf, final-jsmith24.v2 and dana.reyes7.zip but not brown.pdf", 1)
         self.assertEqual(text, f"see {PEER_PLACEHOLDER}.pdf, final-{STUDENT_PLACEHOLDER}.v2 and {PEER_PLACEHOLDER}.zip but not brown.pdf")
 
+    def test_scrub__long_run_is_searched_no_further_than_a_username_reaches(self):
+        """A run of many joined words still has its usernames replaced, and is searched in steps
+        no longer than the longest username, so pasted text of any length is quick to go through."""
+        self.assertEqual(self.scrubber._longest_username, 3)  # dana.reyes7: two words and a full stop
+        run = "x." * 20000 + "wbrown" + ".y" * 20000
+        self.assertEqual(self.scrubber.scrub(run, 1), "x." * 20000 + PEER_PLACEHOLDER + ".y" * 20000)
+        self.assertEqual(NameScrubber([])._longest_username, 0)
+
     def test_scrub__username_that_is_only_a_name_follows_the_rule_for_names(self):
         """A username that is nothing more than a student's name is only replaced where it is
         capitalized, so the ordinary word it also is survives."""
@@ -669,7 +677,7 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="level_2" value="120"')
 
-    def test_views__scale_that_makes_no_sense(self):
+    def test_get__scale_that_makes_no_sense(self):
         """A scale with its levels out of order gets the page back with the reason, from the page
         and from each download, and no file."""
         self.client.force_login(self.teacher)
@@ -678,7 +686,7 @@ class ReportCardViewTests(ByteDeckTenantTestCase):
             self.assertContains(response, "Each level has to start at more XP than the level before it.", status_code=400)
             self.assertNotIn('Content-Disposition', response)
 
-    def test_downloads__use_the_scale_sent(self):
+    def test_respond__uses_the_scale_sent(self):
         """The data file and the key file place students on the scale sent with the download."""
         self.client.force_login(self.teacher)
         scale = {"level_1": 50, "level_2": 120, "level_3": 200, "level_4": 300}

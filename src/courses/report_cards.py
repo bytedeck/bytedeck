@@ -180,6 +180,9 @@ class NameScrubber:
             username.lower(): user_id for user_id, username, *_names in students
             if len(username) > 2 and username.lower() not in name_words
         }
+        # The most words and stretches of punctuation any username is made of, which is as far
+        # as scrub() has to look from any one place in a run for a username.
+        self._longest_username = max((len(_HANDLE_PUNCTUATION_RE.split(username)) for username in self._usernames), default=0)
 
     def scrub(self, text, student_id):
         """Replace names and addresses in a piece of text.
@@ -208,8 +211,10 @@ class NameScrubber:
             replaced = []
             start = 0
             while start < len(parts):
-                # the longest stretch from here that is a username, since one can hold punctuation itself
-                for end in range(len(parts), start, -1):
+                # The longest stretch from here that is a username, since one can hold punctuation
+                # itself. It is looked for no further than the longest username reaches, so a
+                # long run (a pasted "a.b.c.d..." of any length) costs no more than a short one.
+                for end in range(min(len(parts), start + self._longest_username), start, -1):
                     owner = self._usernames.get("".join(parts[start:end]).lower())
                     if owner is not None:
                         replaced.append(STUDENT_PLACEHOLDER if owner == student_id else PEER_PLACEHOLDER)
