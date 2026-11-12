@@ -31,6 +31,16 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
+    def test_title_with_status__published(self):
+        """A published campaign's title_with_status is just its title."""
+        self.assertEqual(self.category.title_with_status, "Test Campaign")
+
+    def test_title_with_status__unpublished(self):
+        """An unpublished campaign's title_with_status marks it "(unpublished)", so staff can tell
+        it apart where they pick or see a quest's campaign (#2965)."""
+        self.category.published = False
+        self.assertEqual(self.category.title_with_status, "Test Campaign (unpublished)")
+
     def test_get_icon_url__returns_category_icon_when_set(self):
         """Category.get_icon_url returns the campaign's own icon url when it has one."""
         self.category.icon = 'icons/campaign.png'
@@ -254,6 +264,74 @@ class QuestTestModel(ByteDeckTenantTestCase):
         # create and test a quest that's archived
         q = baker.make(Quest, archived=True)
         self.assertFalse(q.active)
+
+    def assertReasons(self, quest, expected):
+        """Assert a quest's unavailable_reasons, and that ``active`` agrees with them (#2966)."""
+        self.assertEqual(quest.unavailable_reasons(), expected)
+        self.assertEqual(quest.active, not expected)
+
+    def test_unavailable_reasons__none_for_an_available_quest(self):
+        """A published quest that is open now has no reason to give, and is active."""
+        self.assertReasons(baker.make(Quest), [])
+
+    def test_unavailable_reasons__draft(self):
+        """A quest that isn't published says it's a draft (#2966)."""
+        self.assertReasons(baker.make(Quest, published=False), ["It's a draft: Published isn't ticked on its form."])
+
+    def test_unavailable_reasons__archived(self):
+        """An archived quest says so (#2966)."""
+        self.assertReasons(baker.make(Quest, archived=True), ["It's archived."])
+
+    def test_unavailable_reasons__unpublished_campaign(self):
+        """A quest in an unpublished campaign names the campaign (#2966)."""
+        campaign = baker.make(Category, title="Photography", published=False)
+        self.assertReasons(baker.make(Quest, campaign=campaign), ["Its campaign, Photography, isn't published."])
+
+    @freeze_time(datetime.datetime(2024, 1, 1, 6, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__not_open_yet(self):
+        """A quest whose available date and time haven't come says when it opens, on a later day or
+        later the same day (#2966)."""
+        later_day = baker.make(Quest, date_available=datetime.date(2024, 1, 3), time_available=datetime.time(8, 30))
+        self.assertReasons(later_day, ["It doesn't open until 8:30 a.m. on Jan. 3, 2024."])
+        later_today = baker.make(Quest, date_available=datetime.date(2024, 1, 1), time_available=datetime.time(9))
+        self.assertReasons(later_today, ["It doesn't open until 9 a.m. on Jan. 1, 2024."])
+
+    @freeze_time(datetime.datetime(2024, 1, 5, 12, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__expired(self):
+        """An expired quest says when it expired: at a time on its expiry date, at the end of that
+        date when it has no time, or every day at its time when it has no date (#2966)."""
+        self.assertReasons(
+            baker.make(Quest, date_expired=datetime.date(2024, 1, 4), time_expired=datetime.time(15)),
+            ["It expired at 3 p.m. on Jan. 4, 2024."],
+        )
+        self.assertReasons(
+            baker.make(Quest, date_expired=datetime.date(2024, 1, 4)),
+            ["It expired at the end of Jan. 4, 2024."],
+        )
+        self.assertReasons(
+            baker.make(Quest, time_expired=datetime.time(10)),
+            ["It closes at 10 a.m. every day, and opens again at midnight."],
+        )
+
+    @freeze_time(datetime.datetime(2024, 1, 5, 12, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__archived_and_expired(self):
+        """An archived quest whose expiry has passed gives both reasons, since unarchiving it
+        would still leave it closed (#2973)."""
+        self.assertReasons(
+            baker.make(Quest, archived=True, date_expired=datetime.date(2024, 1, 4)),
+            ["It's archived.", "It expired at the end of Jan. 4, 2024."],
+        )
+
+    def test_unavailable_reasons__several_at_once(self):
+        """Every reason that applies is given, so fixing one doesn't leave the quest closed for a
+        reason nobody was told about (#2966)."""
+        campaign = baker.make(Category, title="Photography", published=False)
+        quest = baker.make(Quest, published=False, archived=True, campaign=campaign)
+        self.assertReasons(quest, [
+            "It's archived.",
+            "It's a draft: Published isn't ticked on its form.",
+            "Its campaign, Photography, isn't published.",
+        ])
 
     def test_expired__date_blank(self):
         """If `date_expired` is blank, expire at `time_expired` every day
@@ -954,6 +1032,32 @@ class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
         a quest with no expiry date has not expired."""
         quest = baker.make(Quest, date_expired=None)
         self.assertFalse(quest.expired())
+
+    def test_expired__archived_quest_with_no_expiry(self):
+        """An archived quest with no expiry date or time hasn't expired.
+
+        Archiving takes a quest out of students' tabs and says nothing about its dates,
+        which are all that expiry depends on (#2973).
+        """
+        quest = baker.make(Quest, archived=True, date_expired=None, time_expired=None)
+        self.assertFalse(quest.expired())
+
+    def test_expired__archived_quest_past_its_expiry_date(self):
+        """An archived quest whose expiry date has passed has expired, as it would unarchived."""
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        quest = baker.make(Quest, archived=True, date_expired=yesterday)
+        self.assertTrue(quest.expired())
+
+    def test_with_is_expired__judges_archived_quests_by_their_dates(self):
+        """The ``is_expired`` annotation reads an archived quest's dates, as ``expired()`` does."""
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        no_expiry = baker.make(Quest, archived=True, date_expired=None, time_expired=None)
+        past_expiry = baker.make(Quest, archived=True, date_expired=yesterday)
+
+        quests = Quest.objects.all_including_archived().filter(pk__in=[no_expiry.pk, past_expiry.pk])
+        is_expired = dict(quests.with_is_expired().values_list('pk', 'is_expired'))
+
+        self.assertEqual(is_expired, {no_expiry.pk: False, past_expiry.pk: True})
 
 
 class QuestManagerPrefetchTest(ByteDeckTenantTestCase):

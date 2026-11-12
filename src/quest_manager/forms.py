@@ -72,6 +72,22 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
         super().__init__(*args, **kwargs)
 
 
+class CampaignChoiceField(forms.ModelChoiceField):
+    """A choice of campaign that labels each one with its title_with_status, so an unpublished
+    campaign reads "(unpublished)" in the dropdown."""
+
+    def label_from_instance(self, obj):
+        """Label a campaign with its title, marked "(unpublished)" when it isn't published.
+
+        Args:
+            obj: the ``Category`` being offered.
+
+        Returns:
+            str: the option's label.
+        """
+        return obj.title_with_status
+
+
 class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
 
     new_quest_prerequisite = forms.ModelChoiceField(
@@ -97,11 +113,12 @@ class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
     )
 
     # Declared here rather than generated from the model, so Meta.widgets doesn't reach it: its
-    # searchable dropdown is set on the field itself.
-    campaign = forms.ModelChoiceField(
+    # searchable dropdown is set on the field itself. It offers every campaign, published or not,
+    # because a teacher adds quests to a campaign before publishing it, and editing a quest in an
+    # unpublished campaign must keep it there (#2965); the unpublished ones are marked.
+    campaign = CampaignChoiceField(
         queryset=Category.objects.all(),
         required=False,
-        limit_choices_to={'published': True},
         widget=Select2Widget(attrs={'data-theme': 'bootstrap'}),
     )
 
@@ -116,7 +133,7 @@ class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
-                  'available_outside_course', 'archived', 'editor')
+                  'available_outside_course', 'archived', 'editor', 'competency_self_assessment')
 
         date_options = {
             'showMeridian': False,

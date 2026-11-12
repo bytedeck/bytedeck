@@ -3,6 +3,7 @@
 {% load crispy_forms_tags %}
 {% load question_tags %}
 {% load comment_tags %}
+{% load competency_tags %}
 
 {% block head %}
     {# the comment form's assets combined with the answer editors', de-duplicated in the view #}
@@ -170,6 +171,10 @@
             {% endif %}
           {% endfor %}
         </div>
+        {% if not request.user.is_staff and not submission.is_approved %}
+          {# the student's self-assessment, when the quest asks for one; recorded when they hand it in #}
+          {% competency_self_assessment submission %}
+        {% endif %}
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
           {% with submission as s %}

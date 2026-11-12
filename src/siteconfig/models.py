@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
+from django.core.validators import MinValueValidator
 from django.db import connection, models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -15,6 +16,7 @@ from django.conf import settings
 from django_tenants.utils import get_public_schema_name, schema_context
 from redis import exceptions as redis_exceptions
 
+from competencies.models import RollupStrategy
 from library.utils import get_library_schema_name
 from utilities.models import RestrictedFileField
 
@@ -336,6 +338,24 @@ class SiteConfig(models.Model):
     competency_label_level_4 = models.CharField(
         verbose_name="Proficiency Scale Label, Level 4", default="Extending", max_length=50,
         help_text="The label displayed for the fourth (highest) level of the proficiency scale."
+    )
+
+    # How a student's assessments of a competency become their current level in it (see
+    # competencies.rollup). db_default as well as default: during a deploy the outgoing version still
+    # creates site configurations without these columns, so the database has to fill them in
+    # (CONTRIBUTING.md, "Migrations and the deploy window").
+    competency_rollup = models.CharField(
+        verbose_name="Current Level of a Competency", max_length=20, choices=RollupStrategy.choices,
+        default=RollupStrategy.MOST_RECENT, db_default=RollupStrategy.MOST_RECENT,
+        help_text="How a student's assessments of a competency become their current level in it, which their "
+                  "course's current level of proficiency is worked out from. BC's reporting guidance favours the "
+                  "most recent evidence. A level a teacher sets for a student overrides it."
+    )
+
+    competency_rollup_count = models.PositiveSmallIntegerField(
+        verbose_name="Latest Assessments Counted", default=3, db_default=3, validators=[MinValueValidator(2)],
+        help_text="For \"Most common level in the latest assessments\": how many of a student's latest assessments "
+                  "of a competency count. On a tie, whichever of the tied levels was assessed most recently stands."
     )
 
     def __str__(self):

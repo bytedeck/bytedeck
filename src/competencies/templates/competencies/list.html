@@ -12,6 +12,9 @@
     <a class="btn btn-primary" href="{% url 'competencies:import' %}" role="button">
         <i class="fa fa-upload"></i>&nbsp;Import
     </a>
+    <a class="btn btn-default" href="{% url 'competencies:matrix' %}" role="button" title="Each course's students by competency">
+        <i class="fa fa-th"></i>&nbsp;Matrix
+    </a>
     <div class="btn-group">
         <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown"
                 aria-haspopup="true" aria-expanded="false" {% if not object_list %}disabled{% endif %}>

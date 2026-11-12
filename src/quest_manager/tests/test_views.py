@@ -2466,6 +2466,14 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
         """Set up a tenant-aware test client and log in the staff user."""
         self.client.force_login(self.staff_user)
 
+    def test_quest_user_status__marks_an_unpublished_campaign(self):
+        """The quest's summary on its user status page marks an unpublished campaign, as the
+        quest's own page does (#2965)."""
+        self.quest.campaign = baker.make(Category, title="Draft Campaign", published=False)
+        self.quest.save()
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+        self.assertContains(response, "Draft Campaign (unpublished)</a>")
+
     def test_quest_user_status__displays_users_and_statuses(self):
         """
         Verify that the quest_user_status view:
@@ -2942,6 +2950,39 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         # Confrim quest was updated
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
+
+    def test_quest_update__keeps_an_unpublished_campaign(self):
+        """Editing a quest in an unpublished campaign shows that campaign selected, marked
+        "(unpublished)", and saving the form keeps the quest in it (#2965)."""
+        self.client.force_login(self.test_teacher)
+        draft = baker.make(Category, title="Draft Campaign", published=False)
+        quest = Quest.objects.create(**self.minimal_valid_form_data, campaign=draft)
+        url = reverse('quests:quest_update', kwargs={'pk': quest.pk})
+
+        soup = BeautifulSoup(self.client.get(url).content, 'html.parser')
+        selected = soup.select_one('select[name="campaign"] option[selected]')
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected['value'], str(draft.pk))
+        self.assertEqual(selected.get_text(), "Draft Campaign (unpublished)")
+
+        response = self.client.post(url, data={**self.minimal_valid_form_data, 'campaign': draft.pk})
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertEqual(quest.campaign, draft)
+
+    def test_quest_detail__marks_an_unpublished_campaign(self):
+        """A quest's page marks its campaign "(unpublished)" when the campaign isn't published, so
+        a teacher can see why students don't have the quest (#2965)."""
+        self.client.force_login(self.test_teacher)
+        draft = baker.make(Category, title="Draft Campaign", published=False)
+        live = baker.make(Category, title="Live Campaign", published=True)
+        draft_quest = Quest.objects.create(**self.minimal_valid_form_data, campaign=draft)
+        live_quest = Quest.objects.create(**{**self.minimal_valid_form_data, 'name': "Live Quest"}, campaign=live)
+
+        self.assertContains(self.client.get(draft_quest.get_absolute_url()), "Draft Campaign (unpublished)</a>")
+        live_response = self.client.get(live_quest.get_absolute_url())
+        self.assertContains(live_response, "Live Campaign</a>")
+        self.assertNotContains(live_response, "(unpublished)")
 
     def test_quest_update__new_prerequisite_names_the_map_the_quest_joins(self):
         """Giving a quest a prerequisite that sits on a map puts the quest on that map, so the
@@ -5594,6 +5635,40 @@ class DetailViewTest(ByteDeckTenantTestCase):
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
         self.assertNotContains(response, 'Export this quest to the Library')
 
+    def test_detail__staff_see_why_students_cannot_start_the_quest(self):
+        """A teacher viewing a quest students can't start gets a banner at the top of the page
+        listing each reason, so a missing quest isn't a mystery (#2966)."""
+        self.client.force_login(self.test_teacher)
+        campaign = baker.make(Category, title="Photography", published=False)
+        quest = baker.make(Quest, name="Light and Shadow", published=False, campaign=campaign)
+
+        response = self.client.get(quest.get_absolute_url())
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        banner = soup.select_one(f'#quest-unavailable-{quest.id}')
+        self.assertIsNotNone(banner)
+        self.assertIn("Students can't start this quest", banner.get_text())
+        self.assertEqual(
+            [li.get_text(strip=True) for li in banner.select('li')],
+            ["It's a draft: Published isn't ticked on its form.", "Its campaign, Photography, isn't published."],
+        )
+        # It comes before the quest's own content.
+        content = response.content.decode()
+        self.assertLess(content.index(f'quest-unavailable-{quest.id}'), content.index(f'quest-info-{quest.id}'))
+
+    def test_detail__no_banner_for_a_quest_students_can_start(self):
+        """A quest open to students gets no banner, even for a teacher (#2966)."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(self.quest.get_absolute_url())
+        self.assertNotContains(response, f'quest-unavailable-{self.quest.id}')
+        self.assertNotContains(response, "Students can't start this quest")
+
+    def test_detail__students_get_no_banner(self):
+        """The banner is for staff: a student opening a draft quest's page doesn't get it (#2966)."""
+        quest = baker.make(Quest, published=False)
+        response = self.client.get(quest.get_absolute_url())
+        self.assertNotContains(response, f'quest-unavailable-{quest.id}')
+
 
 class ApproveViewTest(ByteDeckTenantTestCase):
     """ Tests for:
@@ -6411,6 +6486,21 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
         self.assertEqual(searched.context['num_available'], unsearched.context['num_available'])
         self.assertEqual(searched.context['num_matching_quests'], 1)
         self.assertGreater(searched.context['num_available'], 1)
+
+    def test_quest_list__the_archived_tab_marks_a_quest_expired_only_by_its_dates(self):
+        """The Archived tab colours a row as expired only when the quest's own dates have passed.
+
+        Archiving says nothing about a quest's dates, so an archived quest with no expiry reads
+        as current, and one whose expiry date has passed reads as expired (#2973).
+        """
+        no_expiry = baker.make(Quest, name='Archived, no expiry', archived=True, date_expired=None, time_expired=None)
+        past_expiry = baker.make(Quest, name='Archived, past expiry', archived=True, date_expired=date(2000, 1, 1))
+
+        response = self.client.get(reverse('quests:archived'))
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        self.assertNotIn('warning', soup.find(id=f'heading-quest-{no_expiry.id}')['class'])
+        self.assertIn('warning', soup.find(id=f'heading-quest-{past_expiry.id}')['class'])
 
 
 class SubmissionTabSortTests(ByteDeckTenantTestCase):

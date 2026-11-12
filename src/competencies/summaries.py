@@ -4,9 +4,9 @@ assessment of every competency on their competencies summary page.
 A course's competencies are those carrying its official course label (Competency.course). The courses
 shown for a student are the courses they are registered in this semester that have chosen a
 competency set (Course.competency_set), whether or not they have been assessed in them yet, plus any
-other set they have evidence in (e.g. the BC Core Competencies, which no course chooses as its set).
-Within a course, the competencies counted are its active ones, plus any deactivated ones the student
-already has evidence for.
+other set they have a level in (e.g. the BC Core Competencies, which no course chooses as its set),
+from evidence or a teacher's override. Within a course, the competencies counted are its active
+ones, plus any deactivated ones the student already has a level in.
 """
 
 import math
@@ -24,6 +24,7 @@ from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
 
 from .models import Competency, CompetencyAssessment, ProficiencyLevel
+from .rollup import current_levels, latest_self_assessments
 
 
 #: The three-letter code shown for each level on a chip where many share a row (see level_codes).
@@ -71,14 +72,20 @@ class CourseCompetencies:
     Attributes:
         label (str): the official course label, e.g. "ADST 9" ('' for competencies with none).
         registration (CourseStudent or None): the student's registration in a course that chose this
-            set, or None for a set they have evidence in outside their courses.
+            set, or None for a set they have a level in outside their courses.
         competencies (list[Competency]): the course's competencies, in category and name order.
-        levels (dict[int, int]): competency pk to the student's current level, for those assessed.
+        levels (dict[int, int]): competency pk to the student's current level, for those with one.
+        overrides (dict[int, CompetencyOverride]): competency pk to the teacher's override in force,
+            for those whose current level a teacher has set.
+        self_assessed (dict[int, CompetencyAssessment]): competency pk to the student's latest
+            self-assessment, shown beside their current level and never counted in it.
     """
     label: str
     registration: object = None
     competencies: list = field(default_factory=list)
     levels: dict = field(default_factory=dict)
+    overrides: dict = field(default_factory=dict)
+    self_assessed: dict = field(default_factory=dict)
 
     @property
     def title(self):
@@ -121,10 +128,11 @@ class CourseCompetencies:
 
 def course_competencies(student):
     """ The student's competencies, course by course: first each of their current courses that has a
-    competency set, then each other set they have evidence in, by label.
+    competency set, then each other set they have a level in, by label.
 
-    Current levels come from the roll-up (CompetencyAssessmentQuerySet.current). It takes three
-    queries, however many courses and competencies there are.
+    Current levels come from the roll-up (competencies.rollup.current_levels), and a set the student
+    has a level in only through a teacher's override, or has only assessed themself in, shows too. It
+    takes five queries, however many courses and competencies there are.
 
     Args:
         student (User): the student.
@@ -132,24 +140,78 @@ def course_competencies(student):
     Returns:
         list[CourseCompetencies]: one per course whose set has at least one competency.
     """
-    current = CompetencyAssessment.objects.filter(user=student).current().select_related('competency')
-    levels = {assessment.competency_id: assessment.level for assessment in current}
+    levels, overrides = current_levels(user=student)
+    levels, overrides = levels[student.pk], overrides[student.pk]
+    self_assessed = latest_self_assessments(user=student)[student.pk]
     registrations = [
         registration for registration in CourseStudent.objects.current_courses(student).select_related('course', 'block')
         if registration.course.competency_set
     ]
     registered_labels = {registration.course.competency_set for registration in registrations}
-    labels = registered_labels | {assessment.competency.course for assessment in current}
+    # the sets the student has a level or a self-assessment in, read in the same query as the competencies
+    assessed_labels = Competency.objects.filter(pk__in=[*levels, *self_assessed]).values('course')
 
-    competencies = Competency.objects.filter(course__in=labels).filter(Q(active=True) | Q(pk__in=list(levels)))
+    competencies = Competency.objects.filter(
+        Q(course__in=registered_labels) | Q(course__in=assessed_labels)
+    ).filter(Q(active=True) | Q(pk__in=list(levels)))
     by_label = {label: list(group) for label, group in groupby(competencies, key=lambda competency: competency.course)}
 
     courses = [
-        CourseCompetencies(registration.course.competency_set, registration, by_label[registration.course.competency_set], levels)
+        CourseCompetencies(
+            registration.course.competency_set, registration, by_label[registration.course.competency_set], levels, overrides, self_assessed,
+        )
         for registration in registrations if registration.course.competency_set in by_label
     ]
-    courses += [CourseCompetencies(label, None, by_label[label], levels) for label in by_label if label not in registered_labels]
+    courses += [
+        CourseCompetencies(label, None, by_label[label], levels, overrides, self_assessed) for label in by_label if label not in registered_labels
+    ]
     return courses
+
+
+def course_matrix(course, block=None):
+    """ A course's students by its competencies, for the staff competency matrix: each student
+    registered in the course in an open semester (students only, not staff or test accounts, and only
+    active users), optionally in one block, by last name, with their current level in each competency
+    of the course's set.
+
+    Each row is the same CourseCompetencies the student's own competencies page shows for the course,
+    so its average and current level of proficiency match it: the set's active competencies, plus any
+    deactivated ones that student has a level in. The columns are the set's active competencies plus
+    any deactivated ones some row has a level in.
+
+    It takes five queries, however many students and competencies there are.
+
+    Args:
+        course (Course): the course, which has a competency set.
+        block (Block or None): only the students in this block, or None for all of them.
+
+    Returns:
+        tuple: the columns (list[Competency], in category and name order) and the rows
+        (list[CourseCompetencies], one per registration).
+    """
+    registrations = CourseStudent.objects.get_queryset().in_open_semesters().get_students_only().filter(course=course, user__is_active=True)
+    if block is not None:
+        registrations = registrations.filter(block=block)
+    registrations = list(registrations.select_related('user__profile', 'block').order_by('user__last_name', 'user__first_name', 'user__username'))
+
+    students = {'user_id__in': [registration.user_id for registration in registrations], 'competency__course': course.competency_set}
+    levels, overrides = current_levels(**students)
+    self_assessed = latest_self_assessments(**students)
+    assessed = {competency_id for student_levels in levels.values() for competency_id in student_levels}
+
+    columns = list(Competency.objects.filter(course=course.competency_set).filter(Q(active=True) | Q(pk__in=assessed)))
+    rows = [
+        CourseCompetencies(
+            course.competency_set,
+            registration,
+            [competency for competency in columns if competency.active or competency.pk in levels[registration.user_id]],
+            levels[registration.user_id],
+            overrides[registration.user_id],
+            self_assessed[registration.user_id],
+        )
+        for registration in registrations
+    ]
+    return columns, rows
 
 
 @dataclass
@@ -165,12 +227,18 @@ class Evidence:
     description: str
     url: str = None
 
+    @property
+    def self_assessed(self):
+        """ Whether it is the student's assessment of themself, shown apart and never counted. """
+        return self.assessment.assessed_by_id == self.assessment.user_id
+
 
 def evidence_by_competency(student):
-    """ Every assessment of the student, oldest first, grouped by competency, each with what it was
-    given for: a quest submission links to the submission and is described by its quest's name; any
-    other source links to its own page, when it has one. Evidence whose submission is gone says its
-    quest was deleted, and evidence with no source, or whose other source is gone, has no link.
+    """ Every assessment of the student, oldest first, grouped by competency, their self-assessments
+    among them (Evidence.self_assessed), each with what it was given for: a quest submission links to
+    the submission and is described by its quest's name; any other source links to its own page, when
+    it has one. Evidence whose submission is gone says its quest was deleted, and evidence with no
+    source, or whose other source is gone, has no link.
 
     The sources are prefetched, a submission's through the base manager so that submissions of quests
     since archived or unpublished still name their quest, so the queries don't grow with the evidence.

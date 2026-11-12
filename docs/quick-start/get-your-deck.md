@@ -21,6 +21,9 @@ Press **Create** and wait a moment while your deck is built.
 Once your deck is ready, you land on its sign-in page, and ByteDeck emails you your username and password:
 
 ![The Sign In page of a new deck, saying "Deck created! Check your email for login credentials."](../images/quick-start/sign-in-created.png)
+/// caption
+Your new deck's sign-in page, straight after it's built.
+///
 
 Your username is your first and last name with a dot between them, for example `jordan.rivera`. Sign in with it and the password from the email.
 
@@ -31,11 +34,13 @@ Your username is your first and last name with a dot between them, for example `
 
 The emailed password works, but change it to one only you know:
 
+![The owner's profile heading, with a blue settings button, a yellow key button (marked 2) and a green portfolio button](../images/quick-start/profile-change-password.png)
+/// caption
+The buttons beside your name on your profile.
+///
+
 1. Choose **Profile** in the menu on the left.
 2. Press the yellow key button beside your name.
-
-    ![The owner's profile heading, with a blue settings button, a yellow key button and a green portfolio button](../images/quick-start/profile-change-password.png)
-
 3. Enter the emailed password, then your new password twice, and press **Change Password**.
 
 Your email address is already confirmed, so if you ever forget your password you can reset it yourself with **Forgot your password?** on the sign-in page.
@@ -45,6 +50,9 @@ Your email address is already confirmed, so if you ever forget your password you
 After you sign in, you land on **Quest Approvals**, the page where your students' work waits for you. It's empty for now. Across the top of every page, a banner tells you how long your trial has left and how many students you are using:
 
 ![The trial banner: "Trial Mode: this deck is on a free trial until 6 Dec 2026 (60 days remain). You are using 0 out of max 5 current students."](../images/quick-start/trial-banner.png)
+/// caption
+The trial banner, across the top of every page while your deck is on its free trial.
+///
 
 **Subscription details** in the banner (also **Admin > Subscription**) shows your trial and how to subscribe when you need more students or more time.
 

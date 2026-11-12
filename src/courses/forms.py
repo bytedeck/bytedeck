@@ -11,6 +11,7 @@ from django_select2.forms import Select2Widget
 
 from competencies.models import Competency
 from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
+from .report_cards import DEFAULT_PROFICIENCY_XP, INSUFFICIENT_EVIDENCE, proficiency_scale
 from siteconfig.models import SiteConfig
 from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
 
@@ -487,3 +488,53 @@ class CourseForm(forms.ModelForm):
             choices=[('', '---------')] + [(label, label) for label in sorted(labels, key=str.lower)],
             help_text=Course._meta.get_field('competency_set').help_text,
         )
+
+
+class ProficiencyScaleForm(forms.Form):
+    """The XP at which each level of the proficiency scale starts, for a group's report card data.
+
+    It is sent by GET from the Report card data page, so the numbers a teacher chose travel with
+    each download. Not sent at all, it stands for the default scale.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Adds a whole-number field per level, named for the level's number and labelled with the
+        deck's own name for it."""
+        super().__init__(*args, **kwargs)
+        labels = SiteConfig.get().get_competency_scale_labels()
+        for level, xp in DEFAULT_PROFICIENCY_XP.items():
+            self.fields[f"level_{level.value}"] = forms.IntegerField(
+                min_value=0, initial=xp, label=f"{labels[level]} from",
+                widget=forms.NumberInput(attrs={"class": "form-control"}),
+            )
+
+    def clean(self):
+        """Checks that the levels are in order.
+
+        Returns:
+            dict: the form's cleaned data, unchanged.
+
+        Raises:
+            ValidationError: if a level starts at no more XP than the level before it.
+        """
+        cleaned_data = super().clean()
+        starts = [cleaned_data.get(name) for name in self.fields]
+        if None not in starts and starts != sorted(set(starts)):
+            raise forms.ValidationError("Each level has to start at more XP than the level before it.")
+        return cleaned_data
+
+    def scale(self):
+        """The proficiency scale to place students on.
+
+        Returns:
+            list[tuple]: the scale this form was filled in with (it must be valid), or the default
+            scale when it was not sent (see courses.report_cards.proficiency_scale).
+        """
+        if not self.is_bound:
+            return proficiency_scale()
+        return proficiency_scale({level: self.cleaned_data[f"level_{level.value}"] for level in DEFAULT_PROFICIENCY_XP})
+
+    @property
+    def below_first_level(self):
+        """What a student with less XP than the first level is given, for the page to say so."""
+        return INSUFFICIENT_EVIDENCE

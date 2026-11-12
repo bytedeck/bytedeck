@@ -262,7 +262,7 @@ class CourseFormCompetencySetTest(ByteDeckTenantTestCase):
 
     def test_course_update__saves_the_competency_set(self):
         """ A course named its own way is given a competency set on its edit page, and the course
-        list shows it """
+        list shows it (as a link to the course's competency matrix) """
         course = baker.make(Course, title='Hackerspace Design')
         self.client.force_login(self.teacher)
 
@@ -274,4 +274,6 @@ class CourseFormCompetencySetTest(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:course_list'))
         course.refresh_from_db()
         self.assertEqual(course.competency_set, 'ADST 9')
-        self.assertContains(self.client.get(reverse('courses:course_list')), '<td>ADST 9</td>')
+        matrix = f"{reverse('competencies:matrix')}?course={course.pk}"
+        link = f'<a href="{matrix}" title="See this course\'s students by competency">ADST 9</a>'
+        self.assertContains(self.client.get(reverse('courses:course_list')), link)

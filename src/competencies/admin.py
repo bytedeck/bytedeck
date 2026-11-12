@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
-from .models import Competency, CompetencyAssessment, QuestCompetency
+from .models import Competency, CompetencyAssessment, CompetencyOverride, QuestCompetency
 
 
 class CompetencyAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
@@ -35,6 +35,17 @@ class CompetencyAssessmentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.Model
     date_hierarchy = 'timestamp'
 
 
+class CompetencyOverrideAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    """ Admin for teachers' overrides of students' levels: every record, including those since replaced
+    or cleared (a record with no level), so the history of overrides can be audited. """
+    list_display = ('user', 'competency', 'level', 'set_by', 'timestamp', 'note')
+    list_filter = ('level',)
+    list_select_related = ('user', 'competency', 'set_by')
+    search_fields = ('user__username', 'competency__name', 'note')
+    date_hierarchy = 'timestamp'
+
+
 admin.site.register(Competency, CompetencyAdmin)
 admin.site.register(QuestCompetency, QuestCompetencyAdmin)
 admin.site.register(CompetencyAssessment, CompetencyAssessmentAdmin)
+admin.site.register(CompetencyOverride, CompetencyOverrideAdmin)

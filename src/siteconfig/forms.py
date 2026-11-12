@@ -33,20 +33,22 @@ class SiteConfigForm(forms.ModelForm):
     ]
 
     # Only shown when the competencies feature is enabled.
-    competency_label_fields = [
+    competency_fields = [
         "competency_label_level_1",
         "competency_label_level_2",
         "competency_label_level_3",
         "competency_label_level_4",
+        "competency_rollup",
+        "competency_rollup_count",
     ]
 
     def __init__(self, *args, **kwargs):
         """Build the Site Configuration form and its crispy layout.
 
         Only the deck owner can change the settings in `advanced_fields`, so they're disabled for
-        anyone else. The proficiency scale label fields are only included once the competencies
-        feature is enabled (otherwise they're removed from the form entirely), and then join the
-        owner-only advanced fields. The Google sign-in setting is always disabled on this form, and
+        anyone else. The competency settings (the proficiency scale labels and how a current level is
+        worked out) are only included once the competencies feature is enabled (otherwise they're
+        removed from the form entirely), and then join the owner-only advanced fields. The Google sign-in setting is always disabled on this form, and
         the two Shared Library settings and the competencies flag are labelled as experimental.
 
         Args:
@@ -58,13 +60,13 @@ class SiteConfigForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        # The proficiency scale labels are meaningless (and just clutter) until
+        # The competency settings are meaningless (and just clutter) until
         # the competencies feature is turned on.
         self.advanced_fields = list(self.advanced_fields)
         if self.instance.pk and self.instance.enable_competencies:
-            self.advanced_fields += self.competency_label_fields
+            self.advanced_fields += self.competency_fields
         else:
-            for field_name in self.competency_label_fields:
+            for field_name in self.competency_fields:
                 del self.fields[field_name]
 
         if not is_deck_owner:

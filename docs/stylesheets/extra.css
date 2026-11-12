@@ -1,5 +1,29 @@
-/* Screenshots are mostly white, like the page: a thin border and rounded corners set them apart. */
+/* Screenshots are mostly white, like the page, so each one is framed the way Bootstrap's
+   .img-thumbnail frames an image: a little padding, a border, rounded corners and a soft shadow. */
 .md-typeset img {
-  border: 1px solid var(--md-default-fg-color--lightest);
-  border-radius: 4px;
+  padding: 4px;
+  background-color: #fff;
+  border: 1px solid #c8ccd1;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+}
+
+[data-md-color-scheme="slate"] .md-typeset img {
+  background-color: var(--md-default-fg-color--lightest);
+  border-color: var(--md-default-fg-color--lighter);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* A screenshot is a figure with its caption under it (the `/// caption` block). Material keeps
+   captions to a narrow column; let them run as wide as a typical screenshot, and tuck them closer. */
+.md-typeset figure {
+  margin-top: 1.2em;
+  margin-bottom: 1.2em;
+}
+
+.md-typeset figcaption {
+  max-width: 40rem;
+  margin-top: 0.6em;
+  margin-bottom: 0;
+  color: var(--md-default-fg-color--light);
 }

@@ -1,7 +1,8 @@
 {% load comment_tags competency_tags %}
-  {% comment %} The competency levels an approval records, for a quest with competencies on a deck
-     that has them enabled: inside the form, so the Approve button posts them. {% endcomment %}
-  {% if not s.is_approved %}{% competency_approval_levels s %}{% endif %}
+  {% comment %} The competency levels an approval records (and, on an approved submission, that a
+     comment changes), for a quest with competencies on a deck that has them enabled: inside the
+     form, so the buttons post them. {% endcomment %}
+  {% competency_approval_levels s %}
   <div class="btn-group" role="group">
 
     {% if not s.is_approved %}

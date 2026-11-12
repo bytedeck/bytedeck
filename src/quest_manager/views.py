@@ -38,7 +38,16 @@ from badges.models import BadgeAssertion
 from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
-from competencies.assessments import assessments_comment_html, record_approval_assessments
+from competencies.assessments import (
+    assessments_comment_html,
+    describe_self_assessments,
+    level_changes,
+    posted_self_assessments,
+    prefetch_submission_levels,
+    record_approval_assessments,
+    record_level_changes,
+    record_self_assessments,
+)
 from competencies.forms import quest_competency_initial
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
@@ -1496,8 +1505,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         takes in notification_kwargs and updates 'verb' and 'icon' keys
         returns default text incase staff submits without any comments
 
-        An approval that changes the submission to approved also records its competency levels,
-        keeping what it recorded in self.recorded_assessments for the approving comment.
+        An approval that changes the submission to approved also records its competency levels, and
+        a comment on an approved submission the levels the teacher changed, keeping what it
+        recorded in self.recorded_assessments for the comment.
         """
         blank_comment_text = ""
         if "approve_button" in self.request.POST:
@@ -1530,9 +1540,17 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
                 + "</span>"
             )
-            # nothing stands in: a comment with no text of its own carries a file or a badge,
-            # since one with none of the three is never sent (see has_nothing_to_send)
+            # nothing stands in: a comment with no text of its own carries a file, a badge or
+            # changed competency levels, since one with none of them is never sent (see
+            # has_nothing_to_send)
             blank_comment_text = ""
+            # A comment on an approved submission re-rates it: the levels the teacher changed on the
+            # form replace the ones it had, and the comment shows them (#2955). Checked under the
+            # row's lock, so a return committing at the same moment doesn't leave a returned
+            # submission re-rated.
+            with transaction.atomic():
+                if lock_is_approved(self.submission):
+                    self.recorded_assessments = record_level_changes(self.submission, self.request.user, self.request.POST)
         elif "return_button" in self.request.POST:
             note_verb = "returned"
             icon = (
@@ -1585,14 +1603,15 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
         Approving, returning and skipping are messages in themselves, so with no comment the
         deck's stand-in text goes with them. A comment is only its content: with no text, no
-        file and no badge, it would tell the student their teacher had commented and show them
-        nothing.
+        file, no badge and, on an approved submission, no changed competency level (#2955), it
+        would tell the student their teacher had commented and show them nothing.
 
         Only the attachments field's files are saved with a comment, so a file posted under any
         other name is nothing to send.
 
         Returns:
-            bool: True for the Comment button with an empty reply, no attachment and no badge.
+            bool: True for the Comment button with an empty reply, no attachment, no badge and no
+            level changed.
         """
         if "comment_button" not in self.request.POST:
             return False
@@ -1601,6 +1620,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             is_empty_html(self.form.cleaned_data.get("comment_text"))
             and not self.request.FILES.getlist("attachments")
             and not badges
+            and not (self.submission.is_approved and level_changes(self.submission, self.request.POST))
         )
 
     # misc.
@@ -1737,7 +1757,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
-        # the competency levels an approval records (set by handle_form_button), for its comment
+        # the competency levels an approval or a re-rating comment records (set by handle_form_button), for the comment
         self.recorded_assessments = []
 
         if self.form.is_valid():
@@ -2184,10 +2204,12 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
                 award_choices=award_choices,
                 auto_id=f"id_quick_reply_{submission.id}_%s",
             )
-        # Each row's approve buttons show its quest's competency levels, so the quests' links are
-        # fetched for the whole page at once rather than once per row.
+        # Each row's approve buttons show its quest's competency levels, starting on the ones the
+        # submission already has, so the quests' links and the submissions' levels are fetched for
+        # the whole page at once rather than once per row.
         if competencies_enabled:
             prefetch_related_objects(list(tab["submissions"]), "quest__quest_competencies")
+            prefetch_submission_levels(tab["submissions"])
 
     # Where that button's two halves go, on the tabs that list one teacher's groups by default:
     # (their own groups, every group). A quest's own past approvals are every teacher's, so it
@@ -2553,7 +2575,12 @@ def complete(request, submission_id):
     # while the earlier comment still shows the old. Only a hand-in records them, since that is
     # the only time they take effect: a comment on work already handed in changes neither.
     choices = []
+    self_assessed = []
     if "complete" in request.POST:
+        # levels the student chose for their self-assessment, when the quest asks for one: listed
+        # with the other choices, and recorded once the quest is handed in, below
+        self_assessed = posted_self_assessments(submission, request.POST)
+        choices.extend(escape(text) for text in describe_self_assessments(self_assessed))
         if isinstance(form, SubmissionFormCustomXP):
             xp_requested = form.cleaned_data.get("xp_requested")
             choices.append(f"XP requested: {xp_requested}")
@@ -2660,6 +2687,7 @@ def complete(request, submission_id):
         submission.registration = form.cleaned_data.get('registration')
 
         submission.mark_completed(xp_requested)
+        record_self_assessments(submission, self_assessed)
         if not submission.quest.verification_required:
             # No teacher approves this quest, so its competency evidence is recorded at each
             # link's default level with no assessor (system-assessed): once, not again for a

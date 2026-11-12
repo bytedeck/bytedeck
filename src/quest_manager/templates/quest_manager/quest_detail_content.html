@@ -19,7 +19,7 @@
       <div class="col-sm-6">
         <ul class="list-unstyled">
           <li><h4>XP: {{quest.xp}}{% if quest.xp_can_be_entered_by_students %}+ <small>(student entered)</small>{% endif %}</h4></li>
-          <li>Campaign: {% if quest.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' quest.campaign.id %}">{{ quest.campaign }}</a>{% else %}{{ quest.campaign }}{% endif %}{% else %}-{% endif %}</li>
+          <li>Campaign: {% if quest.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' quest.campaign.id %}">{{ quest.campaign.title_with_status }}</a>{% else %}{{ quest.campaign.title_with_status }}{% endif %}{% else %}-{% endif %}</li>
           <li>Expiry: {{quest.date_expired}}</li>
           <li>Repeatable: {% if quest.max_repeats == 0 %}No
                  {% else %}
