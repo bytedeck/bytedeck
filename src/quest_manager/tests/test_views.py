@@ -649,6 +649,63 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, 'Quest Submission Form')
         self.assertNotContains(response, 'Quest No Longer Available')
 
+    PAST_WORK_HEADING = 'Past Submissions and Replies'
+
+    def test_submission__no_past_work_panel_for_a_student_with_nothing_in_it(self):
+        """A student starting a quest gets no "Past Submissions and Replies" panel while it would
+        be empty: no earlier submission of the quest and no replies yet (#2970)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertNotContains(response, self.PAST_WORK_HEADING)
+        self.assertNotContains(response, f"id='submission-comments-{self.quest1.id}'")
+
+    def test_submission__past_work_panel_for_a_student_once_there_is_a_reply(self):
+        """A reply on the submission brings the panel back, holding it (#2970)."""
+        Comment.objects.create_comment(
+            user=self.test_teacher, path=self.sub1.get_absolute_url(), text="Have another look at part 2", target=self.sub1,
+        )
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(response, self.PAST_WORK_HEADING)
+        self.assertContains(response, "Have another look at part 2")
+
+    def test_submission__no_past_work_panel_for_a_student_when_every_reply_is_flagged(self):
+        """A student doesn't see flagged comments, so flagged replies alone leave the panel out (#2970)."""
+        comment = Comment.objects.create_comment(
+            user=self.test_teacher, path=self.sub1.get_absolute_url(), text="Flagged reply", target=self.sub1,
+        )
+        comment.flag()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertNotContains(response, self.PAST_WORK_HEADING)
+
+    def test_submission__past_work_panel_for_a_student_with_an_earlier_submission(self):
+        """A repeat of a repeatable quest shows the panel, which links the earlier submission (#2970)."""
+        quest = baker.make(Quest, max_repeats=-1)
+        baker.make(QuestSubmission, user=self.test_student1, quest=quest, ordinal=1, is_completed=True, is_approved=True)
+        repeat = baker.make(QuestSubmission, user=self.test_student1, quest=quest, ordinal=2)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[repeat.pk]))
+
+        self.assertContains(response, self.PAST_WORK_HEADING)
+        self.assertContains(response, 'Previous Submission of this Repeatable Quest')
+
+    def test_submission__past_work_panel_always_shown_to_staff(self):
+        """Staff keep the panel on a submission with nothing in it yet: it also carries the time the
+        student took to complete the quest (#2970)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(response, self.PAST_WORK_HEADING)
+
     def test_submission__archived_quest_submission_is_not_viewable(self):
         """A submission of an archived quest is already not viewable (404), which matches the
         "no longer viewable" fallback the issue accepts for the archived case (issue #798).

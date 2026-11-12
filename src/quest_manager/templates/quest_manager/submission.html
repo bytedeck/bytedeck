@@ -67,6 +67,8 @@
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
 
+  {# left out for a student until there is an earlier submission or a reply to show (#2970) #}
+  {% if show_past_work %}
   <div id='submission-comments-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
       <h3 class="panel-title">Past Submissions and Replies</h3>
@@ -87,6 +89,7 @@
 
     </ul>
   </div>
+  {% endif %}
 
   {% comment %} Hide the whole submission form from students when the quest is no longer available
      (see the notice above, issue #798); staff keep it to manage the submission. {% endcomment %}
