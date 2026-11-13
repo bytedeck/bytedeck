@@ -1489,6 +1489,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission_form": self.form,
             "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
+            "show_past_work": _shows_past_work(self.request.user, self.submission),
             # Carried through the correction, so the resubmission lands where the first
             # attempt was going to.
             "next": self.safe_next(),
@@ -2511,6 +2512,7 @@ def complete(request, submission_id):
             "question_formset": question_formset,
             "form_media": _submission_page_media(page_form, question_formset),
             "anchor": "submission-form-" + str(submission.quest.id),
+            "show_past_work": _shows_past_work(request.user, submission),
         }
         return render(request, "quest_manager/submission.html", context)
 
@@ -3408,8 +3410,29 @@ def submission(request, submission_id=None, quest_id=None):
         # QuestSubmission manager excludes them from this view entirely, so they 404, which matches
         # the "no longer viewable" fallback the issue accepts for the archived case.)
         "quest_no_longer_available": not sub.quest.published,
+        "show_past_work": _shows_past_work(request.user, sub),
     }
     return render(request, "quest_manager/submission.html", context)
+
+
+def _shows_past_work(user, sub):
+    """Whether the submission page shows its "Past Submissions and Replies" panel to ``user``.
+
+    A student sees it only once it has something in it, an earlier submission of a repeatable
+    quest or a reply they can see (they aren't shown flagged ones), so a student starting a quest
+    doesn't get an empty section above the form (#2970). Staff always see it: it also carries how
+    long the student took to complete the quest.
+
+    Args:
+        user: the user viewing the page.
+        sub (QuestSubmission): the submission shown.
+
+    Returns:
+        bool: True to show the panel.
+    """
+    if user.is_staff:
+        return True
+    return sub.get_previous() is not None or sub.get_comments().filter(flagged=False).exists()
 
 
 @xml_http_request_required

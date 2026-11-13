@@ -649,6 +649,75 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, 'Quest Submission Form')
         self.assertNotContains(response, 'Quest No Longer Available')
 
+    PAST_WORK_HEADING = 'Past Submissions and Replies'
+
+    def test_submission__no_past_work_panel_for_a_student_with_nothing_in_it(self):
+        """A student starting a quest gets no "Past Submissions and Replies" panel while it would
+        be empty: no earlier submission of the quest and no replies yet (#2970)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertNotContains(response, self.PAST_WORK_HEADING)
+        self.assertNotContains(response, f"id='submission-comments-{self.quest1.id}'")
+
+    def test_submission__past_work_panel_for_a_student_once_there_is_a_reply(self):
+        """A reply on the submission brings the panel back, holding it (#2970)."""
+        Comment.objects.create_comment(
+            user=self.test_teacher, path=self.sub1.get_absolute_url(), text="Have another look at part 2", target=self.sub1,
+        )
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(response, self.PAST_WORK_HEADING)
+        self.assertContains(response, "Have another look at part 2")
+
+    def test_submission__no_past_work_panel_for_a_student_when_every_reply_is_flagged(self):
+        """A student doesn't see flagged comments, so flagged replies alone leave the panel out (#2970)."""
+        comment = Comment.objects.create_comment(
+            user=self.test_teacher, path=self.sub1.get_absolute_url(), text="Flagged reply", target=self.sub1,
+        )
+        comment.flag()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertNotContains(response, self.PAST_WORK_HEADING)
+
+    def test_submission__past_work_panel_for_a_student_with_an_earlier_submission(self):
+        """A repeat of a repeatable quest shows the panel, which links the earlier submission (#2970)."""
+        quest = baker.make(Quest, max_repeats=-1)
+        baker.make(QuestSubmission, user=self.test_student1, quest=quest, ordinal=1, is_completed=True, is_approved=True)
+        repeat = baker.make(QuestSubmission, user=self.test_student1, quest=quest, ordinal=2)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[repeat.pk]))
+
+        self.assertContains(response, self.PAST_WORK_HEADING)
+        self.assertContains(response, 'Previous Submission of this Repeatable Quest')
+
+    def test_submission__no_past_work_panel_when_the_earlier_submission_was_dropped(self):
+        """A repeat whose earlier submission was dropped has nothing to link, so the page is served
+        without the panel (#2970)."""
+        quest = baker.make(Quest, max_repeats=-1)
+        repeat = baker.make(QuestSubmission, user=self.test_student1, quest=quest, ordinal=2)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[repeat.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.PAST_WORK_HEADING)
+
+    def test_submission__past_work_panel_always_shown_to_staff(self):
+        """Staff keep the panel on a submission with nothing in it yet: it also carries the time the
+        student took to complete the quest (#2970)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(response, self.PAST_WORK_HEADING)
+
     def test_submission__archived_quest_submission_is_not_viewable(self):
         """A submission of an archived quest is already not viewable (404), which matches the
         "no longer viewable" fallback the issue accepts for the archived case (issue #798).
@@ -1552,6 +1621,23 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
             "Fix the problems below and submit the quest again.",
             [str(message) for message in get_messages(response.wsgi_request)],
         )
+
+    def test_complete__a_failed_submit_keeps_the_past_work_panel(self):
+        """The page re-rendered with a failed submit's errors still shows the student their
+        teacher's reply in the "Past Submissions and Replies" panel (#2970)."""
+        sub = self.custom_xp_submission()
+        Comment.objects.create_comment(
+            user=self.test_teacher, path=sub.get_absolute_url(), text="Try a longer password", target=sub,
+        )
+
+        # no xp_requested, which the custom-XP form requires, so the page re-renders with errors
+        response = self.client.post(
+            reverse('quests:complete', args=[sub.id]), data={'complete': True, 'comment_text': "<p>done</p>"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Past Submissions and Replies')
+        self.assertContains(response, "Try a longer password")
 
     def test_complete__several_attached_files_survive_a_failed_submit(self):
         """Every attachment is kept, and the notice reads for more than one file (#2427)."""
@@ -5727,6 +5813,16 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertTemplateUsed(response, 'quest_manager/submission.html')
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.is_approved)  # the invalid submission did nothing
+
+    def test_approve__invalid_form_keeps_the_past_work_panel(self):
+        """The page re-rendered with the teacher's errors keeps the "Past Submissions and Replies"
+        panel, which staff always see (#2970)."""
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True},
+        )
+
+        self.assertContains(response, 'Past Submissions and Replies')
 
     def test_approve__with_comment_quick_reply_form(self):
         """Approving via the quick reply form approves the submission, adds the comment, and notifies the student."""
