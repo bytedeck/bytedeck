@@ -11,6 +11,7 @@ from django.views.generic import ListView, CreateView, DetailView, UpdateView, D
 
 from comments.models import Document
 from portfolios.models import Portfolio, Artwork
+from questions.models import QuestionSubmission
 from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from portfolios.forms import PortfolioForm, ArtworkForm
 
@@ -181,33 +182,96 @@ def is_acceptable_vid_type(filename):
     return ext in vid_ext_list
 
 
+def add_file_to_portfolio(request, owner, stored_file, date):
+    """Put one of ``owner``'s image or video files into their portfolio, and go there.
+
+    Shared by every route that turns a file a student already uploaded into a piece of
+    artwork: a file attached to a quest comment (``art_add``) and a file answer to a
+    submission question (``art_add_answer``, issue #2573). The artwork always lands in
+    the owner's portfolio, so a teacher doing this adds it to the student's portfolio
+    rather than their own.
+
+    Args:
+        request (HttpRequest): the request, for the user doing the adding.
+        owner (User): whose work this is, and whose portfolio it goes into.
+        stored_file (FieldFile): the file, already saved.
+        date (datetime.date): the date to record on the artwork.
+
+    Returns:
+        HttpResponseRedirect: to the owner's portfolio.
+
+    Raises:
+        Http404: if the user is neither the owner nor staff, or the file is neither an
+            acceptable image nor an acceptable video.
+    """
+    if not (request.user.is_staff or owner == request.user):
+        raise Http404("I don't think you're supposed to be here....")
+
+    filename = os.path.basename(stored_file.name)
+
+    if is_acceptable_image_type(filename):
+        image_file = stored_file
+        video_file = None
+    elif is_acceptable_vid_type(filename):
+        image_file = None
+        video_file = stored_file
+    else:
+        raise Http404("Unsupported image or video format.  See your teacher if"
+                      " you think this format should be supported.")
+
+    portfolio, created = Portfolio.objects.get_or_create(user=owner)
+
+    Artwork.create(
+        title=os.path.splitext(filename)[0][:50],
+        image_file=image_file,
+        video_file=video_file,
+        portfolio=portfolio,
+        date=date,
+    )
+    return redirect('portfolios:detail', pk=portfolio.pk)
+
+
 @non_public_only_view
 @login_required
 def art_add(request, doc_id):
+    """Add a file attached to a quest comment to its owner's portfolio.
+
+    Args:
+        request (HttpRequest): the request.
+        doc_id (int): id of the ``comments.Document`` holding the file.
+
+    Returns:
+        HttpResponseRedirect: to the owner's portfolio.
+    """
     doc = get_object_or_404(Document, id=doc_id)
-    doc_user = doc.comment.user
-    if request.user.is_staff or doc_user == request.user:
-        filename = os.path.basename(doc.docfile.name)
+    return add_file_to_portfolio(request, doc.comment.user, doc.docfile, doc.comment.timestamp.date())
 
-        if is_acceptable_image_type(filename):
-            image_file = doc.docfile
-            video_file = None
-        elif is_acceptable_vid_type(filename):
-            image_file = None
-            video_file = doc.docfile
-        else:
-            raise Http404("Unsupported image or video format.  See your teacher if"
-                          " you think this format should be supported.")
 
-        portfolio, created = Portfolio.objects.get_or_create(user=doc_user)
+@non_public_only_view
+@login_required
+def art_add_answer(request, answer_id):
+    """Add a student's file answer to a submission question to their portfolio (#2573).
 
-        Artwork.create(
-            title=os.path.splitext(filename)[0][:50],
-            image_file=image_file,
-            video_file=video_file,
-            portfolio=portfolio,
-            date=doc.comment.timestamp.date(),
-        )
-        return redirect('portfolios:detail', pk=portfolio.pk)
-    else:
-        raise Http404("I don't think you're supposed to be here....")
+    A file_upload question is exactly where a teacher asks for the artwork or screencast
+    a portfolio exists to show off, so an answer offers the same action a file attached
+    to the comment box does.
+
+    Args:
+        request (HttpRequest): the request.
+        answer_id (int): id of the ``questions.QuestionSubmission`` holding the file.
+
+    Returns:
+        HttpResponseRedirect: to the student's portfolio.
+
+    Raises:
+        Http404: if the answer has no file (nothing to add).
+    """
+    answer = get_object_or_404(QuestionSubmission, id=answer_id)
+    if not answer.response_file:
+        raise Http404("That answer doesn't have a file to add.")
+    # A published answer carries the comment it was published with, and is dated from it the
+    # way a comment's attachment is. A draft row has no comment yet, so fall back to its own
+    # creation time rather than failing.
+    stamped = answer.comment.timestamp if answer.comment else answer.datetime_created
+    return add_file_to_portfolio(
+        request, answer.quest_submission.user, answer.response_file, stamped.date())
