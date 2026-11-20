@@ -26,7 +26,9 @@
     <label class="btn btn-default btn-sm" for="{{ field.id_for_label }}">
       <i class="fa fa-fw fa-paperclip"></i> Choose files
     </label>
-    <span class="help-block">{{ field.help_text|safe }}</span>
+    {% comment %} The id Django's widget names in its aria-describedby, so a screen reader reads
+       the limits out when the input is focused. {% endcomment %}
+    <span class="help-block" id="{{ field.auto_id }}_helptext">{{ field.help_text|safe }}</span>
     {% for error in field.errors %}
       <span class="help-block text-danger">{{ error }}</span>
     {% endfor %}

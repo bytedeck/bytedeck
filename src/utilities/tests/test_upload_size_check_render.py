@@ -49,7 +49,10 @@ _CHROMIUM = _find_chromium() if HAS_PLAYWRIGHT else None
 _PAGE = """<!doctype html><html><head><meta charset="utf-8"></head><body>
 <form id="form" enctype="multipart/form-data"
       onsubmit="window.submitted = (window.submitted || 0) + 1; return false;">
-  <div class="form-group"><input id="limited" type="file" data-max-size="100"></div>
+  <div class="form-group">
+    <input id="limited" type="file" data-max-size="100" aria-describedby="limited-help">
+    <p id="limited-help">Up to 100 bytes.</p>
+  </div>
   <div class="form-group"><input id="limited-several" type="file" multiple data-max-size="100"></div>
   <div class="form-group"><input id="several" type="file" multiple></div>
   <div class="form-group"><input id="other" type="file"></div>
@@ -117,9 +120,17 @@ class UploadSizeCheckRenderTest(SimpleTestCase):
         """The ids of the inputs whose change reached the page's own handler."""
         return self.page.evaluate("window.handledByPage")
 
+    def _aria(self, selector):
+        """The input `selector`'s aria-invalid and aria-describedby, and the id of the size note in
+        its form group (None for any that isn't there)."""
+        return self.page.eval_on_selector(selector, """input => {
+            const note = input.closest('.form-group').querySelector('.upload-size-note');
+            return [input.getAttribute('aria-invalid'), input.getAttribute('aria-describedby'), note && note.id];
+        }""")
+
     def test_upload_size_check__a_file_over_its_inputs_limit_is_taken_back_out(self):
         """A file over the input's own limit is taken out of it, with one note saying so, and the
-        page's own handler (a draft save) never hears of it."""
+        page's own handler (a draft save) never hears of it. The input points to the note."""
         self._choose("#limited", 200)
 
         self.assertEqual(self._chosen("#limited"), 0)
@@ -127,16 +138,34 @@ class UploadSizeCheckRenderTest(SimpleTestCase):
             "“file1.bin” is 200 bytes, over the 100 bytes limit for a file here. Choose a smaller file.",
         ])
         self.assertEqual(self._handled_by_page(), [])
+        # marked invalid and described by the note, keeping the description it already had, so a
+        # screen reader gives the reason whenever the input is focused
+        invalid, described_by, note_id = self._aria("#limited")
+        self.assertEqual(invalid, "true")
+        self.assertEqual(described_by, f"limited-help {note_id}")
 
     def test_upload_size_check__a_file_within_its_limit_is_kept(self):
         """A file within the limit stays chosen and reaches the page's handler, and it clears the
-        note an earlier, larger one left."""
+        note an earlier, larger one left, along with the input's pointer to it."""
         self._choose("#limited", 200)
         self._choose("#limited", 50)
 
         self.assertEqual(self._chosen("#limited"), 1)
         self.assertEqual(self._notes("#limited"), [])
         self.assertEqual(self._handled_by_page(), ["limited"])
+        # no longer invalid, and described by what described it before
+        self.assertEqual(self._aria("#limited"), [None, "limited-help", None])
+
+    def test_upload_size_check__an_input_the_server_marked_invalid_stays_marked(self):
+        """An input the server marked invalid, for an error on the last submit, is still marked
+        invalid after a refused file and then one within the limit: that error is still on the page."""
+        self.page.eval_on_selector("#limited", "input => input.setAttribute('aria-invalid', 'true')")
+        self._choose("#limited", 200)
+        self._choose("#limited", 50)
+
+        self.assertEqual(self._chosen("#limited"), 1)
+        self.assertEqual(self._notes("#limited"), [])
+        self.assertEqual(self._aria("#limited"), ["true", "limited-help", None])
 
     def test_upload_size_check__several_files_over_the_limit_are_counted(self):
         """When more than one chosen file is over the limit, the note says how many."""
