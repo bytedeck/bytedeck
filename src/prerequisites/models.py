@@ -157,6 +157,20 @@ class IsAPrereqMixin:
         """
         return str(self)
 
+    @classmethod
+    def prereq_choices(cls, keep=None):
+        """ The objects of this model a prerequisite form offers. Override it where some objects are
+        withdrawn from new use.
+
+        Args:
+            keep (IsAPrereqMixin or None): the object a prerequisite being edited already names, which
+                stays a valid choice for it even if withdrawn since.
+
+        Returns:
+            QuerySet: the choices; every object by default.
+        """
+        return cls.objects.all()
+
     def prereq_count_error(self, count):
         """ What is wrong with a prerequisite's count for this object, for the prerequisite form to
         refuse it; most objects take any count. Override it where only some counts make sense.

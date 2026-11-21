@@ -1,6 +1,8 @@
 from crispy_forms.helper import FormHelper
 from crispy_forms import layout
 
+from queryset_sequence import QuerySetSequence
+
 from utilities.forms import FutureModelForm
 from utilities.fields import AllowedGFKChoiceField
 
@@ -15,6 +17,11 @@ class PrereqGFKChoiceField(AllowedGFKChoiceField):
     """
     def get_allowed_model_classes(self):
         return Prereq.all_registered_model_classes()
+
+    def overridden_querysetsequence(self, querysetsequence):
+        """ Offers each prerequisite model's own choices (IsAPrereqMixin.prereq_choices), so objects a
+        model withdraws from new use, such as deactivated competencies, aren't offered or accepted. """
+        return QuerySetSequence(*[qs.model.prereq_choices() for qs in querysetsequence.get_querysets()])
 
 
 class PrereqFormInline(FutureModelForm):
@@ -52,6 +59,16 @@ class PrereqFormInline(FutureModelForm):
         super().__init__(*args, **kwargs)
         self.fields['prereq_object'].label = "Required Element"
         self.fields['or_prereq_object'].label = "Alternate Element"
+
+        # A prerequisite being edited keeps the elements it already names as valid choices, even one its
+        # model has since withdrawn from new use (a competency deactivated after the prerequisite was made).
+        for name, current in (('prereq_object', self.instance.get_prereq()), ('or_prereq_object', self.instance.get_or_prereq())):
+            if current is not None:
+                field = self.fields[name]
+                field.queryset = QuerySetSequence(*[
+                    qs.model.prereq_choices(keep=current) if isinstance(current, qs.model) else qs
+                    for qs in field.queryset.get_querysets()
+                ])
 
         count_attrs = {
             'class': 'form-control',

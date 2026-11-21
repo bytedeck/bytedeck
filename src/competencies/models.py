@@ -3,6 +3,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 from prerequisites.models import IsAPrereqMixin
 
@@ -137,6 +138,21 @@ class Competency(IsAPrereqMixin, models.Model):
         """ The competency among a prerequisite form's choices: its qualified name, since courses
         share wording. """
         return self.qualified_name
+
+    @classmethod
+    def prereq_choices(cls, keep=None):
+        """ The competencies a prerequisite form offers: the active ones, since a deactivated competency
+        is hidden from new use (as on the quest form), plus the one a prerequisite being edited already
+        names, so editing it keeps it.
+
+        Args:
+            keep (IsAPrereqMixin or None): the element the prerequisite being edited names.
+
+        Returns:
+            QuerySet: the competencies.
+        """
+        keep_pk = keep.pk if isinstance(keep, cls) else None
+        return cls.objects.filter(Q(active=True) | Q(pk=keep_pk))
 
     def prereq_count_error(self, count):
         """ A competency's count is a level, so only 1 to 4 make sense.

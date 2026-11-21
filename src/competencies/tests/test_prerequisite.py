@@ -225,6 +225,42 @@ class CompetencyPrerequisiteFormTest(CompetencyPrerequisiteMixin, ByteDeckTenant
 
         self.assertTrue(self.form(PRF, or_count=9, or_object=baker.make(Quest)).is_valid())
 
+    def test_choices__a_deactivated_competency_only_for_the_prerequisite_naming_it(self):
+        """ A deactivated competency isn't offered or accepted for a new prerequisite, as on the quest form,
+        but a prerequisite already naming it keeps it when edited (and still can't add another) """
+        from django.contrib.contenttypes.models import ContentType
+        competency_type = ContentType.objects.get_for_model(Competency).pk
+        retired = baker.make(Competency, course="ADST 9", name="Retired competency", active=False)
+        also_retired = baker.make(Competency, course="ADST 9", name="Another retired competency", active=False)
+
+        def choices(form, name):
+            """ The competencies a form's element field offers. """
+            return [obj for qs in form.fields[name].queryset.get_querysets() if qs.model is Competency for obj in qs]
+
+        def data(target, alternate=None):
+            """ A posted row requiring the target at Got It, with an optional alternate. """
+            row = {'prereq_object': f"{competency_type}-{target.pk}", 'prereq_count': PRF, 'or_prereq_count': PRF}
+            if alternate is not None:
+                row['or_prereq_object'] = f"{competency_type}-{alternate.pk}"
+            return row
+
+        new_form = PrereqFormInline(instance=Prereq(parent_object=self.quest))
+        self.assertIn(self.defining, choices(new_form, 'prereq_object'))
+        self.assertNotIn(retired, choices(new_form, 'prereq_object'))
+        refused = PrereqFormInline(data=data(retired), instance=Prereq(parent_object=self.quest))
+        self.assertFalse(refused.is_valid())
+        self.assertIn('prereq_object', refused.errors)
+
+        existing = self.require(PRF)
+        Prereq.objects.filter(pk=existing.pk).update(prereq_object_id=retired.pk)
+        existing.refresh_from_db()
+        editing = PrereqFormInline(data=data(retired), instance=existing)
+        self.assertTrue(editing.is_valid(), editing.errors)
+        self.assertNotIn(also_retired, choices(editing, 'or_prereq_object'))
+        with_another = PrereqFormInline(data=data(retired, alternate=also_retired), instance=existing)
+        self.assertFalse(with_another.is_valid())
+        self.assertIn('or_prereq_object', with_another.errors)
+
     def test_prereq_levels_tag__the_competency_type_and_levels(self):
         """ The form's level picker gets the competency content type and the deck's levels, Got It to start
         on, and nothing with competencies disabled """
@@ -323,11 +359,13 @@ class ConditionsUpdateElsewhereTest(CompetencyPrerequisiteMixin, ByteDeckTenantT
         self.assertEqual(self.queued_students(queued), [self.student.pk, self.other.pk])
 
     def test_queue_conditions_update_for_everyone__only_with_a_competency_prerequisite(self):
-        """ The recalculation for every student is queued while a prerequisite asks for a competency, and
-        not once none does """
+        """ The recalculation for every student is queued, forced past a sweep already under way, while a
+        prerequisite asks for a competency, and not once none does """
         with patch.object(update_quest_conditions_all_users, 'apply_async') as queued:
             queue_conditions_update_for_everyone()
-            queued.assert_called_once_with(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+            queued.assert_called_once_with(
+                args=[1], kwargs={'force': True}, queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN,
+            )
 
             Prereq.objects.all().delete()
             queue_conditions_update_for_everyone()

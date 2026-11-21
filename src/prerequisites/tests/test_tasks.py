@@ -290,6 +290,19 @@ class UpdateQuestConditionsAllUsersTaskTest(ByteDeckTenantTestCase):
             cache.delete('update_conditions_all_task_waiting')
         self.assertEqual(result, "Skipping task, already running.")
 
+    def test_update_quest_conditions_all_users__forced_runs_while_another_is_under_way(self):
+        """ A forced fresh run (a change that alters every student's conditions) dispatches its users
+        even while the debounce cache key is set """
+        cache.set('update_conditions_all_task_waiting', True, 60)
+        try:
+            with patch.object(update_quest_conditions_for_user, 'apply_async') as per_user_call, \
+                 patch.object(update_quest_conditions_all_users, 'apply_async'):
+                result = update_quest_conditions_all_users(start_from_user_id=1, force=True)
+        finally:
+            cache.delete('update_conditions_all_task_waiting')
+        self.assertIsNone(result)
+        self.assertEqual(per_user_call.call_count, 2)
+
     @override_settings(CELERY_TASKS_BUNCH_SIZE=1)
     def test_update_quest_conditions_all_users__dispatches_per_user_and_requeues(self):
         """Each user in the bunch gets a per-user recompute dispatched, and the task

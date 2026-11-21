@@ -205,13 +205,17 @@ def update_quest_conditions_for_user(self, user_id):
 
 
 @app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_all_users', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
-def update_quest_conditions_all_users(self, start_from_user_id):
+def update_quest_conditions_all_users(self, start_from_user_id, force=False):
     """Cycles through all quests for all users to update the cache of available quests (PreqAllConditionsMet)
     This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
 
     Args:
         start_from_user_id (int): the user id to start this bunch at. The recursive call
             passes the id after the last one it handled; a fresh sweep starts at 1.
+        force (bool): start a fresh sweep even while another is under way. A change that alters
+            every student's conditions (the deck's competency roll-up settings) needs every student
+            recalculated after it; a sweep already partway through has passed students it read before
+            the change, so skipping as a duplicate would leave them stale.
 
     Returns:
         str or None: the "Skipping task, already running." the celery log shows when a sweep
@@ -219,7 +223,7 @@ def update_quest_conditions_all_users(self, start_from_user_id):
         there is no result to report once a bunch has been dispatched.
     """
 
-    if start_from_user_id == 1 and cache.get('update_conditions_all_task_waiting'):
+    if start_from_user_id == 1 and not force and cache.get('update_conditions_all_task_waiting'):
         # Return value is displayed at the end of the celery log
         return "Skipping task, already running."
 

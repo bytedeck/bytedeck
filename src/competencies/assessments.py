@@ -191,11 +191,13 @@ def queue_conditions_update(*user_ids):
 def queue_conditions_update_for_everyone():
     """ Queue the recalculation of which quests every student can start, after something that changes
     everyone's levels at once (the deck's roll-up settings), when any prerequisite asks for a competency
-    level. """
+    level. The sweep is forced: one already under way may have passed students before the change. """
     from prerequisites.tasks import update_quest_conditions_all_users  # locally, as in queue_conditions_update
 
     if competency_prerequisites_exist():
-        update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+        update_quest_conditions_all_users.apply_async(
+            args=[1], kwargs={'force': True}, queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN,
+        )
 
 
 def record_level(submission, link, level, assessed_by):
