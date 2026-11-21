@@ -250,3 +250,4 @@ def update_quest_conditions_all_users(self, start_from_user_id, force=False):
     if users:
         user = User.objects.filter(id__gte=users[-1] + 1).values('id').first()
         user and self.apply_async(args=[user['id']], queue='default', countdown=5)
+    return None
