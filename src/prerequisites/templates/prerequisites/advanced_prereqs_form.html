@@ -1,6 +1,7 @@
 {% extends "prerequisites/base.html" %}
 {% load crispy_forms_tags %}
 {% load static %}
+{% load competency_tags %}
 
 {% block head %}
   {{ form.media.css }}
@@ -10,6 +11,7 @@
 {% block heading_inner %}Advanced Prerequisites Form{% endblock %}
 
 {% block content %}
+{% competency_prereq_levels as competency_levels %}
 <h3>Editing prereqs for: {{object.prereq_parent_str}}</h3>
 
 <div>Current prerequisites:</div>
@@ -30,7 +32,9 @@
       <dt>Count</dt>
       <dd>The minimum number of times the Required Element must be achieved.  This can be used for badges, or quests that are repeatable.
         For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 3, then they will meet the prerequisite if
-        they have earned 3 or more Nickels. For most element types this field is ignored.</dd>
+        they have earned 3 or more Nickels. For most element types this field is ignored.
+        {% if competency_levels %}For a competency, the count is the minimum level, chosen by name: the student meets the
+        prerequisite once their current level in the competency is that level or higher.{% endif %}</dd>
       <br>
       <dt>NOT</dt>
       <dd>This inverts the requirement.  For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 1,
@@ -59,6 +63,11 @@
 
 {% block js %}
 {{ form.media.js }}
+{% competency_prereq_levels as competency_levels %}
+{% if competency_levels %}
+  {{ competency_levels|json_script:"competency-prereq-levels" }}
+  <script src="{% static 'competencies/js/prereq-levels.js' %}?v=1.0"></script>
+{% endif %}
 <script>
 
   // Adds another blank row to the formset. The button itself is rendered server side, as one

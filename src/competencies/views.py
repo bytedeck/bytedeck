@@ -20,6 +20,7 @@ from siteconfig.models import SiteConfig
 
 from tenant.views import NonPublicOnlyViewMixin
 
+from .assessments import queue_conditions_update
 from .forms import CompetencyImportForm, CompetencyOverrideForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
 from .models import Competency, CompetencyOverride, ProficiencyLevel
@@ -466,6 +467,7 @@ class CompetencyOverrideView(NonPublicOnlyViewMixin, FormView):
             )
             override.full_clean()
             override.save()
+            queue_conditions_update(self.student.pk)
             if level is None:
                 messages.success(self.request, f"Cleared the override of {self.competency.name}: the level worked out from the evidence stands.")
             else:
