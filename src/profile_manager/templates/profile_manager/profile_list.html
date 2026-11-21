@@ -23,6 +23,10 @@
     <a class="btn btn-danger" href="{% url 'courses:block_delete' block_object.id %}" role="button" title="Delete this {% group_name %}">
         <i class="fa fa-trash-o"></i>
     </a>
+    <a class="btn btn-default" href="{% url 'courses:report_card_data' block_object.id %}" role="button"
+       title="Report card data for this {% group_name %}">
+        <i class="fa fa-file-text-o"></i>
+    </a>
     {% endif %}
     <!-- end of custom block user list header -->
 

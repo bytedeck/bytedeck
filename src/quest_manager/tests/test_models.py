@@ -313,6 +313,15 @@ class QuestTestModel(ByteDeckTenantTestCase):
             ["It closes at 10 a.m. every day, and opens again at midnight."],
         )
 
+    @freeze_time(datetime.datetime(2024, 1, 5, 12, tzinfo=timezone.get_current_timezone()))
+    def test_unavailable_reasons__archived_and_expired(self):
+        """An archived quest whose expiry has passed gives both reasons, since unarchiving it
+        would still leave it closed (#2973)."""
+        self.assertReasons(
+            baker.make(Quest, archived=True, date_expired=datetime.date(2024, 1, 4)),
+            ["It's archived.", "It expired at the end of Jan. 4, 2024."],
+        )
+
     def test_unavailable_reasons__several_at_once(self):
         """Every reason that applies is given, so fixing one doesn't leave the quest closed for a
         reason nobody was told about (#2966)."""
@@ -1023,6 +1032,32 @@ class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
         a quest with no expiry date has not expired."""
         quest = baker.make(Quest, date_expired=None)
         self.assertFalse(quest.expired())
+
+    def test_expired__archived_quest_with_no_expiry(self):
+        """An archived quest with no expiry date or time hasn't expired.
+
+        Archiving takes a quest out of students' tabs and says nothing about its dates,
+        which are all that expiry depends on (#2973).
+        """
+        quest = baker.make(Quest, archived=True, date_expired=None, time_expired=None)
+        self.assertFalse(quest.expired())
+
+    def test_expired__archived_quest_past_its_expiry_date(self):
+        """An archived quest whose expiry date has passed has expired, as it would unarchived."""
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        quest = baker.make(Quest, archived=True, date_expired=yesterday)
+        self.assertTrue(quest.expired())
+
+    def test_with_is_expired__judges_archived_quests_by_their_dates(self):
+        """The ``is_expired`` annotation reads an archived quest's dates, as ``expired()`` does."""
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        no_expiry = baker.make(Quest, archived=True, date_expired=None, time_expired=None)
+        past_expiry = baker.make(Quest, archived=True, date_expired=yesterday)
+
+        quests = Quest.objects.all_including_archived().filter(pk__in=[no_expiry.pk, past_expiry.pk])
+        is_expired = dict(quests.with_is_expired().values_list('pk', 'is_expired'))
+
+        self.assertEqual(is_expired, {no_expiry.pk: False, past_expiry.pk: True})
 
 
 class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
