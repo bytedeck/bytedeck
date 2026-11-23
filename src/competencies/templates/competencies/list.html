@@ -1,4 +1,5 @@
 {% extends "competencies/base.html" %}
+{% load competency_tags %}
 {% load static %}
 
 {% block head %}
@@ -43,7 +44,13 @@
                 <tr>
                     <th data-sortable='true' data-field='course' class="col-sm-2">Course</th>
                     <th data-sortable='true' data-field='category' class="col-sm-2">Category</th>
-                    <th data-sortable='true' data-field='name' class="col-sm-5">Competency</th>
+                    {% comment %}
+                    The name cell holds the competency's link, which bootstrap-table would sort and search
+                    by its markup (the link's address and title). The column sorts and searches on the
+                    plain name in the hidden column beside it instead.
+                    {% endcomment %}
+                    <th data-sortable='true' data-field='name' data-sort-name='name_sort' data-searchable='false' class="col-sm-5">Competency</th>
+                    <th data-field='name_sort' data-visible='false' data-switchable='false'></th>
                     <th data-sortable='true' data-field='source_id' class="col-sm-2">ID</th>
                     <th data-sortable='true' data-field='active' class="col-sm-1">Active</th>
                 </tr>
@@ -54,6 +61,7 @@
                     <tr>
                         <td>{{ competency.course }}</td>
                         <td>{{ competency.category }}</td>
+                        <td>{% competency_link competency %}</td>
                         <td>{{ competency.name }}</td>
                         <td><small>{{ competency.source_id|default_if_none:"" }}</small></td>
                         <td>
