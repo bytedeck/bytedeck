@@ -45,13 +45,16 @@
       <thead>
         <tr class="panel-heading">
           <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
-          <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
+          <th class="{% if show_competencies %}col-sm-4{% else %}col-sm-5{% endif %} col-xs-8" data-field="name" data-sortable="true">Quest</th>
           <th class="col-sm-1 col-xs-2 text-right"
               data-field="xp"
               data-sortable="true">XP</th>
           <th class="col-sm-1 hidden-xs text-center"
               data-field="tags"
               data-sortable="true">{{ config.custom_name_for_tag }}s</th>
+          {% if show_competencies %}
+          <th class="col-sm-3 hidden-xs" data-field="competencies">Competencies</th>
+          {% endif %}
           <th class="col-sm-2 hidden-xs" data-field="status_icons">
             <!-- status_icons -->
           </th>
@@ -78,11 +81,17 @@
                    src="{{ q.get_icon_url }}"
                    alt="icon" />
             </td>
-            <td class="col-sm-5 col-xs-8">{{ q.name }}</td>
+            <td class="{% if show_competencies %}col-sm-4{% else %}col-sm-5{% endif %} col-xs-8">{{ q.name }}</td>
             <td class="col-sm-1 col-xs-2 text-center">{{ q.xp }}</td>
             <td class="col-sm-1 hidden-xs text-center">
               <small>{{ q.tags.all|join:", "|default:"-" }}</small>
             </td>
+            {% if show_competencies %}
+            {# by name, cut short like the quest's own Quest Info list; the title gives each in full, with its course and category #}
+            <td class="col-sm-3 hidden-xs">
+              <small class="compact-lines">{% for link in q.active_competency_links %}<span title="{{ link.competency.qualified_name }}">{{ link.competency.name|truncatechars:50 }}</span>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</small>
+            </td>
+            {% endif %}
             <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted">
               {% if local_quest_import_ids and q.import_id in local_quest_import_ids %}
                 <i title="This quest already exists in your deck and any local changes will be overwritten." class="icon-spacing fa fa-fw fa-exclamation-triangle"></i>

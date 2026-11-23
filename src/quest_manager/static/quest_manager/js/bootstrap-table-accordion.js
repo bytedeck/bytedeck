@@ -135,6 +135,7 @@ function multiKeywordSearch(data, text) {
       row.name || "",
       row.campaign || "",
       row.tags || "",
+      row.competencies || "",
       row.xp || "",
       row.status_icons || "",
       row.group_name || "",
