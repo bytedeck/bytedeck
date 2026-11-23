@@ -205,21 +205,58 @@ cy.on('tap', '[href]', function(){
 });
 
 // A campaign's name runs up the left side of its box, outside the box itself, and cytoscape
-// doesn't count a click on a rotated label as a click on its node: the click lands on the
-// background. So a background click inside a linked campaign's bounds, label included, opens
-// that campaign the way a click on its box does (#2994).
-cy.on('tap', function(evt){
+// doesn't count a pointer over a rotated label as being over its node: it's over the background.
+// So the background handlers below find the linked campaign whose name is under the pointer, by
+// the name's own bounds (not the box's, so blank space beside the box stays background), and
+// treat it as the box: a click opens the campaign and hovering highlights it (#2994).
+var campaignAtName = function (position) {
+    return cy.nodes('.campaign[href]').filter(function (node) {
+        var bb = node.boundingBox({includeNodes: false, includeEdges: false, includeLabels: true, includeOverlays: false});
+        return position.x >= bb.x1 && position.x <= bb.x2 && position.y >= bb.y1 && position.y <= bb.y2;
+    })[0] || null;
+};
+
+cy.on('tap', function (evt) {
     if (evt.target !== cy) {
         return;
     }
-    var p = evt.position;
-    var campaign = cy.nodes('.campaign[href]').filter(function(node){
-        var bb = node.boundingBox({includeLabels: true});
-        return p.x >= bb.x1 && p.x <= bb.x2 && p.y >= bb.y1 && p.y <= bb.y2;
-    })[0];
+    var campaign = campaignAtName(evt.position);
     if (campaign) {
         window.location.href = campaign.data('href');
     }
+});
+
+// The campaign whose name the pointer is over, highlighted like a hovered link.
+var nameHoverCampaign = null;
+var setNameHover = function (campaign) {
+    if (campaign === nameHoverCampaign) {
+        return;
+    }
+    if (nameHoverCampaign) {
+        nameHoverCampaign.removeClass('link_hover');
+    }
+    nameHoverCampaign = campaign;
+    if (campaign) {
+        campaign.addClass('link_hover');
+    }
+    $('#cy').css('cursor', campaign ? 'pointer' : 'move');
+};
+
+cy.on('mousemove', function (evt) {
+    if (evt.target === cy) {
+        setNameHover(campaignAtName(evt.position));
+    } else if (nameHoverCampaign) {
+        // Onto an element, whose own mouseover handler sets the cursor and, if it's this
+        // campaign's box, keeps the highlight.
+        if (evt.target !== nameHoverCampaign) {
+            nameHoverCampaign.removeClass('link_hover');
+        }
+        nameHoverCampaign = null;
+    }
+});
+
+$('#cy').on('mouseleave', function () {
+    setNameHover(null);
 });
 
 cy.on('mouseover', '[href]', function(){
