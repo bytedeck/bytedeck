@@ -67,8 +67,17 @@
   </div>
 </div>
 
+<div id="submission-instructions-{{quest.id}}" class="panel panel-primary">
+  <div class="panel-heading">
+    <h3 class="panel-title">Submission Instructions</h3>
+  </div>
+  <div class="panel-body">
+    {{ quest.submission_details | safe }}
+  </div>
+</div>
+
 {% if user.is_staff %}
-{# right after Quest Details: the questions are part of what the quest asks for (#2922) #}
+{# after the Submission Instructions, the order a student meets them on their submission page (#2969) #}
 <div id="quest-questions-{{quest.id}}" class="panel panel-primary">
   <div class="panel-heading">
     {# the questions themselves are visible to students (they answer them when submitting); #}
@@ -102,15 +111,6 @@
   </div>
 </div>
 {% endif %}
-
-<div id="submission-instructions-{{quest.id}}" class="panel panel-primary">
-  <div class="panel-heading">
-    <h3 class="panel-title">Submission Instructions</h3>
-  </div>
-  <div class="panel-body">
-    {{ quest.submission_details | safe }}
-  </div>
-</div>
 
 {% if user.is_staff %}
 <div id="instructor-notes-{{quest.id}}" class="panel panel-primary">
