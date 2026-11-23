@@ -982,6 +982,13 @@ class CampaignNodeEmissionTest(ByteDeckTenantTestCase):
         node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
         self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
 
+    def test_add_to_campaign__campaign_node_links_to_its_quest_list(self):
+        """A campaign's box on the map carries an href to the campaign's page, the list of its
+        quests, so clicking the box opens it the way clicking a quest opens the quest (#2994)."""
+        nodes = self._emit()['nodes']
+        campaign_node = nodes[self._index_by_category(nodes, self.camp_a.id)]
+        self.assertEqual(campaign_node['data']['href'], self.camp_a.get_absolute_url())
+
     def test_elements_dict__nodes_are_emitted_in_deterministic_id_order(self):
         """Nodes come out in ascending-id order (A's campaign node before B's), the deterministic
         emission issue #2012 asked for, so a map looks the same between generations.

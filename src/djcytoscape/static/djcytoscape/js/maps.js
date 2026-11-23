@@ -204,6 +204,24 @@ cy.on('tap', '[href]', function(){
     window.location.href = this.data('href');
 });
 
+// A campaign's name runs up the left side of its box, outside the box itself, and cytoscape
+// doesn't count a click on a rotated label as a click on its node: the click lands on the
+// background. So a background click inside a linked campaign's bounds, label included, opens
+// that campaign the way a click on its box does (#2994).
+cy.on('tap', function(evt){
+    if (evt.target !== cy) {
+        return;
+    }
+    var p = evt.position;
+    var campaign = cy.nodes('.campaign[href]').filter(function(node){
+        var bb = node.boundingBox({includeLabels: true});
+        return p.x >= bb.x1 && p.x <= bb.x2 && p.y >= bb.y1 && p.y <= bb.y2;
+    })[0];
+    if (campaign) {
+        window.location.href = campaign.data('href');
+    }
+});
+
 cy.on('mouseover', '[href]', function(){
     $('#cy').css('cursor', 'pointer');
     this.addClass('link_hover');
