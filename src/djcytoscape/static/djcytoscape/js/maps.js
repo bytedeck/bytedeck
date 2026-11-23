@@ -264,8 +264,13 @@ cy.on('mouseover', '[href]', function(){
     this.addClass('link_hover');
 });
 cy.on('mouseout', '[href]', function(){
-    $('#cy').css('cursor', 'move');
-    this.removeClass('link_hover');
+    // The pointer can leave a campaign's box straight onto a campaign's name, and cytoscape
+    // reports the move onto the name (handled below) before this mouseout. Keep the feedback
+    // the name hover has already set (#2994).
+    if (this !== nameHoverCampaign) {
+        this.removeClass('link_hover');
+    }
+    $('#cy').css('cursor', nameHoverCampaign ? 'pointer' : 'move');
 });
 
 // nodes that don't link
