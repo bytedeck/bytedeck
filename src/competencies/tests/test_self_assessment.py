@@ -109,7 +109,7 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
 
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
         self.assertIn('<p>Done</p>', text)
-        self.assertIn('<li><b>Self-assessment of Critical Thinking: Got It</b></li>', text)
+        self.assertIn('<li><b>Self-assessment of <span title="Thinking: Critical Thinking">Critical Thinking</span>: Got It</b></li>', text)
         self.assertNotIn('Communicating', text)
 
     def test_hand_in__the_comment_names_the_course(self):
@@ -122,7 +122,9 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.hand_in(submission, **{self_assessment_field_name(self.thinking.pk): EXT})
 
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
-        self.assertIn('<li><b>Self-assessment of Critical Thinking (ADST 9): Extending</b></li>', text)
+        self.assertIn(
+            '<li><b>Self-assessment of <span title="ADST 9: Thinking: Critical Thinking">Critical Thinking</span> (ADST 9): Extending</b></li>', text,
+        )
 
     def test_hand_in__a_level_off_the_scale_is_ignored(self):
         """ Anything posted that isn't a level (a hand-made request) records nothing """
@@ -168,8 +170,8 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.self_assessed(submission), {self.thinking: EXT})
         self.assertEqual(submission_levels(submission), {self.thinking.pk: EXT, self.communicating.pk: PRF})
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
-        self.assertIn('Self-assessment of Critical Thinking: Extending', text)
-        self.assertNotIn('Self-assessment of Communicating', text)
+        self.assertIn('Critical Thinking</span>: Extending', text)
+        self.assertNotIn('Communicating</span>', text)
 
     def test_hand_in_again__a_competency_not_posted_keeps_its_level(self):
         """ A competency missing from the POST altogether (a hand-made request; the form always posts

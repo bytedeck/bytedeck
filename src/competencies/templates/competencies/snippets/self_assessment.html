@@ -13,7 +13,7 @@
       their own, and it doesn't count toward your level.)</small></p>
   {% for row in rows %}
   <div class="competency-approval-row">
-    <span class="competency-approval-name" title="{{ row.competency.qualified_name }}">{{ row.competency.name }}{% if row.competency.course %} <small class="text-muted">({{ row.competency.course }})</small>{% endif %}</span>
+    <span class="competency-approval-name" title="{{ row.competency.full_text }}">{{ row.competency.name }}{% if row.competency.course %} <small class="text-muted">({{ row.competency.course }})</small>{% endif %}</span>
     <div class="btn-group btn-group-xs" data-toggle="buttons" role="group" aria-label="{{ row.competency.name }}: your self-assessment">
       <label class="btn btn-default{% if row.skipped %} active{% endif %}">
         <input type="radio" name="{{ row.field_name }}" value="" autocomplete="off"{% if row.skipped %} checked{% endif %}>Skip
