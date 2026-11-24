@@ -54,7 +54,7 @@
                     <tr>
                         <td>{{ competency.course }}</td>
                         <td>{{ competency.category }}</td>
-                        <td>{{ competency.name }}</td>
+                        <td title="{{ competency.full_text }}">{{ competency.name }}</td>
                         <td><small>{{ competency.source_id|default_if_none:"" }}</small></td>
                         <td>
                             {% if competency.active %}
