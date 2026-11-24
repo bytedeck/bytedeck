@@ -41,6 +41,7 @@ from quest_manager.models import Category, CommonData, Quest, QuestSubmission, X
 from quest_manager.forms import SubmissionFormStaff
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
+from competencies.models import Competency, QuestCompetency
 from comments.models import Comment, Document
 from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
@@ -4614,6 +4615,66 @@ class CategoryViewTests(ByteDeckTenantTestCase):
             self.client.get(url)
 
         # without the prefetch + annotation each extra quest adds several queries
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def _enable_competencies(self):
+        """Turn the deck's competencies feature on."""
+        config = SiteConfig.get()
+        config.enable_competencies = True
+        config.full_clean()
+        config.save()
+
+    def test_CategoryDetail_view__lists_each_quests_competencies(self):
+        """With competencies on, the campaign's quest list has a Competencies column beside the tags,
+        naming each quest's active competencies; a deactivated one isn't listed, as it isn't on the
+        quest's own page (#2993)."""
+        self._enable_competencies()
+        campaign = baker.make(Category)
+        quest = baker.make(Quest, campaign=campaign)
+        active = baker.make(Competency, name="Collaborate with peers", course="Core", category="Communication")
+        retired = baker.make(Competency, name="Retired standard", active=False)
+        baker.make(QuestCompetency, quest=quest, competency=active)
+        baker.make(QuestCompetency, quest=quest, competency=retired)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+
+        self.assertContains(response, 'data-field="competencies"')
+        self.assertContains(response, 'title="Core: Communication: Collaborate with peers">Collaborate with peers<')
+        self.assertNotContains(response, "Retired standard")
+
+    def test_CategoryDetail_view__no_competencies_column_while_competencies_are_off(self):
+        """A deck without competencies gets no Competencies column (#2993)."""
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+
+        self.assertNotContains(response, 'data-field="competencies"')
+
+    def test_CategoryDetail_view__competencies_column_query_count_flat_as_quests_grow(self):
+        """The quests' competencies are fetched together, so the Competencies column doesn't cost a
+        query per quest (#2993)."""
+        self._enable_competencies()
+        self.client.force_login(self.test_teacher)
+        campaign = baker.make(Category)
+        competency = baker.make(Competency)
+        url = reverse('quests:category_detail', kwargs={"pk": campaign.pk})
+
+        def make_quests(n):
+            for _ in range(n):
+                baker.make(QuestCompetency, quest=baker.make(Quest, campaign=campaign), competency=competency)
+
+        make_quests(2)
+        self.client.get(url)  # warm per-request caches (SiteConfig, content types)
+        with CaptureQueriesContext(connection) as few_queries:
+            self.client.get(url)
+
+        make_quests(4)
+        with CaptureQueriesContext(connection) as many_queries:
+            self.client.get(url)
+
         self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
 
     def test_CategoryDetail_view__displays_published_status_when_false(self):

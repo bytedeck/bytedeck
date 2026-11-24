@@ -20,8 +20,8 @@ from django.contrib.postgres.aggregates import StringAgg
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
-    Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Q, Subquery, Sum, Value, When,
-    prefetch_related_objects,
+    Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Prefetch, Q, Subquery, Sum, Value,
+    When, prefetch_related_objects,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -49,6 +49,7 @@ from competencies.assessments import (
     record_self_assessments,
 )
 from competencies.forms import quest_competency_initial
+from competencies.models import QuestCompetency
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import (
@@ -216,7 +217,19 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         # queries per quest. This mirrors the quest list view (see quest_list()).
         quests = quests.select_related("campaign").prefetch_related("tags").with_is_expired()
 
+        # With competencies on, the list has a Competencies column beside the tags, naming each
+        # quest's active competencies as its own page does, fetched for every quest at once (#2993).
+        # The flag is set only here, so the Library's pages that share the list leave the column out.
+        show_competencies = SiteConfig.get().enable_competencies
+        if show_competencies:
+            quests = quests.prefetch_related(Prefetch(
+                'quest_competencies',
+                queryset=QuestCompetency.objects.filter(competency__active=True),
+                to_attr='active_competency_links',
+            ))
+
         kwargs['category_displayed_quests'] = quests
+        kwargs['show_competencies'] = show_competencies
 
         return super().get_context_data(**kwargs)
 
