@@ -17,7 +17,7 @@
       {% for competency, field, selected in levels.rows %}
       <tr data-competency-id="{{ competency.pk }}"{% if not selected %} class="hidden"{% endif %}>
         <td>
-          <label for="{{ field.id_for_label }}">{{ competency.name }}</label>
+          <label for="{{ field.id_for_label }}" title="{{ competency.full_text }}">{{ competency.name }}</label>
           {% if competency.course_and_category %}<br><small class="text-muted">{{ competency.course_and_category }}</small>{% endif %}
         </td>
         <td>
