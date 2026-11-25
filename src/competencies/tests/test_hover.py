@@ -51,7 +51,20 @@ class CompetencyHoverTextPagesTest(ByteDeckTenantTestCase):
         """ The staff list of competencies gives each name its full text on hover """
         response = self.client.get(reverse('competencies:list'))
 
-        self.assertContains(response, f'<td {self.title}>Communicating</td>')
+        self.assertContains(response, f'<td><span {self.title}>Communicating</span></td>')
+
+    def test_list__hover_text_not_on_a_table_cell(self):
+        """ The list's hover text sits inside the name cell, not on it, and the column sorts and searches on the plain name.
+
+        bootstrap-table rebuilds each row from the markup, reading a cell's title decoded and writing it back
+        unescaped, so a description with a double quote in it would break out of a cell's title attribute.
+        An inner element's attributes are copied as markup, escaped.
+        """
+        response = self.client.get(reverse('competencies:list'))
+
+        self.assertNotContains(response, '<td title=')
+        self.assertContains(response, "data-sort-name='name_sort' data-searchable='false'")
+        self.assertContains(response, '<td>Communicating</td>')
 
     def test_quest_info__each_name_with_its_full_text(self):
         """ The Quest Info's competencies give their full text on hover, description included """
