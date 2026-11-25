@@ -1786,3 +1786,11 @@ table[data-toggle="table"].bt-reveal {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Several short lines stacked in one table cell, such as a quest's competencies on its campaign's
+   quest list (#2993), set close together so a cell of a few lines doesn't stretch its row. Display
+   block, since line-height on an inline element doesn't tighten the lines it wraps onto. */
+.compact-lines {
+    display: block;
+    line-height: 1.35;
+}
