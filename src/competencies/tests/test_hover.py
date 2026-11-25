@@ -7,7 +7,7 @@ from comments.models import Comment
 from competencies.models import Competency, QuestCompetency
 from competencies.tests.test_approval import set_competencies_flag
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from quest_manager.models import Quest, QuestSubmission
+from quest_manager.models import Category, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -64,6 +64,16 @@ class CompetencyHoverTextPagesTest(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:quest_update', args=[self.quest.pk]))
 
         self.assertContains(response, self.title + '>Communicating</label>')
+
+    def test_campaign_quest_list__each_name_with_its_full_text(self):
+        """ A campaign's quest list names each quest's competencies with their full text on hover """
+        campaign = baker.make(Category, title="Hover Campaign")
+        self.quest.campaign = campaign
+        self.quest.save()
+
+        response = self.client.get(reverse('quests:category_detail', kwargs={'pk': campaign.pk}))
+
+        self.assertContains(response, f'<span {self.title}>Communicating</span>')
 
     def test_approval_comment__the_full_text_in_each_title(self):
         """ The levels an approval lists in its comment give each competency's full text on hover """
