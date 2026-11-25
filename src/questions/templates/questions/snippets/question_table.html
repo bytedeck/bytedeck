@@ -1,6 +1,12 @@
 {% load comment_tags %}
 {% load question_tags %}
 
+{% comment %}
+  in_quest_form: the table is the quest form's Submission Questions section (#2971), inside the
+  quest's own <form>. Edit and Delete carry `next` back to that section, and the arrows are
+  buttons for question-table.js to post, because a browser drops a <form> nested in another.
+{% endcomment %}
+{% if in_quest_form %}{% url 'quests:quest_update' quest.id as quest_form_url %}{% endif %}
 {% if questions %}
 <table class="table table-striped">
   <thead>
@@ -72,7 +78,8 @@
       <td class="text-nowrap">
         {% comment %}
           Only where the page binds the handler that posts these in the background and swaps
-          the answer in (the question list, and the view re-rendering this table for it).
+          the answer in (the question list, the quest form's Submission Questions section, and
+          the view re-rendering this table for them).
           Elsewhere this snippet is a preview of a quest the reader is doing something else
           with, and the move would redirect them to the question list, losing their place and,
           on the Library's Share Quest page, the export they were partway through (#2568).
@@ -80,7 +87,14 @@
           without the handler cannot inherit buttons that would strand its reader. Edit and
           Delete stay: those are plain links, so leaving the page is what they promise.
         {% endcomment %}
-        {% if can_reorder_questions %}
+        {% if can_reorder_questions and in_quest_form %}
+        <button type="button" class="btn btn-default" title="Move up" data-move-url="{% url 'questions:move' quest.id question.id 'up' %}"{% if forloop.first %} disabled{% endif %}>
+          <i class="fa fa-fw fa-arrow-up"></i>
+        </button>
+        <button type="button" class="btn btn-default" title="Move down" data-move-url="{% url 'questions:move' quest.id question.id 'down' %}"{% if forloop.last %} disabled{% endif %}>
+          <i class="fa fa-fw fa-arrow-down"></i>
+        </button>
+        {% elif can_reorder_questions %}
         <form method="post" action="{% url 'questions:move' quest.id question.id 'up' %}" class="preview-action-form question-move-form">
           {% csrf_token %}
           <button type="submit" class="btn btn-default" title="Move up"{% if forloop.first %} disabled{% endif %}>
@@ -94,10 +108,10 @@
           </button>
         </form>
         {% endif %}
-        <a class="btn btn-warning" href="{{ question.get_absolute_url }}" title="Edit">
+        <a class="btn btn-warning" href="{{ question.get_absolute_url }}{% if in_quest_form %}?next={{ quest_form_url|urlencode }}%23submission-questions{% endif %}" title="Edit">
           <i class="fa fa-edit"></i>
         </a>
-        <a class="btn btn-danger" href="{% url 'questions:delete' quest.id question.id %}" title="Delete">
+        <a class="btn btn-danger" href="{% url 'questions:delete' quest.id question.id %}{% if in_quest_form %}?next={{ quest_form_url|urlencode }}%23submission-questions{% endif %}" title="Delete">
           <i class="fa fa-trash-o"></i>
         </a>
       </td>

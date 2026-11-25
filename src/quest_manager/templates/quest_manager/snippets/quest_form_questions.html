@@ -1,0 +1,30 @@
+{% comment %}
+  The quest form's Submission Questions section (#2971). A question belongs to a saved quest, so
+  a new quest gets a button that saves it and comes back here (QuestCreate.get_success_url);
+  once saved, the quest's questions are listed with their Add, Edit, Delete and move buttons.
+  The question pages return to this section through `next`, and question-table.js opens it.
+{% endcomment %}
+{% if object.id %}
+  <div class="help-block">
+    <p>Students answer these questions as part of submitting the quest, in this order.
+    Add or edit a question on its own page, which brings you back here once it's saved.
+    Moving a question up or down saves the new order straight away.</p>
+  </div>
+  {% url 'quests:quest_update' object.id as quest_form_url %}
+  <div class="btn-toolbar">
+    {% for value, verbose_name in question_type_choices %}
+      <a class="btn btn-primary"
+         href="{% url 'questions:create' object.id value %}?next={{ quest_form_url|urlencode }}%23submission-questions"
+         title="Create {{ verbose_name }} Question"><i class="fa fa-plus-circle"></i> {{ verbose_name }}</a>
+    {% endfor %}
+  </div>
+  <div data-question-table>
+    {% include 'questions/snippets/question_table.html' with quest=object questions=object.question_set.all can_reorder_questions=True in_quest_form=True %}
+  </div>
+{% else %}
+  <div class="help-block">
+    <p>Students answer these questions as part of submitting the quest. Create the quest first:
+    <strong>Create and Add Questions</strong> saves it and brings you back here to add them.</p>
+  </div>
+  <button type="submit" name="add_questions" class="btn btn-default">Create and Add Questions</button>
+{% endif %}

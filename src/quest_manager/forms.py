@@ -89,6 +89,9 @@ class CampaignChoiceField(forms.ModelChoiceField):
 
 
 class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
+    # Whether the layout has the Submission Questions section (#2971): only staff may manage
+    # questions, so TAQuestForm turns it off.
+    questions_section = True
 
     new_quest_prerequisite = forms.ModelChoiceField(
         # to_field_name="name",
@@ -173,8 +176,11 @@ class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
         Beyond the model fields, the layout carries the form's action buttons (cancel and submit,
         repeated top and bottom) and links out to the two parts of a quest configured on their own
         pages: prerequisites and submission questions. Both of those need a saved quest to attach
-        to, so on the create form they render as disabled placeholders explaining why. When the deck
-        has competencies enabled, the competency fields (QuestCompetenciesFormMixin) follow the tags.
+        to, so on the create form the prerequisites button is a disabled placeholder explaining
+        why, and the questions button saves the new quest and goes on to its questions. The
+        questions are also listed in the form's Submission Questions section (when
+        ``questions_section`` is set), to manage without leaving the quest. When the deck has
+        competencies enabled, the competency fields (QuestCompetenciesFormMixin) follow the tags.
 
         Args:
             *args: positional arguments passed through to ``forms.ModelForm``.
@@ -195,17 +201,30 @@ class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
             'before you can add prerequisites.">Edit Prerequisites</button>' \
             '{% endif %} '
 
-        # Questions are managed on their own page, so link to it from the form where the rest of
-        # the quest is configured (#2347); the detail page's "Submission Questions" panel is the
-        # other way in. Staff-only, because every view in the questions app requires staff and
-        # TAQuestForm inherits this layout, so an unguarded button would 403 for a TA.
+        # Link to the questions' own page from the form where the rest of the quest is configured
+        # (#2347); the detail page's "Submission Questions" panel is the other way in. A new quest
+        # has no questions page yet, so its button saves it and opens the form's Submission
+        # Questions section (QuestCreate.get_success_url, #2971). Staff-only, because every view
+        # in the questions app requires staff and TAQuestForm inherits this layout, so an
+        # unguarded button would 403 for a TA.
         questions_btn = '{% if request.user.is_staff %}' \
             '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'questions:list\' object.id %}">' \
             'Manage Questions</a>' \
-            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
-            'before you can add submission questions.">Manage Questions</button>' \
+            '{% else %}<button type="submit" name="add_questions" class="btn btn-default">Create and Add Questions</button>' \
             '{% endif %}' \
             '{% endif %}'
+
+        # The quest's questions, managed from the form (#2971); see quest_form_questions.html.
+        # The section's id is the fragment the question pages return to.
+        questions_group = [
+            AccordionGroup(
+                "Submission Questions",
+                HTML("{% include 'quest_manager/snippets/quest_form_questions.html' %}"),
+                css_id='submission-questions',
+                active=False,
+                template='crispy_forms/bootstrap3/accordion-group.html',
+            ),
+        ] if self.questions_section else []
 
         self.helper = FormHelper()
         self.helper.layout = Layout(
@@ -232,6 +251,7 @@ class QuestForm(QuestCompetenciesFormMixin, forms.ModelForm):
                 *competency_layout,
                 'quick_reply',
                 Accordion(
+                    *questions_group,
                     AccordionGroup(
                         "Basic Prerequisites",
                         # TODO This code should be combined with its use in quest_detail_content.html
@@ -315,6 +335,9 @@ class TAQuestForm(QuestForm):
     defaults. ``QuestFormViewMixin.form_valid`` still forces ``published`` and ``editor`` for a
     TA, which keeps a TA's quest a draft of their own no matter which form or view saved it.
     """
+
+    # a TA can't manage questions (every questions view is staff-only)
+    questions_section = False
 
     class Meta(QuestForm.Meta):
         fields = tuple(f for f in QuestForm.Meta.fields if f not in TA_RESTRICTED_QUEST_FIELDS)
