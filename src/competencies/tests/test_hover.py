@@ -32,7 +32,7 @@ class CompetencyFullTextTest(ByteDeckTenantTestCase):
 
 
 class CompetencyHoverTextPagesTest(ByteDeckTenantTestCase):
-    """ The pages and comments that name a competency give its full text as the name's hover text. """
+    """ The pages and comments that name a competency link it, with its full text as the link's hover text. """
 
     def setUp(self):
         """ Competencies on, a teacher signed in, and a Core competency with a description linked to a quest. """
@@ -51,7 +51,7 @@ class CompetencyHoverTextPagesTest(ByteDeckTenantTestCase):
         """ The staff list of competencies gives each name its full text on hover """
         response = self.client.get(reverse('competencies:list'))
 
-        self.assertContains(response, f'<td><span {self.title}>Communicating</span></td>')
+        self.assertContains(response, f'<td><a href="{self.competency.get_absolute_url()}" {self.title}>Communicating</a></td>')
 
     def test_list__hover_text_not_on_a_table_cell(self):
         """ The list's hover text sits inside the name cell, not on it, and the column sorts and searches on the plain name.
@@ -70,23 +70,23 @@ class CompetencyHoverTextPagesTest(ByteDeckTenantTestCase):
         """ The Quest Info's competencies give their full text on hover, description included """
         response = self.client.get(reverse('quests:quest_detail', args=[self.quest.pk]))
 
-        self.assertContains(response, f'<li {self.title}>Communicating</li>')
+        self.assertContains(response, f'<li><a href="{self.competency.get_absolute_url()}" {self.title}>Communicating</a></li>')
 
     def test_quest_form__each_default_level_row_with_its_full_text(self):
         """ The quest form's default-level rows give each competency's full text on hover """
         response = self.client.get(reverse('quests:quest_update', args=[self.quest.pk]))
 
-        self.assertContains(response, self.title + '>Communicating</label>')
+        self.assertContains(response, self.title + ' target="_blank" rel="noopener">Communicating</a></label>')
 
     def test_campaign_quest_list__each_name_with_its_full_text(self):
-        """ A campaign's quest list names each quest's competencies with their full text on hover """
+        """ A campaign's quest list links each quest's competencies, with their full text on hover """
         campaign = baker.make(Category, title="Hover Campaign")
         self.quest.campaign = campaign
         self.quest.save()
 
         response = self.client.get(reverse('quests:category_detail', kwargs={'pk': campaign.pk}))
 
-        self.assertContains(response, f'<span {self.title}>Communicating</span>')
+        self.assertContains(response, f'<a href="{self.competency.get_absolute_url()}" {self.title}>Communicating</a>')
 
     def test_approval_comment__the_full_text_in_each_title(self):
         """ The levels an approval lists in its comment give each competency's full text on hover """
@@ -99,7 +99,7 @@ class CompetencyHoverTextPagesTest(ByteDeckTenantTestCase):
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
         # the comment cleaner writes the title back in single quotes, as it contains double ones
         self.assertIn(
-            "<span title='Core: Communication: Communicating\n\n"
+            f"<a href=\"{self.competency.get_absolute_url()}\" target=\"_blank\" title='Core: Communication: Communicating\n\n"
             'Communicating encompasses the abilities people use to "impart" &amp; exchange information.\'>'
-            'Communicating</span>: <b>Proficient</b>', text,
+            'Communicating</a>: <b>Proficient</b>', text,
         )

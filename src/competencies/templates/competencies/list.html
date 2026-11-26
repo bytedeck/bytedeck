@@ -1,4 +1,5 @@
 {% extends "competencies/base.html" %}
+{% load competency_tags %}
 {% load static %}
 
 {% block head %}
@@ -44,11 +45,11 @@
                     <th data-sortable='true' data-field='course' class="col-sm-2">Course</th>
                     <th data-sortable='true' data-field='category' class="col-sm-2">Category</th>
                     {% comment %}
-                    The name cell carries its hover text on an inner span: bootstrap-table rebuilds
+                    The name cell carries its hover text on the link inside it: bootstrap-table rebuilds
                     each row from the markup and writes a cell's own title back unescaped, while an
-                    inner element's attributes come back escaped. The span would also put its title
-                    into the values the column sorts and searches on, so both use the plain name in
-                    the hidden column beside it.
+                    inner element's attributes come back escaped. The link would also put its address
+                    and title into the values the column sorts and searches on, so both use the plain
+                    name in the hidden column beside it.
                     {% endcomment %}
                     <th data-sortable='true' data-field='name' data-sort-name='name_sort' data-searchable='false' class="col-sm-5">Competency</th>
                     <th data-field='name_sort' data-visible='false' data-switchable='false'></th>
@@ -62,7 +63,7 @@
                     <tr>
                         <td>{{ competency.course }}</td>
                         <td>{{ competency.category }}</td>
-                        <td><span title="{{ competency.full_text }}">{{ competency.name }}</span></td>
+                        <td>{% competency_link competency %}</td>
                         <td>{{ competency.name }}</td>
                         <td><small>{{ competency.source_id|default_if_none:"" }}</small></td>
                         <td>
