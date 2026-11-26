@@ -7,10 +7,28 @@ from ..assessments import (
     submission_self_levels,
 )
 from ..forms import competency_level_field_name, self_assessment_field_name
+from ..links import competency_link as link_html
 from ..models import ProficiencyLevel
 from ..summaries import course_competencies
 
 register = template.Library()
+
+
+@register.simple_tag
+def competency_link(competency, length=None, new_tab=False, text=None):
+    """ A competency, named and linked to its page, with its full qualified name as hover text
+    (competencies.links.competency_link): how every list of competencies shows one.
+
+    Args:
+        competency (Competency): the competency.
+        length (int or None): cut the name short to this many characters, or None for all of it.
+        new_tab (bool): open the page in a new tab, for a link inside a form.
+        text (str or None): what the link says instead of the name.
+
+    Returns:
+        SafeString: the link.
+    """
+    return link_html(competency, length=length, new_tab=new_tab, text=text)
 
 
 @register.inclusion_tag('competencies/snippets/quest_competency_list.html')

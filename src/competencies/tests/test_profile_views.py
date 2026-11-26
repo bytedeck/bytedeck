@@ -213,7 +213,7 @@ class EvidenceByCompetencyTest(StudentCompetenciesMixin, ByteDeckTenantTestCase)
 
     def test_evidence_by_competency__sources_that_are_gone_or_not_submissions(self):
         """ A deleted quest says so; evidence with no source has no link; any other source is described by
-        itself and links to its own page when it has one """
+        itself and links to its own page when it has one (a quest, a competency), or not (a block) """
         gone = self.submission("Gone Quest")
         self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=50, source=gone)
         gone.quest.delete()
@@ -221,6 +221,7 @@ class EvidenceByCompetencyTest(StudentCompetenciesMixin, ByteDeckTenantTestCase)
         other_quest = baker.make(Quest, name="A Quest Itself")
         self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=30, source=other_quest)
         self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=20, source=self.making)
+        self.assess(self.defining, ProficiencyLevel.PROFICIENT, minutes_ago=10, source=baker.make('courses.Block', name="Block A"))
 
         evidence = evidence_by_competency(self.student)[self.defining.pk]
 
@@ -228,7 +229,8 @@ class EvidenceByCompetencyTest(StudentCompetenciesMixin, ByteDeckTenantTestCase)
             ("A deleted quest", None),
             ("No linked evidence", None),
             ("A Quest Itself", other_quest.get_absolute_url()),
-            ("Use materials safely", None),
+            ("Use materials safely", self.making.get_absolute_url()),
+            ("Block A", None),
         ])
 
     def test_evidence_by_competency__queries_dont_grow_with_the_evidence(self):
@@ -389,7 +391,8 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             r'<th>Assessments, oldest first</th>'
             r'.*?<tr class="info"><th colspan="4">Applied Design - Defining</th></tr>\s*'
             rf'<tr id="{pane}-competency-{self.defining.pk}">\s*'
-            r'<td title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</td>\s*'
+            rf'<td><a href="{self.defining.get_absolute_url()}" '
+            r'title="ADST 9: Applied Design - Defining: Choose a design opportunity">Choose a design opportunity</a></td>\s*'
             r'<td class="competency-summary-current">\s*'
             r'<span class="label competency-code competency-level competency-level-4" title="Nailed It">NAI</span>\s*'
             rf'<a href="{reverse("competencies:override", args=[self.student.pk, self.defining.pk])}" class="btn btn-default btn-xs"\s*'
@@ -404,7 +407,7 @@ class CompetencySummaryViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCase
             r'title="Developing: Brainstorm, [^"]+">DEV</a>\s*'
             rf'<a href="{prototype.get_absolute_url()}" class="label competency-code competency-level competency-level-4"\s*'
             r'title="Nailed It: Prototype, [^"]+">NAI</a>'
-            r'.*?Generate potential ideas</td>\s*<td class="competency-summary-current">\s*'
+            r'.*?Generate potential ideas</a></td>\s*<td class="competency-summary-current">\s*'
             r'<span class="text-muted" title="Not yet assessed">n/a</span>\s*<a [^>]+><i class="fa fa-pencil"></i></a>\s*</td>\s*'
             r'<td class="competency-summary-history">\s*</td>\s*<td class="competency-summary-evidence">\s*'
             r'<span class="text-muted" title="Not yet assessed">n/a</span>'

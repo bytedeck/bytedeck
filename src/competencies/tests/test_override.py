@@ -114,8 +114,11 @@ class CompetencyOverrideViewTest(StudentCompetenciesMixin, ByteDeckTenantTestCas
         response = self.client.get(self.override_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<strong>Grace Hopper</strong>'s level in <strong")
-        self.assertContains(response, "ADST 9: Applied Design - Defining: Choose a design opportunity</strong>")
+        self.assertContains(response, (
+            f"<strong>Grace Hopper</strong>'s level in <strong><a href=\"{self.defining.get_absolute_url()}\" "
+            'title="ADST 9: Applied Design - Defining: Choose a design opportunity">'
+            "ADST 9: Applied Design - Defining: Choose a design opportunity</a></strong>"
+        ))
         self.assertContains(response, (
             'Worked out from the evidence (the level of its most recent assessment):\n    '
             '<span class="label competency-code competency-level competency-level-2">DEV</span> Developing'

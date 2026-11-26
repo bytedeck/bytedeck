@@ -159,7 +159,8 @@ class CompetencyMatrixViewTest(CompetencyMatrixMixin, ByteDeckTenantTestCase):
         ))
         self.assertRegex(content, (
             r'(?s)<th colspan="1" class="competency-matrix-category">Defining</th><th colspan="1" class="competency-matrix-category">Making</th>'
-            r'.*?<th class="competency-matrix-name" title="ADST 9: Defining: Choose a design opportunity"><div>Choose a design opportunity</div></th>'
+            r'.*?<th class="competency-matrix-name"><div><a href="' + self.defining.get_absolute_url() + '" '
+            r'title="ADST 9: Defining: Choose a design opportunity">Choose a design opportunity</a></div></th>'
         ))
         summary = reverse('competencies:summary', args=[self.zed.pk])
         pane = f"course-pane-{self.zed_registration.pk}"

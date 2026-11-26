@@ -4,7 +4,7 @@ from comments.models import Comment
 from competencies.assessments import NOT_APPLICABLE, NotApplicable, posted_level, record_approval_assessments, starting_level
 from competencies.forms import competency_level_field_name
 from competencies.models import CompetencyAssessment, ProficiencyLevel, QuestCompetency
-from competencies.tests.test_approval import ApprovalTestMixin, set_competencies_flag
+from competencies.tests.test_approval import ApprovalTestMixin, comment_link, set_competencies_flag
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 DEV, PRF, EXT = ProficiencyLevel.DEVELOPING, ProficiencyLevel.PROFICIENT, ProficiencyLevel.EXTENDING
@@ -71,8 +71,8 @@ class NotApplicableApprovalTest(NotApplicableTestMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(self.recorded(self.submission), {self.communicating: PRF})
         comment = self.latest_comment()
-        self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>N/A</b>', comment)
-        self.assertIn('<span title="Communication: Communicating">Communicating</span>: <b>Proficient</b>', comment)
+        self.assertIn(f'{comment_link(self.thinking)}: <b>N/A</b>', comment)
+        self.assertIn(f'{comment_link(self.communicating)}: <b>Proficient</b>', comment)
 
     def test_record_approval_assessments__na_is_returned(self):
         """ The N/A comes back beside the assessments recorded, standing for the level not recorded """
@@ -100,8 +100,8 @@ class NotApplicableApprovalTest(NotApplicableTestMixin, ByteDeckTenantTestCase):
         })
 
         self.assertEqual(self.recorded(self.submission), {self.communicating: PRF})
-        self.assertIn('Critical Thinking</span>: <b>N/A</b>', self.latest_comment())
-        self.assertNotIn('Communicating</span>', self.latest_comment())
+        self.assertIn(f'{comment_link(self.thinking)}: <b>N/A</b>', self.latest_comment())
+        self.assertNotIn(comment_link(self.communicating), self.latest_comment())
 
     def test_comment__a_competency_with_no_level_starts_on_na(self):
         """ On an approved submission, a competency it has no level in (approved as N/A, or added to the
@@ -115,7 +115,7 @@ class NotApplicableApprovalTest(NotApplicableTestMixin, ByteDeckTenantTestCase):
 
         self.post_decision('comment_button', comment_text='On reflection', **{self.thinking_field: str(EXT), self.communicating_field: str(PRF)})
         self.assertEqual(self.recorded(self.submission), {self.thinking: EXT, self.communicating: PRF})
-        self.assertIn('Critical Thinking</span>: <b>Extending</b>', self.latest_comment())
+        self.assertIn(f'{comment_link(self.thinking)}: <b>Extending</b>', self.latest_comment())
 
 
 class NotApplicableWidgetTest(NotApplicableTestMixin, ByteDeckTenantTestCase):
