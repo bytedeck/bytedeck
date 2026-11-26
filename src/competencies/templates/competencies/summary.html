@@ -126,7 +126,7 @@
             {% if category.grouper %}<tr class="info"><th colspan="4">{{ category.grouper }}</th></tr>{% endif %}
             {% for row in category.list %}
             <tr id="{{ course.pane_id }}-competency-{{ row.competency.pk }}">
-              <td title="{{ row.competency.full_text }}">{{ row.competency.name }}</td>
+              <td title="{{ row.competency.qualified_name }}">{{ row.competency.name }}</td>
               <td class="competency-summary-current">
                 {% if row.override %}
                   <span class="label competency-code competency-level competency-level-{{ row.level }} competency-override"

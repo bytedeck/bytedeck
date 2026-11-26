@@ -15,7 +15,7 @@
   <p class="competency-approval-levels-heading"><strong>Competencies</strong> <small class="text-muted">({% if approved %}any you change are recorded when you comment{% else %}recorded when you approve{% endif %})</small></p>
   {% for row in rows %}
   <div class="competency-approval-row">
-    <span class="competency-approval-name" title="{{ row.competency.full_text }}">{{ row.competency.name }}{% if row.competency.course %} <small class="text-muted">({{ row.competency.course }})</small>{% endif %}{% if row.self_level %}
+    <span class="competency-approval-name" title="{{ row.competency.qualified_name }}">{{ row.competency.name }}{% if row.competency.course %} <small class="text-muted">({{ row.competency.course }})</small>{% endif %}{% if row.self_level %}
       <span class="label competency-level competency-level-{{ row.self_level }} competency-self" title="The student's self-assessment, not counted">Self: {{ row.self_label }}</span>{% endif %}</span>
     <div class="btn-group btn-group-xs" data-toggle="buttons" role="group" aria-label="{{ row.competency.name }}: proficiency level">
       {% for level, label, selected in row.levels %}

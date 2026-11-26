@@ -57,7 +57,7 @@
           {% for category, span in categories %}<th colspan="{{ span }}" class="competency-matrix-category">{{ category }}</th>{% endfor %}
         </tr>
         <tr>
-          {% for column in columns %}<th class="competency-matrix-name" title="{{ column.full_text }}"><div>{{ column.name }}</div></th>{% endfor %}
+          {% for column in columns %}<th class="competency-matrix-name" title="{{ column.qualified_name }}"><div>{{ column.name }}</div></th>{% endfor %}
         </tr>
       </thead>
       <tbody>

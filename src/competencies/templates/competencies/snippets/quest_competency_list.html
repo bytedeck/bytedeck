@@ -8,7 +8,7 @@
 <li>Competencies:
   <ul>
     {% for link in links %}
-    <li title="{{ link.competency.full_text }}">{{ link.competency.name|truncatechars:50 }}</li>
+    <li title="{{ link.competency.qualified_name }}">{{ link.competency.name|truncatechars:50 }}</li>
     {% endfor %}
   </ul>
 </li>

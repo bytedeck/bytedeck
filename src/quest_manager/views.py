@@ -2595,8 +2595,7 @@ def complete(request, submission_id):
         # levels the student chose for their self-assessment, when the quest asks for one: listed
         # with the other choices, and recorded once the quest is handed in, below
         self_assessed = posted_self_assessments(submission, request.POST)
-        # each line is already safe HTML, its text escaped and the competency's full text in a title
-        choices.extend(describe_self_assessments(self_assessed))
+        choices.extend(escape(text) for text in describe_self_assessments(self_assessed))
         if isinstance(form, SubmissionFormCustomXP):
             xp_requested = form.cleaned_data.get("xp_requested")
             choices.append(f"XP requested: {xp_requested}")

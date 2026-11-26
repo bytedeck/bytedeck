@@ -388,17 +388,15 @@ def record_self_assessments(submission, chosen):
 
 def describe_self_assessments(chosen):
     """ The student's self-assessment, one line per competency, for the comment they hand the quest in
-    with, as the other choices they make on the form are listed there. A long name is cut short, with
-    the competency in full in its title (Competency.full_text), and the competency's course follows
-    it, since courses can share a competency's wording.
+    with, as the other choices they make on the form are listed there. A long name is cut short, and
+    the competency's course follows it, since courses can share a competency's wording.
 
     Args:
         chosen (list[tuple[QuestCompetency, int or None]]): what posted_self_assessments returned; the
             competencies left on "Skip" aren't listed.
 
     Returns:
-        list[SafeString]: HTML lines, e.g. 'Self-assessment of <span title="...">Choose a design
-        opportunity</span> (ADST 9): Proficient', with everything in them escaped.
+        list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity (ADST 9): Proficient".
     """
     labels = SiteConfig.get().get_competency_scale_labels()
     lines = []
@@ -406,18 +404,15 @@ def describe_self_assessments(chosen):
         if level is None:
             continue
         course = f" ({link.competency.course})" if link.competency.course else ""
-        lines.append(format_html(
-            'Self-assessment of <span title="{}">{}</span>{}: {}',
-            link.competency.full_text, truncatechars(link.competency.name, 50), course, labels[level],
-        ))
+        lines.append(f"Self-assessment of {truncatechars(link.competency.name, 50)}{course}: {labels[level]}")
     return lines
 
 
 def assessments_comment_html(assessments):
     """ The competency levels an approval or comment recorded, for the comment itself, so the student
     reads them in the conversation alongside the approval (as a granted badge is announced there),
-    and the conversation keeps each rating given. A long name is cut short; its title gives the
-    competency in full (Competency.full_text).
+    and the conversation keeps each rating given. A long name is cut short, with the full name in
+    its title.
 
     Args:
         assessments (list[CompetencyAssessment]): what record_approval_assessments or
@@ -430,7 +425,7 @@ def assessments_comment_html(assessments):
         return ''
     labels = SiteConfig.get().get_competency_scale_labels()
     items = format_html_join('', '<li><span title="{}">{}</span>: <b>{}</b></li>', (
-        (assessment.competency.full_text, truncatechars(assessment.competency.name, 50), labels[assessment.level])
+        (assessment.competency.qualified_name, truncatechars(assessment.competency.name, 50), labels[assessment.level])
         for assessment in assessments
     ))
     return format_html('<p>Competencies:</p><ul>{}</ul>', items)
