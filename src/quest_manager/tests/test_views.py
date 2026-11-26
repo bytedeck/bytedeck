@@ -1118,6 +1118,23 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
                 sub.refresh_from_db()
                 self.assertEqual(sub.xp_requested, 50)
 
+    def test_ajax_save_draft__leaves_the_stored_xp_alone_for_a_number_too_big_to_store(self):
+        """A number beyond what xp_requested can hold leaves what is stored, rather than a server error.
+
+        The column is a PositiveIntegerField, so past 2147483647 the number cannot be stored at
+        all. The draft save treats it as it treats a value that isn't a number: it keeps the XP
+        already saved, and the rest of the draft still saves. Submitting the quest is where the
+        student is told the number is too big.
+        """
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '50')
+
+        response = self._save_draft_xp(sub, '2147483648')
+
+        self.assertEqual(response.status_code, 200)
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 50)
+
     def test_ajax_save_draft__zero_xp_does_not_come_back_as_the_quest_default(self):
         """Storing zero would read back as the quest's XP, so it is never stored.
 
@@ -1847,6 +1864,31 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         # assert that xp matches rank
         self.test_student.refresh_from_db()
         self.assertEqual(self.test_student.profile.xp_cached, 80)
+
+    def test_complete__custom_xp_out_of_range_is_a_form_error(self):
+        """A requested XP the submission can't store is answered on the form, not with a server error.
+
+        xp_requested is a PositiveIntegerField, so a negative number, or one past 2147483647,
+        can't be saved: the form says so beside the field, and the submission isn't handed in.
+        """
+        quest = baker.make(Quest, xp=40, xp_can_be_entered_by_students=True, verification_required=False)
+        submission = baker.make(
+            QuestSubmission, quest=quest, user=self.test_student, semester=self.semester,
+            draft_comment=baker.make(Comment, text="draft"),
+        )
+
+        for out_of_range in (2147483648, -5):
+            with self.subTest(xp_requested=out_of_range):
+                response = self.client.post(
+                    reverse('quests:complete', args=[submission.id]),
+                    data={'complete': True, 'xp_requested': out_of_range},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('xp_requested', response.context['submission_form'].errors)
+                submission.refresh_from_db()
+                self.assertFalse(submission.is_completed)
+                self.assertEqual(submission.xp_requested, 0)
 
     def test_complete__xp_requested_when_is_approved(self):
         """ Checks that xp_requested can't be changed after a qubmission is approved

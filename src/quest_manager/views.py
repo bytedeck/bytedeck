@@ -17,6 +17,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.postgres.aggregates import StringAgg
+from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
@@ -3143,6 +3144,14 @@ def ajax_save_draft(request):
             except (TypeError, ValueError):
                 # absent, blank, or not a number: leave whatever is stored alone
                 xp_requested = None
+            # A number the column can't hold (past the database's integer range) is left alone
+            # too: the full_clean below would reject it with a server error, failing the whole
+            # draft save. Handing the quest in is where the form tells the student.
+            if xp_requested is not None:
+                try:
+                    QuestSubmission._meta.get_field("xp_requested").run_validators(xp_requested)
+                except ValidationError:
+                    xp_requested = None
             # Zero and below are left alone rather than stored. Zero is this app's sentinel
             # for "no custom XP requested" (`sub.xp_requested or sub.quest.xp` here and in
             # the approval path), so storing it says the same thing as storing nothing while
