@@ -112,6 +112,14 @@ The **Insert Math** toolbar button (`math`): a formula typed in LaTeX, drawn by 
   The iframe editor loads both itself.
 * Origin not recorded. Added in 628050cbe (2018).
 
+### paste-colors
+
+No button: takes the text and highlight colors off pasted content, so text copied from a page in
+one theme, or from a document, stays readable in either theme (#3008). The rest of the pasted
+formatting stays, as do colors already in the content and ones chosen with the color button.
+
+* ByteDeck's own (#3008).
+
 ### table-headers
 
 **Toggle table header** in the table's menu (`tableHeaders`): turns the table's first row into a
