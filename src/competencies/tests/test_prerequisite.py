@@ -171,9 +171,9 @@ class CompetencyPrerequisiteLabelTest(CompetencyPrerequisiteMixin, ByteDeckTenan
         self.assertEqual(widget.label_from_instance(self.quest), "Advanced Design")
         self.assertEqual(Competency.gfk_search_fields(), ["name__icontains", "course__icontains", "category__icontains"])
 
-    def test_prereq_list__a_competency_is_listed_without_a_link(self):
-        """ The quest's list of prerequisites names a competency prerequisite without a link (it has no
-        page), and links a quest prerequisite as before """
+    def test_prereq_list__a_competency_links_to_its_page(self):
+        """ The quest's list of prerequisites, and a badge's popover, link a competency prerequisite to the
+        competency's page, as a quest prerequisite links to the quest """
         self.require(PRF)
         earlier = baker.make(Quest, name="Basics")
         Prereq.objects.create(parent_object=self.quest, prereq_object=earlier)
@@ -181,9 +181,10 @@ class CompetencyPrerequisiteLabelTest(CompetencyPrerequisiteMixin, ByteDeckTenan
         html = render_to_string('prerequisites/current_prereq_list.html', {'object': self.quest})
         badge_html = render_to_string('badges/snippets/badge_popover_content.html', {'badge': self.badge_requiring_the_competency()})
 
-        self.assertIn("<li>(competency) Got It in ADST 9: Defining: Choose a design opportunity</li>", html)
+        item = f"<li><a href='{self.defining.get_absolute_url()}'>(competency) Got It in ADST 9: Defining: Choose a design opportunity</a></li>"
+        self.assertIn(item, html)
         self.assertIn(f"<li><a href='{earlier.get_absolute_url()}'>(quest) Basics</a></li>", html)
-        self.assertIn("<li>(competency) Got It in ADST 9: Defining: Choose a design opportunity</li>", badge_html)
+        self.assertIn(item, badge_html)
 
     def badge_requiring_the_competency(self):
         """ A badge with the competency at Got It as its prerequisite. """

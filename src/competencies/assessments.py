@@ -22,13 +22,13 @@ from collections import defaultdict
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
-from django.template.defaultfilters import truncatechars
 from django.utils.html import format_html, format_html_join
 
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 
 from .forms import competency_level_field_name, self_assessment_field_name
+from .links import competency_link
 from .models import Competency, CompetencyAssessment, ProficiencyLevel
 
 
@@ -388,15 +388,16 @@ def record_self_assessments(submission, chosen):
 
 def describe_self_assessments(chosen):
     """ The student's self-assessment, one line per competency, for the comment they hand the quest in
-    with, as the other choices they make on the form are listed there. A long name is cut short, and
-    the competency's course follows it, since courses can share a competency's wording.
+    with, as the other choices they make on the form are listed there. Each competency links to its
+    page (a long name cut short, in full in the link's title), and its course follows it, since courses
+    can share a competency's wording.
 
     Args:
         chosen (list[tuple[QuestCompetency, int or None]]): what posted_self_assessments returned; the
             competencies left on "Skip" aren't listed.
 
     Returns:
-        list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity (ADST 9): Proficient".
+        list[SafeString]: HTML lines, e.g. "Self-assessment of <a ...>Choose a design opportunity</a> (ADST 9): Proficient".
     """
     labels = SiteConfig.get().get_competency_scale_labels()
     lines = []
@@ -404,15 +405,15 @@ def describe_self_assessments(chosen):
         if level is None:
             continue
         course = f" ({link.competency.course})" if link.competency.course else ""
-        lines.append(f"Self-assessment of {truncatechars(link.competency.name, 50)}{course}: {labels[level]}")
+        lines.append(format_html("Self-assessment of {}{}: {}", competency_link(link.competency, length=50), course, labels[level]))
     return lines
 
 
 def assessments_comment_html(assessments):
     """ The competency levels an approval or comment recorded, for the comment itself, so the student
     reads them in the conversation alongside the approval (as a granted badge is announced there),
-    and the conversation keeps each rating given. A long name is cut short, with the full name in
-    its title.
+    and the conversation keeps each rating given. Each competency links to its page; a long name is
+    cut short, with the full name in the link's title.
 
     Args:
         assessments (list[CompetencyAssessment]): what record_approval_assessments or
@@ -424,8 +425,8 @@ def assessments_comment_html(assessments):
     if not assessments:
         return ''
     labels = SiteConfig.get().get_competency_scale_labels()
-    items = format_html_join('', '<li><span title="{}">{}</span>: <b>{}</b></li>', (
-        (assessment.competency.qualified_name, truncatechars(assessment.competency.name, 50), labels[assessment.level])
+    items = format_html_join('', '<li>{}: <b>{}</b></li>', (
+        (competency_link(assessment.competency, length=50), labels[assessment.level])
         for assessment in assessments
     ))
     return format_html('<p>Competencies:</p><ul>{}</ul>', items)
