@@ -1,4 +1,5 @@
 {% extends "competencies/base.html" %}
+{% load competency_tags %}
 
 {% block heading_inner %}Competencies{% if student != request.user %} for {{ student.profile.teacher_name }}{% endif %}{% endblock %}
 
@@ -126,7 +127,7 @@
             {% if category.grouper %}<tr class="info"><th colspan="4">{{ category.grouper }}</th></tr>{% endif %}
             {% for row in category.list %}
             <tr id="{{ course.pane_id }}-competency-{{ row.competency.pk }}">
-              <td title="{{ row.competency.qualified_name }}">{{ row.competency.name }}</td>
+              <td>{% competency_link row.competency %}</td>
               <td class="competency-summary-current">
                 {% if row.override %}
                   <span class="label competency-code competency-level competency-level-{{ row.level }} competency-override"

@@ -32,6 +32,20 @@ def set_competencies_flag(enabled, **labels):
     config.save()
 
 
+def comment_link(competency, text=None):
+    """ How a competency is linked in a comment: to its page, with its qualified name as the title, and
+    opening in a new tab, as the comment cleaner opens every link.
+
+    Args:
+        competency (Competency): the competency.
+        text (str, optional): what the link says, when it isn't the whole name.
+
+    Returns:
+        str: the link's HTML.
+    """
+    return f'<a href="{competency.get_absolute_url()}" target="_blank" title="{competency.qualified_name}">{text or competency.name}</a>'
+
+
 class ApprovalTestMixin:
     """ A teacher, a student in the active semester, and a quest with two active competencies
     (one defaulting to Extending, one to Proficient) and a deactivated one. """
@@ -215,7 +229,7 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         self.assertEqual(CompetencyAssessment.objects.filter(user=self.student).order_by('-timestamp', '-pk').first(), rerated)
         text = self.approval_comment()
         self.assertIn('On reflection', text)
-        self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>Developing</b>', text)
+        self.assertIn(f'{comment_link(self.thinking)}: <b>Developing</b>', text)
         self.assertNotIn('Communicating', text)
 
     def test_comment__with_the_levels_unchanged_records_nothing(self):
@@ -324,18 +338,20 @@ class ApprovalAssessmentTest(ApprovalTestMixin, ByteDeckTenantTestCase):
         text = self.approval_comment()
         self.assertIn('Nice work', text)
         self.assertIn('<p>Competencies:</p>', text)
-        self.assertIn('<span title="Thinking: Critical Thinking">Critical Thinking</span>: <b>Developing</b>', text)
-        self.assertIn('<span title="Communication: Communicating">Communicating</span>: <b>Proficient</b>', text)
+        self.assertIn(f'{comment_link(self.thinking)}: <b>Developing</b>', text)
+        self.assertIn(f'{comment_link(self.communicating)}: <b>Proficient</b>', text)
         self.assertNotIn('Retired Competency', text)
 
     def test_approve__comment_cuts_a_long_competency_name_short(self):
-        """ A long competency name in the approving comment is cut short, in full in its title """
+        """ A long competency name in the approving comment is cut short, linked to its page with the full
+        name in the link's title """
         long_name = "Critically analyze and prioritize competing factors to meet community needs"
-        QuestCompetency.objects.create(quest=self.quest, competency=baker.make(Competency, name=long_name, category="Ideating"))
+        ideating = baker.make(Competency, name=long_name, category="Ideating")
+        QuestCompetency.objects.create(quest=self.quest, competency=ideating)
 
         self.post_decision('approve_button')
 
-        self.assertIn(f'<span title="Ideating: {long_name}">{long_name[:49]}\u2026</span>', self.approval_comment())
+        self.assertIn(comment_link(ideating, text=f'{long_name[:49]}\u2026'), self.approval_comment())
 
     def test_return_and_repeated_approval__comments_list_no_levels(self):
         """ Returning records nothing, so its comment lists no levels; nor does a second Approve on a
