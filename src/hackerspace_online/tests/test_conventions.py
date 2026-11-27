@@ -369,6 +369,29 @@ class TestListTablesAreConsistent(SimpleTestCase):
         self.assertEqual(missing, [], f"No such template(s): {missing}")
 
 
+#: bootstrap-table's script, and the script that has to load after it wherever it loads (#3007).
+_BOOTSTRAP_TABLE_SCRIPT = "js/bootstrap-table-1.20.2.min.js"
+_BOOTSTRAP_TABLE_SEARCH_SCRIPT = "js/bootstrap-table-search.js"
+
+
+class TestBootstrapTableLoadsItsSearchFix(SimpleTestCase):
+    """Guard that every page loading bootstrap-table loads the fix to its search with it."""
+
+    def test_conventions__bootstrap_table_loads_with_its_search_fix(self):
+        """Each template that loads bootstrap-table's script loads js/bootstrap-table-search.js too.
+
+        Without it a searchable table on the page finds nothing for a search holding an
+        apostrophe or a double quote (#3007). snippets/bootstrap_table.html loads both, so a page
+        including it passes; this catches one that loads bootstrap-table's script itself.
+        """
+        missing = sorted(
+            str(path.relative_to(_SRC_ROOT))
+            for path in _SRC_ROOT.glob("**/templates/**/*.html")
+            if _BOOTSTRAP_TABLE_SCRIPT in (text := path.read_text()) and _BOOTSTRAP_TABLE_SEARCH_SCRIPT not in text
+        )
+        self.assertEqual(missing, [], f"Templates loading bootstrap-table without {_BOOTSTRAP_TABLE_SEARCH_SCRIPT}: {missing}")
+
+
 class TestMigrationsSurviveTheDeployWindow(SimpleTestCase):
     """Guard that a new migration cannot break the version it replaces mid-deploy."""
 
