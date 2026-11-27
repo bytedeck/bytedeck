@@ -113,8 +113,10 @@ class TableSearchRenderMixin:
         """Type into the table's search box and return the names left in the table.
 
         bootstrap-table searches on a key's release, a moment after the last one, so the text is
-        typed key by key, and it announces the search with its `search.bs.table` event, which this
-        waits for before reading the rows.
+        typed key by key. It announces each search, with its query, in its `search.bs.table`
+        event, and this waits for the one carrying the whole text before reading the rows: a slow
+        typist's pause could start a search on part of it, and "Children" matches the row that
+        "Children's" has to.
 
         Args:
             text (str): what to type.
@@ -123,11 +125,11 @@ class TableSearchRenderMixin:
             list[str]: the first cell's text of each row the search leaves.
         """
         self.page.evaluate(
-            "window.searched = false;"
-            "$('[data-toggle=\"table\"]').one('search.bs.table', function () { window.searched = true; })"
+            "window.searchedText = null;"
+            "$('[data-toggle=\"table\"]').on('search.bs.table', function (event, query) { window.searchedText = query; })"
         )
         self.page.locator(".bootstrap-table .search input").press_sequentially(text)
-        self.page.wait_for_function("window.searched", timeout=10000)
+        self.page.wait_for_function("text => window.searchedText === text", arg=text, timeout=10000)
         return self.page.eval_on_selector_all(
             ".bootstrap-table tbody tr:not(.no-records-found) td:first-child",
             "cells => cells.map(cell => cell.textContent.trim())",
