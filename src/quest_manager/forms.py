@@ -17,7 +17,7 @@ from tags.forms import BootstrapTaggitSelect2Widget
 from courses.forms import XPCourseChoiceMixin
 from courses.models import CourseStudent
 
-from .models import Category, Quest, CommonData
+from .models import Category, Quest, CommonData, QuestSubmission
 
 
 #: Quest fields a student TA may not set. A TA works on drafts, so whether a quest is
@@ -391,9 +391,21 @@ class SubmissionFormCustomXP(SubmissionForm):
     )
 
     def __init__(self, *args, **kwargs):
+        """Set the field's suggested minimum, and hold it to what the submission can store.
+
+        Args:
+            *args: positional arguments passed through to ``SubmissionForm``.
+            **kwargs: keyword arguments passed through to ``SubmissionForm``, plus
+                ``minimum_xp``, the quest's XP, as the field's ``min``.
+        """
         minimum_xp = kwargs.pop('minimum_xp', 0)
         super().__init__(*args, **kwargs)
         self.fields['xp_requested'].widget.attrs['min'] = minimum_xp
+        # The number is saved to QuestSubmission.xp_requested, a PositiveIntegerField, so it has
+        # to be one that column can hold: a negative number, or one past the database's integer
+        # range, fails on save with a server error. The model field's own validators turn it
+        # into an error beside the field instead.
+        self.fields['xp_requested'].validators.extend(QuestSubmission._meta.get_field('xp_requested').validators)
 
 
 class SubmissionFormStaff(SubmissionForm):
