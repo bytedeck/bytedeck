@@ -819,6 +819,20 @@ class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
             ).exists()
         )
 
+    def test_generate_map__a_long_parent_map_name_fits_the_link_back(self):
+        """A child map still generates when its parent map's name is too long for a node label.
+
+        A map's name can run to 250 characters but a node's label to 50, so the link back to the
+        parent map cuts the name short and keeps " Quest Map" whole. Without that the child map's
+        generation fails with a DataError (#3004).
+        """
+        parent_scape = CytoScape.generate_map(baker.make(Quest, name="ParentInit"), "A parent map named at more length than a label holds")
+        child_scape = CytoScape.generate_map(baker.make(Quest, name="ChildInit"), "Child Map", parent_scape=parent_scape)
+
+        node = child_scape.cytoelement_set.get(classes__contains='parent-map')
+        self.assertEqual(node.label, "A parent map named at more length tha..." + " Quest Map")
+        self.assertEqual(len(node.label), CytoElement._meta.get_field('label').max_length)
+
     def test_get_temp_campaign__returns_none_when_id_not_found(self):
         """get_temp_campaign returns None when no TempCampaign matches the given node id."""
         scape = bake_scape(name="temp-campaign-test")
@@ -982,6 +996,19 @@ class CampaignNodeEmissionTest(ByteDeckTenantTestCase):
         node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
         self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
 
+    def test_add_to_campaign__a_50_character_campaign_title_still_generates_the_map(self):
+        """A map holding a campaign whose title is as long as the column allows still generates,
+        with the campaign's box labelled by its title cut short and its XP total (#3004).
+        """
+        self.camp_a.title = "A campaign title that runs the full fifty letters!"
+        self.camp_a.save()
+
+        scape = CytoScape.generate_map(self.start, "order-test")
+
+        node = scape.cytoelement_set.get(selector_id=f'Category: {self.camp_a.id}')
+        self.assertEqual(node.label, CytoScape.generate_label(self.camp_a))
+        self.assertTrue(node.label.startswith("A campaign title that"))
+
     def test_elements_dict__nodes_are_emitted_in_deterministic_id_order(self):
         """Nodes come out in ascending-id order (A's campaign node before B's), the deterministic
         emission issue #2012 asked for, so a map looks the same between generations.
@@ -1016,3 +1043,29 @@ class GenerateLabelTest(ByteDeckTenantTestCase):
         quest = baker.make(Quest, name='Say "hi"', xp=2, xp_can_be_entered_by_students=False)
 
         self.assertEqual(CytoScape.generate_label(quest), 'Say "hi" (2)')
+
+    def test_generate_label__a_50_character_campaign_title_fits_the_label_column(self):
+        """A campaign's title is cut short so its label, XP total included, fits the label column.
+
+        A campaign's title can be 50 characters, as many as the label holds, so the title gives
+        way to the " (N XP)" after it, which is kept whole. Before #3004 the title kept 44
+        characters whatever the XP, and the label came out at 51 or more.
+        """
+        campaign = baker.make(Category, title="A campaign title that runs the full fifty letters!")
+        baker.make(Quest, campaign=campaign, xp=1000, published=True)
+
+        label = CytoScape.generate_label(campaign)
+
+        self.assertEqual(label, "A campaign title that runs the full f..." + " (1000 XP)")
+        self.assertEqual(len(label), CytoElement._meta.get_field('label').max_length)
+
+    def test_generate_label__a_long_name_keeps_its_whole_xp(self):
+        """A quest's name, like a campaign's, gives way to its xp: the label fits the column with
+        the xp and the "+" of student-entered xp intact.
+        """
+        quest = baker.make(Quest, name="A quest name that runs the full fifty letters too!", xp=1000, xp_can_be_entered_by_students=True)
+
+        label = CytoScape.generate_label(quest)
+
+        self.assertEqual(label, "A quest name that runs the full fifty l..." + " (1000+)")
+        self.assertEqual(len(label), CytoElement._meta.get_field('label').max_length)

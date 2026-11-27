@@ -622,31 +622,19 @@ class CytoScape(models.Model):
         Supports the object types that can appear on a quest map: a Quest, a Badge, or a
         Rank (all of which have an ``xp`` attribute), and a Category (campaign). The label is
         ``"<prefix><name> (<xp/points>)"``: a Badge/Rank name is prefixed with ``"Badge: "`` /
-        ``"Rank: "``, the name is truncated with an ellipsis past a max length that shrinks as
-        the xp value grows, and the parenthetical suffix is the object's xp (a ``+`` marks
-        student-enterable xp) or, for a Category, its total xp sum.
+        ``"Rank: "``, the parenthetical suffix is the object's xp (a ``+`` marks
+        student-enterable xp) or, for a Category, its total xp sum, and a name too long to fit
+        beside the suffix is cut short with an ellipsis (see ``fit_label``).
 
         :param obj: the Quest/Badge/Rank/Category the node represents.
         :return: the display label string for the node.
         """
-        # set max label length in characters
-        # object labels with large xp values require a shorter name length so all values when combined comply with max label length
-        if hasattr(obj, 'xp'):
-            max_len = 46 - len(str(obj.xp))
-        else:
-            max_len = 44
-
         post = ""
         pre = ""
         if type(obj) is Badge:
             pre = "Badge: "
         elif type(obj) is Rank:
             pre = "Rank: "
-
-        title = pre + str(obj)
-        # shorten the end
-        if len(title) > max_len:
-            title = title[:(max_len - 3)] + "..."  # + title[-int(l/2-2):]
 
         if hasattr(obj, 'xp'):
             if hasattr(obj, 'xp_can_be_entered_by_students') and obj.xp_can_be_entered_by_students:
@@ -664,7 +652,26 @@ class CytoScape(models.Model):
         #     if obj.max_repeats != 0:
         #         post += ' ⟲'
 
-        return title + post
+        return CytoScape.fit_label(pre + str(obj), post)
+
+    @staticmethod
+    def fit_label(name, suffix):
+        """Join a name and the suffix after it into a node label that fits ``CytoElement.label``.
+
+        The suffix (an xp value, a campaign's XP total, " Quest Map") is kept whole, since it's
+        the part that says what the node is, and the name gives way: one too long to fit beside
+        it is cut short with an ellipsis. The names come from fields as long as the label column
+        (a campaign's title) or longer (a map's name), so a long one has to give way for the node
+        to save.
+
+        :param name: the node's name, e.g. a quest's name or a campaign's title.
+        :param suffix: the text that follows the name, possibly empty.
+        :return: the label, no longer than the label column allows.
+        """
+        max_len = CytoElement._meta.get_field('label').max_length - len(suffix)
+        if len(name) > max_len:
+            name = name[:max_len - 3] + "..."
+        return name + suffix
 
     def create_first_node(self, obj):
         """ Creates the first node from `obj`, then if this map has a parent, creates an aditiona node to link back to back to the parent scape/map.
@@ -678,7 +685,7 @@ class CytoScape(models.Model):
             parent_node, _ = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
-                label=f"{self.parent_scape.name} Quest Map",
+                label=CytoScape.fit_label(self.parent_scape.name, " Quest Map"),
                 href=reverse('maps:quest_map', args=[self.parent_scape.id]),
                 classes='link parent-map'
             )
