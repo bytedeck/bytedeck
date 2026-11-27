@@ -3,13 +3,32 @@ from django import template
 from siteconfig.models import SiteConfig
 
 from ..assessments import (
-    approval_links, posted_level, posted_self_level, self_assessment_links, starting_level, submission_levels, submission_self_levels,
+    NOT_APPLICABLE, approval_links, posted_level, posted_self_level, self_assessment_links, starting_level, submission_levels,
+    submission_self_levels,
 )
 from ..forms import competency_level_field_name, self_assessment_field_name
+from ..links import competency_link as link_html
 from ..models import ProficiencyLevel
 from ..summaries import course_competencies
 
 register = template.Library()
+
+
+@register.simple_tag
+def competency_link(competency, length=None, new_tab=False, text=None):
+    """ A competency, named and linked to its page, with its full qualified name as hover text
+    (competencies.links.competency_link): how every list of competencies shows one.
+
+    Args:
+        competency (Competency): the competency.
+        length (int or None): cut the name short to this many characters, or None for all of it.
+        new_tab (bool): open the page in a new tab, for a link inside a form.
+        text (str or None): what the link says instead of the name.
+
+    Returns:
+        SafeString: the link.
+    """
+    return link_html(competency, length=length, new_tab=new_tab, text=text)
 
 
 @register.inclusion_tag('competencies/snippets/quest_competency_list.html')
@@ -71,10 +90,12 @@ def course_competency_average(averages, registration):
 def competency_approval_levels(context, submission):
     """ The competency level controls for a submission's approval form: one per competency the
     quest gives evidence of, labelled with the deck's proficiency scale. Approving records them; on an
-    approved submission, commenting records the ones changed. Each starts on the submission's current
-    level (from an earlier approval) or else the link's default, or, when the page is re-rendered for
-    a posted form that didn't validate, on the level the teacher posted, so resubmitting it records
-    their choice. Beside each is the student's self-assessment of the submission, when they gave one,
+    approved submission, commenting records the ones changed. Each offers N/A (not applicable) before
+    the lowest level, which records no level for the competency. Each starts on the submission's
+    current level (from an earlier approval), or else N/A on an approved submission (it has no level
+    in it) or the link's default on one being approved, or, when the page is re-rendered for a posted
+    form that didn't validate, on the level the teacher posted, so resubmitting it records their
+    choice. Beside each is the student's self-assessment of the submission, when they gave one,
     as context for the teacher. Renders nothing when the deck has competencies disabled or the quest
     has no active competencies.
 
@@ -87,11 +108,11 @@ def competency_approval_levels(context, submission):
         submission (QuestSubmission): the submission the approval form acts on.
 
     Returns:
-        dict: the snippet's context: 'rows', each with the competency, the posted field's name, its
-        (level, label, selected) choices and the student's self-assessed level and its label (None and
-        '' when they gave none); whether the submission is approved; the deck's label
-        for the lowest level; and whether any row starts on it (so the nudge shows from the first
-        render, not only once a level changes).
+        dict: the snippet's context: 'rows', each with the competency, the posted field's name, whether
+        N/A is selected, its (level, label, selected) choices and the student's self-assessed level and
+        its label (None and '' when they gave none); whether the submission is approved; the deck's
+        label for the lowest level; whether any row starts on it (so the nudge shows from the first
+        render, not only once a level changes); and the value N/A posts.
     """
     config = SiteConfig.get()
     if config is None or not config.enable_competencies:
@@ -105,11 +126,12 @@ def competency_approval_levels(context, submission):
     self_levels = submission_self_levels(submission) if links else {}
     rows = []
     for link in links:
-        chosen = posted_level(data, link, starting_level(link, current))
+        chosen = posted_level(data, link, starting_level(link, current, approved=submission.is_approved))
         self_level = self_levels.get(link.competency_id)
         rows.append({
             'competency': link.competency,
             'field_name': competency_level_field_name(link.competency_id),
+            'not_applicable': chosen is None,
             'levels': [(level, labels[level], level == chosen) for level in ProficiencyLevel.values],
             'self_level': self_level,
             'self_label': labels.get(self_level, ''),
@@ -120,6 +142,7 @@ def competency_approval_levels(context, submission):
         'approved': submission.is_approved,
         'lowest_label': labels[ProficiencyLevel.EMERGING],
         'starts_on_lowest': starts_on_lowest,
+        'not_applicable_value': NOT_APPLICABLE,
     }
 
 
