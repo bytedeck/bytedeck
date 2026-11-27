@@ -16,7 +16,7 @@ from competencies.forms import competency_level_field_name, self_assessment_fiel
 from competencies.models import CompetencyAssessment, ProficiencyLevel, QuestCompetency, RollupStrategy
 from competencies.rollup import current_levels, evidence_levels, latest_self_assessments
 from competencies.summaries import course_competencies
-from competencies.tests.test_approval import ApprovalTestMixin, set_competencies_flag
+from competencies.tests.test_approval import comment_link, ApprovalTestMixin, set_competencies_flag
 from competencies.tests.test_profile_views import StudentCompetenciesMixin, own_query_count
 from competencies.tests.test_rollup import set_rollup
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -109,7 +109,7 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
 
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
         self.assertIn('<p>Done</p>', text)
-        self.assertIn('<li><b>Self-assessment of Critical Thinking: Got It</b></li>', text)
+        self.assertIn(f'<li><b>Self-assessment of {comment_link(self.thinking)}: Got It</b></li>', text)
         self.assertNotIn('Communicating', text)
 
     def test_hand_in__the_comment_names_the_course(self):
@@ -122,7 +122,7 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.hand_in(submission, **{self_assessment_field_name(self.thinking.pk): EXT})
 
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
-        self.assertIn('<li><b>Self-assessment of Critical Thinking (ADST 9): Extending</b></li>', text)
+        self.assertIn(f'<li><b>Self-assessment of {comment_link(self.thinking)} (ADST 9): Extending</b></li>', text)
 
     def test_hand_in__a_level_off_the_scale_is_ignored(self):
         """ Anything posted that isn't a level (a hand-made request) records nothing """
@@ -168,7 +168,7 @@ class SelfAssessmentRecordingTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.self_assessed(submission), {self.thinking: EXT})
         self.assertEqual(submission_levels(submission), {self.thinking.pk: EXT, self.communicating.pk: PRF})
         text = Comment.objects.filter(target_object_id=submission.pk).order_by('-pk').first().text
-        self.assertIn('Self-assessment of Critical Thinking: Extending', text)
+        self.assertIn('Critical Thinking</a>: Extending', text)
         self.assertNotIn('Self-assessment of Communicating', text)
 
     def test_hand_in_again__a_competency_not_posted_keeps_its_level(self):
@@ -273,7 +273,8 @@ class SelfAssessmentFormTest(SelfAssessmentMixin, ByteDeckTenantTestCase):
         self.assertContains(response, '<strong>Your self-assessment</strong>')
         self.assertContains(response, "it doesn't count toward your level.")
         self.assertRegex(content, (
-            r'(?s)<span class="competency-approval-name" title="Communication: Communicating">Communicating</span>.*?'
+            rf'(?s)<span class="competency-approval-name"><a href="{self.communicating.get_absolute_url()}" '
+            r'title="Communication: Communicating" target="_blank" rel="noopener">Communicating</a></span>.*?'
             r'<label class="btn btn-default active">\s*'
             rf'<input type="radio" name="{self_assessment_field_name(self.communicating.pk)}" value="" autocomplete="off" checked>Skip'
             r'.*?<label class="btn btn-default competency-level competency-level-4">\s*'
@@ -455,14 +456,16 @@ class SelfAssessmentShownTest(StudentCompetenciesMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.brainstorm.pk]))
 
         self.assertContains(response, (
-            '<span class="competency-approval-name" title="ADST 9: Applied Design - Defining: Choose a design opportunity">'
-            'Choose a design opportunity <small class="text-muted">(ADST 9)</small>\n'
+            f'<span class="competency-approval-name"><a href="{self.defining.get_absolute_url()}" '
+            'title="ADST 9: Applied Design - Defining: Choose a design opportunity" target="_blank" rel="noopener">'
+            'Choose a design opportunity</a> <small class="text-muted">(ADST 9)</small>\n'
             '      <span class="label competency-level competency-level-4 competency-self" '
             'title="The student\'s self-assessment, not counted">Self: Nailed It</span></span>'
         ))
         self.assertContains(response, (
-            '<span class="competency-approval-name" title="ADST 9: Applied Design - Making: Use materials safely">'
-            'Use materials safely <small class="text-muted">(ADST 9)</small></span>'
+            f'<span class="competency-approval-name"><a href="{self.making.get_absolute_url()}" '
+            'title="ADST 9: Applied Design - Making: Use materials safely" target="_blank" rel="noopener">'
+            'Use materials safely</a> <small class="text-muted">(ADST 9)</small></span>'
         ))
 
     def test_approvals_tab__self_assessments_fetched_for_the_page(self):

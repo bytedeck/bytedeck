@@ -1,4 +1,5 @@
 {% load static %}
+{% load competency_tags %}
 <div class="media">
   <div class="media-left">
     <img class="media-object icon-lg img-rounded"
@@ -89,7 +90,7 @@
             {% if show_competencies %}
             {# by name, cut short like the quest's own Quest Info list; the title gives each in full, with its course and category #}
             <td class="col-sm-3 hidden-xs">
-              <small class="compact-lines">{% for link in q.active_competency_links %}<span title="{{ link.competency.qualified_name }}">{{ link.competency.name|truncatechars:50 }}</span>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</small>
+              <small class="compact-lines">{% for link in q.active_competency_links %}{% competency_link link.competency length=50 %}{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</small>
             </td>
             {% endif %}
             <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted">

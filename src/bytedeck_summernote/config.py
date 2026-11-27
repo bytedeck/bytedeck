@@ -27,6 +27,7 @@ PLUGINS = (
     ('table-headers', ('summernote-table-headers.js',), ()),
     ('math', ('summernote-math.js',), ()),
     ('keep-caret', ('summernote-keep-caret.js',), ()),
+    ('paste-colors', ('summernote-paste-colors.js',), ()),
 )
 
 

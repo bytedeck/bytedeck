@@ -1,0 +1,45 @@
+{% extends "competencies/base.html" %}
+
+{% block head_title %}{{ competency.name|truncatechars:60 }} | {% endblock %}
+
+{% block heading_inner %}Competency{% endblock %}
+
+{% block content %}
+{% comment %}
+  A competency's page (CompetencyDetailView), which every list of competencies links to: its full name,
+  course, category and description, then the quests that give evidence of it. Staff also see the quests
+  not open to students, marked; a student sees their own current level in it.
+{% endcomment %}
+<h3 class="competency-detail-name">
+  {{ competency.name }}
+  {% if not competency.active %}<span class="label label-default" title="Deactivated: hidden from new use, its evidence kept">Inactive</span>{% endif %}
+</h3>
+{% if competency.course_and_category %}<p class="text-muted">{{ competency.course_and_category }}</p>{% endif %}
+{% if competency.description %}{{ competency.description|linebreaks }}{% endif %}
+
+{% if not request.user.is_staff %}
+<p>
+  Your current level:
+  {% include "competencies/snippets/level_label.html" with level=current_level label=current_label %}{% if override %} <small class="text-muted">(set by your teacher)</small>{% endif %}.
+  <a href="{% url 'competencies:summary' request.user.pk %}">See all your competencies</a>
+</p>
+{% endif %}
+
+<h4>Quests that give evidence of it</h4>
+{% if quest_links %}
+<ul class="competency-detail-quests">
+  {% for link, open, default_label in quest_links %}
+  <li>
+    <a href="{{ link.quest.get_absolute_url }}">{{ link.quest.name }}</a>
+    {% if request.user.is_staff %}<small class="text-muted">(default level: {{ default_label }}{% if not open %}; not open to students{% endif %})</small>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-muted">None yet.</p>
+{% endif %}
+
+{% if request.user.is_staff %}
+<p><a href="{% url 'competencies:list' %}">All competencies</a></p>
+{% endif %}
+{% endblock %}
