@@ -107,6 +107,16 @@ class Competency(IsAPrereqMixin, models.Model):
         so competencies from different courses can be told apart in a picker. """
         return ": ".join(part for part in (self.course_and_category, self.name) if part)
 
+    @property
+    def full_text(self):
+        """ The competency in full, for the hover text wherever it's named: its qualified name (course,
+        category and the whole name, however short the name is shown), then its description when it has
+        one, since that is where a competency like the BC Core Competencies' "Communicating" keeps its
+        actual text. """
+        if self.description:
+            return f"{self.qualified_name}\n\n{self.description}"
+        return self.qualified_name
+
     def condition_met_as_prerequisite(self, user, num_required=1):
         """ Whether the student meets this competency as a prerequisite: their current level in it
         (competencies.rollup.current_levels: the deck's roll-up of their teacher's evidence, or a
