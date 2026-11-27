@@ -204,13 +204,73 @@ cy.on('tap', '[href]', function(){
     window.location.href = this.data('href');
 });
 
+// A campaign's name runs up the left side of its box, outside the box itself, and cytoscape
+// doesn't count a pointer over a rotated label as being over its node: it's over the background.
+// So the background handlers below find the linked campaign whose name is under the pointer, by
+// the name's own bounds (not the box's, so blank space beside the box stays background), and
+// treat it as the box: a click opens the campaign and hovering highlights it (#2994).
+var campaignAtName = function (position) {
+    return cy.nodes('.campaign[href]').filter(function (node) {
+        var bb = node.boundingBox({includeNodes: false, includeEdges: false, includeLabels: true, includeOverlays: false});
+        return position.x >= bb.x1 && position.x <= bb.x2 && position.y >= bb.y1 && position.y <= bb.y2;
+    })[0] || null;
+};
+
+cy.on('tap', function (evt) {
+    if (evt.target !== cy) {
+        return;
+    }
+    var campaign = campaignAtName(evt.position);
+    if (campaign) {
+        window.location.href = campaign.data('href');
+    }
+});
+
+// The campaign whose name the pointer is over, highlighted like a hovered link.
+var nameHoverCampaign = null;
+var setNameHover = function (campaign) {
+    if (campaign === nameHoverCampaign) {
+        return;
+    }
+    if (nameHoverCampaign) {
+        nameHoverCampaign.removeClass('link_hover');
+    }
+    nameHoverCampaign = campaign;
+    if (campaign) {
+        campaign.addClass('link_hover');
+    }
+    $('#cy').css('cursor', campaign ? 'pointer' : 'move');
+};
+
+cy.on('mousemove', function (evt) {
+    if (evt.target === cy) {
+        setNameHover(campaignAtName(evt.position));
+    } else if (nameHoverCampaign) {
+        // Onto an element, whose own mouseover handler sets the cursor and, if it's this
+        // campaign's box, keeps the highlight.
+        if (evt.target !== nameHoverCampaign) {
+            nameHoverCampaign.removeClass('link_hover');
+        }
+        nameHoverCampaign = null;
+    }
+});
+
+$('#cy').on('mouseleave', function () {
+    setNameHover(null);
+});
+
 cy.on('mouseover', '[href]', function(){
     $('#cy').css('cursor', 'pointer');
     this.addClass('link_hover');
 });
 cy.on('mouseout', '[href]', function(){
-    $('#cy').css('cursor', 'move');
-    this.removeClass('link_hover');
+    // The pointer can leave a campaign's box straight onto a campaign's name, and cytoscape
+    // reports the move onto the name (handled below) before this mouseout. Keep the feedback
+    // the name hover has already set (#2994).
+    if (this !== nameHoverCampaign) {
+        this.removeClass('link_hover');
+    }
+    $('#cy').css('cursor', nameHoverCampaign ? 'pointer' : 'move');
 });
 
 // nodes that don't link

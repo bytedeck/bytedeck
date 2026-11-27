@@ -982,6 +982,35 @@ class CampaignNodeEmissionTest(ByteDeckTenantTestCase):
         node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
         self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
 
+    def test_add_to_campaign__campaign_node_links_to_its_quest_list(self):
+        """A campaign's box on the map carries an href to the campaign's page, the list of its
+        quests, so clicking the box opens it the way clicking a quest opens the quest (#2994)."""
+        nodes = self._emit()['nodes']
+        campaign_node = nodes[self._index_by_category(nodes, self.camp_a.id)]
+        self.assertEqual(campaign_node['data']['href'], self.camp_a.get_absolute_url())
+
+    def test_add_to_campaign__campaigns_with_the_same_label_get_their_own_boxes(self):
+        """Two campaigns whose labels come out the same each get their own box, linking to their own page (#2994).
+
+        A label is the campaign's title, cut short when long, and its xp, so it doesn't identify
+        the campaign: each box is found by the campaign it draws, so neither campaign's quests land
+        in the other's box, and each box opens its own campaign. The labels are made to match by
+        patching, since a title long enough to be cut short currently overflows the label (#3004).
+        """
+        real_generate_label = CytoScape.generate_label
+
+        def same_label_for_campaigns(obj):
+            """Label every campaign alike, and everything else as usual."""
+            return "Campaign (10 XP)" if isinstance(obj, Category) else real_generate_label(obj)
+
+        with patch.object(CytoScape, 'generate_label', side_effect=same_label_for_campaigns):
+            scape = CytoScape.generate_map(self.start, "order-test")
+
+        for campaign, quest in ((self.camp_a, self.qa), (self.camp_b, self.qb)):
+            box = scape.cytoelement_set.get(classes='campaign', selector_id=f'Category: {campaign.id}')
+            self.assertEqual(box.href, campaign.get_absolute_url())
+            self.assertEqual(scape.cytoelement_set.get(selector_id=f'Quest: {quest.id}').data_parent, box)
+
     def test_elements_dict__nodes_are_emitted_in_deterministic_id_order(self):
         """Nodes come out in ascending-id order (A's campaign node before B's), the deterministic
         emission issue #2012 asked for, so a map looks the same between generations.

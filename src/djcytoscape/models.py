@@ -761,14 +761,19 @@ class CytoScape(models.Model):
 
             # Create a node for this campaign (or get it if it already exists).
             # selector_id ties the compound node back to its Category, the same way quest and
-            # badge nodes point at their objects, so a campaign node can be found from the
-            # Category it draws.
+            # badge nodes point at their objects, and it is what the node is found by: the label
+            # is the title cut short plus the campaign's xp, so two campaigns can share one, and
+            # their quests would then share a box. Its href opens the campaign's page, the list
+            # of its quests, when the box is clicked (#2994).
             campaign_node, _ = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
-                label=CytoScape.generate_label(obj.campaign),
+                selector_id=CytoElement.generate_selector_id(obj.campaign),
                 classes="campaign",
-                defaults={'selector_id': CytoElement.generate_selector_id(obj.campaign)},
+                defaults={
+                    'label': CytoScape.generate_label(obj.campaign),
+                    'href': obj.campaign.get_absolute_url(),
+                },
             )
 
             # Add a parent (i.e. campaign) to the target node (to form a compound node)
