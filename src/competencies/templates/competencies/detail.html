@@ -8,7 +8,8 @@
 {% comment %}
   A competency's page (CompetencyDetailView), which every list of competencies links to: its full name,
   course, category and description, then the quests that give evidence of it. Staff also see the quests
-  not open to students, marked; a student sees their own current level in it.
+  not open to students, marked, and the prerequisites that ask for a level in it; a student sees their
+  own current level in it.
 {% endcomment %}
 <h3 class="competency-detail-name">
   {{ competency.name }}
@@ -40,6 +41,16 @@
 {% endif %}
 
 {% if request.user.is_staff %}
+<h4>Prerequisites that ask for it</h4>
+{% if required_by %}
+<ul class="competency-detail-prerequisites">
+  {% for prereq in required_by %}
+  <li><a href="{{ prereq.parent_object.get_absolute_url }}">{{ prereq.parent_object.prereq_parent_str }}</a> requires {{ prereq }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-muted">None.</p>
+{% endif %}
 <p><a href="{% url 'competencies:list' %}">All competencies</a></p>
 {% endif %}
 {% endblock %}

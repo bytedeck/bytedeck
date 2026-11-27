@@ -10,6 +10,7 @@ from competencies.models import Competency, CompetencyAssessment, CompetencyOver
 from competencies.tests.test_approval import set_competencies_flag
 from competencies.tests.test_profile_views import own_query_count
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from prerequisites.models import Prereq
 from quest_manager.models import Category, Quest
 
 User = get_user_model()
@@ -58,7 +59,8 @@ class CompetencyDetailViewTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         """ A teacher and a student on a deck with competencies on ("Got It" for level 3), and a competency
-        that an open quest, a draft quest and an archived quest give evidence of. """
+        that an open quest, a draft quest and an archived quest give evidence of, and that another quest
+        has as a prerequisite. """
         set_competencies_flag(True, competency_label_level_3="Got It")
         self.teacher = User.objects.create_user('detail_teacher', is_staff=True)
         self.student = User.objects.create_user('detail_student')
@@ -72,6 +74,8 @@ class CompetencyDetailViewTest(ByteDeckTenantTestCase):
         QuestCompetency.objects.create(quest=self.open_quest, competency=self.competency, default_level=EXT)
         QuestCompetency.objects.create(quest=self.draft_quest, competency=self.competency, default_level=DEV)
         QuestCompetency.objects.create(quest=self.archived_quest, competency=self.competency)
+        self.locked_quest = baker.make(Quest, name="Design Challenge", published=True)
+        self.prerequisite = Prereq.objects.create(parent_object=self.locked_quest, prereq_object=self.competency, prereq_count=PRF)
         self.url = reverse('competencies:detail', args=[self.competency.pk])
 
     def test_detail__flag_off_is_404(self):
@@ -89,9 +93,10 @@ class CompetencyDetailViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.teacher)
         self.assert404('competencies:detail', args=[self.competency.pk + 100])
 
-    def test_detail__staff_see_every_quest(self):
-        """ Staff see the full name, course, category and description, and every quest that gives evidence
-        of it, with its default level, the ones not open to students marked """
+    def test_detail__staff_see_every_quest_and_the_prerequisites(self):
+        """ Staff see the full name, course, category and description; every quest that gives evidence
+        of it, with its default level, the ones not open to students marked; and the prerequisites that ask
+        for a level in it """
         self.client.force_login(self.teacher)
 
         response = self.client.get(self.url)
@@ -105,23 +110,43 @@ class CompetencyDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, '<small class="text-muted">(default level: Developing; not open to students)</small>')
         self.assertContains(response, f'<a href="{self.archived_quest.get_absolute_url()}">Old Archived</a>')
         self.assertContains(response, '<small class="text-muted">(default level: Got It; not open to students)</small>')
+        self.assertContains(response, (
+            f'<li><a href="{self.locked_quest.get_absolute_url()}">(quest) Design Challenge</a> requires '
+            '(competency) Got It in ADST 9: Applied Design - Defining: Choose a design opportunity</li>'
+        ))
         self.assertContains(response, f'<a href="{reverse("competencies:list")}">All competencies</a>')
         self.assertNotContains(response, "Your current level")
         self.assertNotContains(response, "Inactive")
 
+    def test_detail__a_prerequisite_naming_it_as_the_alternate(self):
+        """ A prerequisite that names the competency as its OR alternative is listed too, and one whose
+        parent is gone isn't """
+        self.client.force_login(self.teacher)
+        badge = baker.make('badges.Badge', name="Designer")
+        Prereq.objects.create(parent_object=badge, prereq_object=self.open_quest, or_prereq_object=self.competency, or_prereq_count=EXT)
+        orphan = Prereq.objects.create(parent_object=baker.make(Quest, name="Soon Gone"), prereq_object=self.competency)
+        Prereq.objects.filter(pk=orphan.pk).update(parent_object_id=orphan.parent_object_id + 1000)
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, f'<a href="{badge.get_absolute_url()}">(badge) Designer</a> requires')
+        self.assertContains(response, 'OR (competency) Extending in ADST 9')
+        self.assertNotContains(response, "Soon Gone")
+
     def test_detail__staff_with_nothing_linked(self):
-        """ A competency no quest gives evidence of says so, and an inactive one is marked """
+        """ A competency no quest gives evidence of and no prerequisite asks for says so """
         self.client.force_login(self.teacher)
         lone = baker.make(Competency, name="Lone competency", active=False)
 
         response = self.client.get(reverse('competencies:detail', args=[lone.pk]))
 
         self.assertContains(response, '<p class="text-muted">None yet.</p>')
+        self.assertContains(response, '<p class="text-muted">None.</p>')
         self.assertContains(response, 'title="Deactivated: hidden from new use, its evidence kept">Inactive</span>')
 
     def test_detail__students_see_open_quests_and_their_level(self):
-        """ A student sees the quests open to students, without their default levels, and their current
-        level in it, linking to their competencies page """
+        """ A student sees the quests open to students, without their default levels, no prerequisites,
+        and their current level in it, linking to their competencies page """
         self.client.force_login(self.student)
         summary = reverse('competencies:summary', args=[self.student.pk])
 
@@ -131,6 +156,7 @@ class CompetencyDetailViewTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, "Unfinished Draft")
         self.assertNotContains(response, "Old Archived")
         self.assertNotContains(response, "default level")
+        self.assertNotContains(response, "Prerequisites that ask for it")
         self.assertNotContains(response, "All competencies")
         self.assertContains(response, '<span class="label label-default" title="Not yet assessed">n/a</span>')
         self.assertContains(response, f'<a href="{summary}">See all your competencies</a>')

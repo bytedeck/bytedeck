@@ -16,3 +16,10 @@
   position: static;
   margin: 0;
 }
+
+/* An element's search box stays within its column, so a long name (a competency's, with its course
+   and category in front) is cut short with an ellipsis rather than pushing the table past the
+   page; select2 puts the full name in the box's title. */
+#id_prereq_formset .select2-container {
+  max-width: 320px;
+}

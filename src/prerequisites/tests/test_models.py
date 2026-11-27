@@ -256,10 +256,11 @@ class IsAPrereqMixinTest(PrereqMixinTestData, ByteDeckTenantTestCase):
         self.assertFalse(IsAPrereqMixin.content_type_is_registered(ct))
 
     def test_all_registered_content_types__returns_expected_count(self):
-        """There are 6 models that implement the IsAPrereqMixin
+        """There are 9 models that implement the IsAPrereqMixin (Quest, Category, Badge, Rank, Grade,
+        Block, Course, Competency and Prereq itself)
         """
         cts = IsAPrereqMixin.all_registered_content_types()
-        self.assertEqual(cts.count(), 8)
+        self.assertEqual(cts.count(), 9)
 
     @isolate_apps('prerequisites')
     def test_model_is_registered__reflects_mixin(self):
