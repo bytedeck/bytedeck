@@ -2,14 +2,17 @@ import os
 import posixpath
 import warnings
 from functools import partial
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
+from django.urls import reverse
 from django.utils.deconstruct import deconstructible
 from django.utils.html import escape
+from utilities.fields import UNSAFE_UPLOAD_EXTENSIONS
 from utilities.html import urlize
 from utilities.uploads import UploadToOwnFolder, is_own_folder
 
@@ -352,6 +355,36 @@ class Document(models.Model):
         from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
         filename = os.path.basename(self.docfile.name)
         return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
+
+    @property
+    def is_script_capable(self):
+        """Whether this attachment is a file a browser would run a script from (#2726).
+
+        Answered from the stored file rather than from whatever rule was in force when it was
+        uploaded: those rules change, and a change to them must not quietly start linking a
+        stored HTML attachment at its storage URL again, which is the whole exposure.
+
+        Returns:
+            bool: True for a stored HTML, SVG, XML or MHTML file, False for anything else.
+        """
+        return os.path.splitext(self.docfile.name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS
+
+    def get_download_url(self):
+        """The url the app links this attachment at.
+
+        A script-capable file is handed over as a download, through the download view, when the
+        deck serves uploads from its own site: opened there, a script in it would run as the
+        deck, in the session of whoever opened it, usually the teacher marking the work (#2726).
+        Where uploads are served from a site of their own, as production serves them from its
+        CDN, the script can't reach the deck, so the file opens in a tab like any other: a
+        student's web page shows as they built it, styled by the stylesheet beside it (#2861).
+
+        Returns:
+            str: the url to link this attachment at.
+        """
+        if self.is_script_capable and not urlparse(settings.MEDIA_URL).netloc:
+            return reverse('comments:document_download', args=[self.id])
+        return self.docfile.url
 
 
 pre_delete.connect(deleted_object_receiver, sender=Comment)
