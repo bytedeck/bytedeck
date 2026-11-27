@@ -3,6 +3,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 
 
 class ProficiencyLevel(models.IntegerChoices):
@@ -89,11 +90,25 @@ class Competency(models.Model):
         part left out when blank, so possibly ''). """
         return ": ".join(part for part in (self.course, self.category) if part)
 
+    def get_absolute_url(self):
+        """ The competency's page (CompetencyDetailView), which every list of competencies links to. """
+        return reverse('competencies:detail', args=[self.pk])
+
     @property
     def qualified_name(self):
         """ The name with its course and category in front, e.g. "Core: Communication: Collaborating",
         so competencies from different courses can be told apart in a picker. """
         return ": ".join(part for part in (self.course_and_category, self.name) if part)
+
+    @property
+    def full_text(self):
+        """ The competency in full, for the hover text wherever it's named: its qualified name (course,
+        category and the whole name, however short the name is shown), then its description when it has
+        one, since that is where a competency like the BC Core Competencies' "Communicating" keeps its
+        actual text. """
+        if self.description:
+            return f"{self.qualified_name}\n\n{self.description}"
+        return self.qualified_name
 
 
 class QuestCompetencyManager(models.Manager):

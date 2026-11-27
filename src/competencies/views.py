@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
-from django.views.generic import FormView, ListView, TemplateView
+from django.views.generic import DetailView, FormView, ListView, TemplateView
 
 from courses.models import Block, Course, CourseStudent
 from hackerspace_online.decorators import staff_member_required
@@ -23,7 +23,7 @@ from tenant.views import NonPublicOnlyViewMixin
 from .forms import CompetencyImportForm, CompetencyOverrideForm
 from .import_export import export_competency_set, export_csv, import_competency_set, preview_entry_statuses
 from .models import Competency, CompetencyOverride, ProficiencyLevel
-from .rollup import describe_rollup, evidence_levels
+from .rollup import current_levels, describe_rollup, evidence_levels
 from .summaries import LEVEL_RANGES, course_competencies, course_matrix, evidence_by_competency, level_codes
 
 # session key holding the parsed competency set between the upload and preview steps
@@ -72,6 +72,44 @@ class CompetencyListView(NonPublicOnlyViewMixin, ListView):
     """
     model = Competency
     template_name = 'competencies/list.html'
+
+
+@method_decorator([competencies_enabled, login_required], name='dispatch')
+class CompetencyDetailView(NonPublicOnlyViewMixin, DetailView):
+    """ A competency's page, which every list of competencies links to: its full name, course, category
+    and description, and the quests that give evidence of it.
+
+    Staff also see the quests that aren't open to students (drafts, archived quests, quests not yet
+    available or expired), marked as such. A student sees the quests open to students and their own
+    current level in it.
+    """
+    model = Competency
+    template_name = 'competencies/detail.html'
+
+    def get_context_data(self, **kwargs):
+        """ Adds the quests that give evidence of the competency and, for a student, their current level in it. """
+        from quest_manager.models import Quest  # locally: quest_manager imports this app
+
+        context = super().get_context_data(**kwargs)
+        competency = self.object
+        user = self.request.user
+        links = competency.quest_competencies.select_related('quest').order_by('quest__name')
+        labels = SiteConfig.get().get_competency_scale_labels()
+
+        if user.is_staff:
+            # Quest's default manager leaves archived quests out, so read which links are open to
+            # students from the active quests rather than from the links themselves
+            open_ids = set(Quest.objects.get_active().filter(quest_competencies__competency=competency).values_list('pk', flat=True))
+            context['quest_links'] = [(link, link.quest_id in open_ids, labels[link.default_level]) for link in links]
+        else:
+            open_quests = Quest.objects.get_active().filter(quest_competencies__competency=competency)
+            context['quest_links'] = [(link, True, labels[link.default_level]) for link in links.filter(quest__in=open_quests)]
+            levels, overrides = current_levels(user=user, competency=competency)
+            level = levels[user.pk].get(competency.pk)
+            context['current_level'] = level
+            context['current_label'] = labels.get(level, '')
+            context['override'] = overrides[user.pk].get(competency.pk)
+        return context
 
 
 @method_decorator([competencies_enabled, staff_member_required], name='dispatch')
