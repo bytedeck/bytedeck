@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
@@ -39,6 +40,38 @@ class QuestionListView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, ListVie
         return context_data
 
 
+class QuestionNextUrlMixin:
+    """Return to a ``next`` URL, when the request names one on this site, once the page is done.
+
+    The quest form's Submission Questions section (#2971) links to the create, edit and delete
+    pages with ``next`` set to the form, so a teacher working on a quest lands back in it. The
+    page carries ``next`` from its link into its own post (``next_url`` in the context, for a
+    hidden field and the Cancel button). Without one, the page returns to the quest's question
+    list as it always has.
+    """
+
+    def get_next_url(self):
+        """Return the request's ``next`` URL, or None if it names none or points off this site.
+
+        Checked with ``url_has_allowed_host_and_scheme``, as Django's login view checks its own
+        ``next``, so a crafted link can't use these pages to send a teacher to another site.
+
+        Returns:
+            str | None: the URL to return to, from the post or else the query string.
+        """
+        next_url = self.request.POST.get('next') or self.request.GET.get('next')
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure(),
+        ):
+            return next_url
+        return None
+
+    def get_context_data(self, **kwargs):
+        """Add ``next_url``, for the page's hidden field and its Cancel button."""
+        kwargs['next_url'] = self.get_next_url()
+        return super().get_context_data(**kwargs)
+
+
 class QuestionFormViewMixin:
     """Shared bits of the create and update views: both render QuestionForm for a
     question type that must be validated before the form is built."""
@@ -57,7 +90,7 @@ class QuestionFormViewMixin:
         return kwargs
 
 
-class QuestionCreateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionFormViewMixin, CreateView):
+class QuestionCreateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionNextUrlMixin, QuestionFormViewMixin, CreateView):
     """Staff-only creation of a question of the type named in the URL."""
 
     model = Question
@@ -85,8 +118,8 @@ class QuestionCreateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, Quest
         return super().form_valid(form)
 
     def get_success_url(self):
-        """Back to the quest's question list."""
-        return reverse('questions:list', kwargs={'quest_id': self.kwargs['quest_id']})
+        """Back to ``next``, if the page was given one, otherwise to the quest's question list."""
+        return self.get_next_url() or reverse('questions:list', kwargs={'quest_id': self.kwargs['quest_id']})
 
 
 class QuestionQuestScopedMixin:
@@ -98,7 +131,9 @@ class QuestionQuestScopedMixin:
         return Question.objects.filter(quest_id=self.kwargs['quest_id'])
 
 
-class QuestionUpdateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, QuestionFormViewMixin, UpdateView):
+class QuestionUpdateView(
+    NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, QuestionNextUrlMixin, QuestionFormViewMixin, UpdateView,
+):
     """Staff-only editing of an existing question (its type is fixed at creation)."""
 
     model = Question
@@ -117,11 +152,11 @@ class QuestionUpdateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, Quest
         return super().get_context_data(**kwargs)
 
     def get_success_url(self):
-        """Back to the quest's question list."""
-        return self.object.get_list_url()
+        """Back to ``next``, if the page was given one, otherwise to the quest's question list."""
+        return self.get_next_url() or self.object.get_list_url()
 
 
-class QuestionDeleteView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, DeleteView):
+class QuestionDeleteView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, QuestionNextUrlMixin, DeleteView):
     """Staff-only deletion of a question, with confirmation page.
 
     Students' existing answers survive (QuestionSubmission.question is SET_NULL) so markers
@@ -132,8 +167,8 @@ class QuestionDeleteView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, Quest
     template_name = 'questions/question_confirm_delete.html'
 
     def get_success_url(self):
-        """Back to the quest's question list."""
-        return reverse('questions:list', kwargs={'quest_id': self.kwargs['quest_id']})
+        """Back to ``next``, if the page was given one, otherwise to the quest's question list."""
+        return self.get_next_url() or reverse('questions:list', kwargs={'quest_id': self.kwargs['quest_id']})
 
 
 class QuestionMoveView(
@@ -147,11 +182,12 @@ class QuestionMoveView(
     found by ordering rather than by ``ordinal ± 1``. Moving the first question up or the last
     question down is a no-op.
 
-    There are two ways to ask for a move. The question list posts one in the background and
-    swaps the answer into the page, which keeps the teacher's place in a long list across the
-    several clicks a reorder takes (#2216): that request gets the re-rendered table as JSON. A
-    plain form post gets a redirect to the list, which is the path a browser running no
-    JavaScript takes.
+    There are two ways to ask for a move. The question list, and the quest form's Submission
+    Questions section, post one in the background and swap the answer into the page, which
+    keeps the teacher's place in a long list across the several clicks a reorder takes (#2216):
+    that request gets the re-rendered table as JSON, drawn for the quest form when the post
+    says ``in_quest_form`` (#2971). A plain form post gets a redirect to the list, which is the
+    path a browser running no JavaScript takes on the list.
     """
 
     http_method_names = ['post']
@@ -161,7 +197,8 @@ class QuestionMoveView(
 
         Args:
             request (HttpRequest): the move request. An ``X-Requested-With`` header of
-                ``XMLHttpRequest`` asks for the table back instead of a redirect.
+                ``XMLHttpRequest`` asks for the table back instead of a redirect, and an
+                ``in_quest_form`` value of ``1`` for the table as the quest form draws it.
             *args: unused, passed through from the URL resolver.
             **kwargs: URL keywords; ``pk`` names the question and ``direction`` (which must be
                 'up' or 'down') the way to move it.
@@ -191,13 +228,14 @@ class QuestionMoveView(
             self._swap_ordinals(question, neighbour)
 
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-            return JsonResponse({'question_table_html': self._render_table(request, question.quest)})
+            in_quest_form = request.POST.get('in_quest_form') == '1'
+            return JsonResponse({'question_table_html': self._render_table(request, question.quest, in_quest_form)})
 
         return redirect('questions:list', quest_id=question.quest_id)
 
     @staticmethod
-    def _render_table(request, quest):
-        """Render the quest's questions as the list page shows them.
+    def _render_table(request, quest, in_quest_form=False):
+        """Render the quest's questions as the page that asked shows them.
 
         The server re-renders the snippet the page was built from, so the order and which
         arrows are disabled at the ends of the list stay decided in one place. Working that
@@ -207,6 +245,8 @@ class QuestionMoveView(
             request (HttpRequest): the current request, so the template renders with the same
                 context processors the page uses.
             quest (Quest): the quest whose questions to render.
+            in_quest_form (bool): draw the table as the quest form's Submission Questions
+                section does (#2971), rather than as the question list does.
 
         Returns:
             str: the rendered table.
@@ -216,11 +256,11 @@ class QuestionMoveView(
             {
                 'quest': quest,
                 'questions': Question.objects.filter(quest_id=quest.id),
-                # This table replaces the one on the question list, which is the page that
-                # binds the move handler, so it needs the arrows the snippet otherwise
-                # withholds. Without this a reorder would work once and then hand back a
-                # table with nothing left to click (#2568).
+                # This table replaces one on a page that binds the move handler, so it needs
+                # the arrows the snippet otherwise withholds. Without this a reorder would
+                # work once and then hand back a table with nothing left to click (#2568).
                 'can_reorder_questions': True,
+                'in_quest_form': in_quest_form,
             },
             request=request,
         )

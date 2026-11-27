@@ -341,6 +341,110 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.assertTrue(Question.objects.filter(id=self.question1.id).exists())
 
 
+class QuestionNextUrlTest(ByteDeckTenantTestCase):
+    """The question pages return to a `next` URL when given one (#2971).
+
+    The quest form's Submission Questions section links to them with `next` set to the form,
+    so a teacher adding or editing a question from there lands back in the quest. Without
+    `next`, or with one pointing off the site, they return to the quest's question list.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher and a quest with one question."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.quest = baker.make(Quest)
+        cls.question = baker.make(Question, quest=cls.quest, ordinal=1, instructions="Q1")
+        cls.form_url = reverse("quests:quest_update", args=[cls.quest.id]) + "#submission-questions"
+        cls.list_url = reverse("questions:list", kwargs={"quest_id": cls.quest.id})
+
+    def setUp(self):
+        """Log the teacher in and set up valid question form data."""
+        self.client.force_login(self.test_teacher)
+        self.question_form_data = {
+            "type": "short_answer",
+            "instructions": "Test instructions",
+            "required": True,
+        }
+
+    def _create_url(self):
+        """The create page for a short-answer question on the quest."""
+        return reverse("questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+
+    def _update_url(self):
+        """The edit page for the quest's question."""
+        return reverse("questions:update", kwargs={"quest_id": self.quest.id, "pk": self.question.id})
+
+    def _delete_url(self):
+        """The delete confirmation page for the quest's question."""
+        return reverse("questions:delete", kwargs={"quest_id": self.quest.id, "pk": self.question.id})
+
+    def test_create__returns_to_next(self):
+        """A question created from the quest form goes back to the form."""
+        response = self.client.post(self._create_url(), data={**self.question_form_data, "next": self.form_url})
+
+        self.assertRedirects(response, self.form_url, fetch_redirect_response=False)
+        self.assertTrue(Question.objects.filter(quest=self.quest, instructions="Test instructions").exists())
+
+    def test_create__carries_next_through_the_form(self):
+        """The page keeps `next` for the post that saves the question, and its Cancel goes there."""
+        response = self.client.get(self._create_url(), data={"next": self.form_url})
+
+        self.assertContains(response, f'<input type="hidden" name="next" value="{self.form_url}">', html=True)
+        self.assertContains(response, f'href="{self.form_url}" role="button" class="btn btn-danger">Cancel</a>')
+
+    def test_create__without_next_returns_to_the_list(self):
+        """With no `next`, the question list is still where a new question leads, and its Cancel goes there."""
+        response = self.client.get(self._create_url())
+        self.assertNotContains(response, 'name="next"')
+        self.assertContains(response, f'href="{self.list_url}" role="button" class="btn btn-danger">Cancel</a>')
+
+        response = self.client.post(self._create_url(), data=self.question_form_data)
+        self.assertRedirects(response, self.list_url)
+
+    def test_create__ignores_next_off_the_site(self):
+        """A `next` pointing at another site is ignored, so the page can't be used to send a teacher there."""
+        response = self.client.post(
+            self._create_url(), data={**self.question_form_data, "next": "https://example.com/"})
+
+        self.assertRedirects(response, self.list_url)
+
+    def test_update__returns_to_next(self):
+        """A question edited from the quest form goes back to the form."""
+        response = self.client.post(self._update_url(), data={**self.question_form_data, "next": self.form_url})
+
+        self.assertRedirects(response, self.form_url, fetch_redirect_response=False)
+
+    def test_update__ignores_next_off_the_site(self):
+        """An edited question goes back to its list when `next` points off the site."""
+        response = self.client.post(
+            self._update_url(), data={**self.question_form_data, "next": "//example.com/"})
+
+        self.assertRedirects(response, self.list_url)
+
+    def test_delete__returns_to_next(self):
+        """A question deleted from the quest form goes back to the form."""
+        response = self.client.post(self._delete_url(), data={"next": self.form_url})
+
+        self.assertRedirects(response, self.form_url, fetch_redirect_response=False)
+        self.assertFalse(Question.objects.filter(pk=self.question.pk).exists())
+
+    def test_delete__confirmation_carries_next(self):
+        """The confirmation keeps `next` for its post, and its Cancel goes there."""
+        response = self.client.get(self._delete_url(), data={"next": self.form_url})
+
+        self.assertContains(response, f'<input type="hidden" name="next" value="{self.form_url}">', html=True)
+        self.assertContains(response, f'href="{self.form_url}" role="button" class="btn btn-info">Cancel</a>')
+
+    def test_delete__without_next_returns_to_the_list(self):
+        """With no `next`, deleting a question returns to the question list, and its Cancel goes there."""
+        response = self.client.get(self._delete_url())
+        self.assertContains(response, f'href="{self.list_url}" role="button" class="btn btn-info">Cancel</a>')
+
+        response = self.client.post(self._delete_url())
+        self.assertRedirects(response, self.list_url)
+
+
 class QuestionTableMoveArrowsTest(ByteDeckTenantTestCase):
     """The move arrows render only where the page can act on them (#2568).
 
@@ -403,6 +507,33 @@ class QuestionTableMoveArrowsTest(ByteDeckTenantTestCase):
         self.assertIn("question-move-form", table)
         self.assertIn('title="Move up"', table)
         self.assertIn('title="Move down"', table)
+
+    def test_question_table__in_quest_form_arrows_are_buttons(self):
+        """Inside the quest's own form the arrows are buttons carrying their move URL, not forms (#2971).
+
+        A <form> can't nest in another, so the browser would drop the arrow's own form and the
+        click would submit the quest form instead.
+        """
+        table = self._render_snippet(can_reorder_questions=True, in_quest_form=True)
+
+        self.assertNotIn("<form", table)
+        move_down = reverse("questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q1.id, "direction": "down"})
+        self.assertIn(f'data-move-url="{move_down}"', table)
+        self.assertIn('type="button"', table)
+
+    def test_question_table__in_quest_form_links_return_to_the_form(self):
+        """In the quest form, Edit and Delete carry `next` back to the form's Submission Questions (#2971)."""
+        table = self._render_snippet(in_quest_form=True)
+
+        back_here = f"?next={reverse('quests:quest_update', args=[self.quest.id])}%23submission-questions"
+        self.assertIn(self.q1.get_absolute_url() + back_here, table)
+        self.assertIn(reverse("questions:delete", args=[self.quest.id, self.q1.id]) + back_here, table)
+
+    def test_question_table__links_carry_no_next_elsewhere(self):
+        """Everywhere else, Edit and Delete are the plain links they were, leading back to the question list."""
+        table = self._render_snippet(can_reorder_questions=True)
+
+        self.assertNotIn("?next=", table)
 
     def test_QuestionList__renders_the_move_arrows(self):
         """The question list is the page built to reorder from, so it shows them."""
@@ -606,6 +737,26 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
         self.assertIn("Q1", response.json()["question_table_html"])
+
+    def test_move__ajax_from_the_quest_form_returns_its_table(self):
+        """A move posted from the quest form gets back the table as the form shows it (#2971).
+
+        The table replaces the one inside the quest's form, so its arrows must again be
+        buttons rather than nested forms, and its links must again lead back to the form.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse("questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q1.id, "direction": "down"}),
+            data={"in_quest_form": "1"},
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(self._ordinals(), {"Q1": 2, "Q2": 1, "Q3": 3})
+        table = response.json()["question_table_html"]
+        self.assertNotIn("question-move-form", table)
+        self.assertIn("data-move-url", table)
+        self.assertIn("%23submission-questions", table)
 
     def test_move__a_plain_post_redirects_to_the_list(self):
         """A form post that is not an XHR redirects to the question list.

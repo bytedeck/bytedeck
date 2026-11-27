@@ -411,6 +411,12 @@ class QuestFormViewMixin:
         else:
             return QuestForm
 
+    def get_context_data(self, **kwargs):
+        """Add the question types, for the Add buttons in the form's Submission Questions section (#2971)."""
+        context = super().get_context_data(**kwargs)
+        context["question_type_choices"] = QuestionType.choices
+        return context
+
 
 class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
     def test_func(self):
@@ -439,6 +445,19 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
         context["cancel_url"] = reverse("quests:quests")
         context["submit_btn_value"] = "Create"
         return context
+
+    def get_success_url(self):
+        """Open the new quest's form at its Submission Questions if the teacher asked to, otherwise the quest.
+
+        A question needs a saved quest to belong to, so the create form's Create and Add Questions
+        button (`add_questions`) saves the quest and comes back to it ready for questions (#2971).
+
+        Returns:
+            str: the URL to go to once the quest is created.
+        """
+        if "add_questions" in self.request.POST:
+            return reverse("quests:quest_update", args=[self.object.id]) + "#submission-questions"
+        return super().get_success_url()
 
 
 # UpdateMapMessageMixin comes before QuestFormViewMixin so that it wraps the prerequisites the form

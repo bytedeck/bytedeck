@@ -13,7 +13,9 @@
         <p>Question ID: {{ object.id }}</p>
     </div>
     <p>Answers students have already submitted for this question are kept and will still be visible to markers.</p>
-    <a href="{% url 'questions:list' object.quest.id %}" role="button" class="btn btn-info">Cancel</a>
+    {# next_url: the page this was opened from, such as the quest form, to return to (#2971) #}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <a href="{% if next_url %}{{ next_url }}{% else %}{% url 'questions:list' object.quest.id %}{% endif %}" role="button" class="btn btn-info">Cancel</a>
     <input type="submit" value="Delete" class="btn btn-danger">
 </form>
 {% endblock %}

@@ -9,7 +9,9 @@
 {# data-warn-unsaved: leaving with a half-written question draws the browser's "Leave site?" prompt (#2572). #}
 <form method='post' enctype="multipart/form-data" data-warn-unsaved>{% csrf_token %}
     {% crispy form %}
-    <a href="{% url 'questions:list' quest.id %}" role="button" class="btn btn-danger">Cancel</a>
+    {# next_url: the page this was opened from, such as the quest form, to return to (#2971) #}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <a href="{% if next_url %}{{ next_url }}{% else %}{% url 'questions:list' quest.id %}{% endif %}" role="button" class="btn btn-danger">Cancel</a>
     <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
 </form>
 {% endblock %}

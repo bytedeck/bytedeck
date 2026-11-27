@@ -2900,17 +2900,101 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         questions_url = reverse('questions:list', args=[quest.pk])
         self.assertContains(response, f'href="{questions_url}">Manage Questions</a>')
 
-    def test_quest_form__manage_questions_button_disabled_when_creating(self):
-        """On the create form there is no quest to hang questions on yet, so the button is disabled (#2347)."""
+    def test_quest_form__create_and_add_questions_button_when_creating(self):
+        """On the create form the questions button saves the new quest and goes on to its questions (#2971).
+
+        There is no quest to hang questions on until it's saved, so the button is a submit
+        button rather than a link to a question list that doesn't exist yet.
+        """
         self.client.force_login(self.test_teacher)
 
         content = self.client.get(reverse('quests:quest_create')).content.decode()
 
-        self.assertIn('Manage Questions', content)
-        # the disabled placeholder is a <button>, not a link to the (non-existent) quest's questions
-        self.assertIn('disabled title="You need to create this new quest first, '
-                      'before you can add submission questions."', content)
+        self.assertIn('<button type="submit" name="add_questions" class="btn btn-default">Create and Add Questions</button>', content)
         self.assertNotIn('/questions/quest/', content)
+
+    def test_quest_form__submission_questions_section_lists_the_quests_questions(self):
+        """Editing a quest shows its questions in a Submission Questions section of the form (#2971).
+
+        Each Add, Edit and Delete link carries `next` back to this form, opened at the section,
+        so the teacher returns to the quest once the question is saved.
+        """
+        from questions.models import Question
+
+        self.client.force_login(self.test_teacher)
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        question = baker.make(Question, quest=quest, ordinal=1, instructions="Name a colour")
+
+        content = self.client.get(reverse('quests:quest_update', args=[quest.pk])).content.decode()
+
+        self.assertIn('Submission Questions', content)
+        self.assertIn('id="submission-questions"', content)
+        self.assertIn("Name a colour", content)
+        back_here = f"?next={reverse('quests:quest_update', args=[quest.pk])}%23submission-questions"
+        self.assertIn(reverse('questions:create', args=[quest.pk, 'short_answer']) + back_here, content)
+        self.assertIn(reverse('questions:create', args=[quest.pk, 'file_upload']) + back_here, content)
+        self.assertIn(question.get_absolute_url() + back_here, content)
+        self.assertIn(reverse('questions:delete', args=[quest.pk, question.pk]) + back_here, content)
+
+    def test_quest_form__submission_questions_section_nests_no_forms(self):
+        """The section's move arrows are buttons, not forms, because the section is inside the quest's form (#2971).
+
+        A browser drops a <form> nested in another, so an arrow inside one would submit the
+        quest form instead. Each arrow carries its move URL for the script that posts it.
+        """
+        from questions.models import Question
+
+        self.client.force_login(self.test_teacher)
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        question = baker.make(Question, quest=quest, ordinal=1)
+
+        content = self.client.get(reverse('quests:quest_update', args=[quest.pk])).content.decode()
+
+        self.assertNotIn('question-move-form', content)
+        move_up = reverse('questions:move', args=[quest.pk, question.pk, 'up'])
+        self.assertIn(f'data-move-url="{move_up}"', content)
+        self.assertIn('question-table.js', content)
+
+    def test_quest_form__submission_questions_section_offers_create_and_add_when_creating(self):
+        """A new quest's Submission Questions section explains that the quest is saved first, with the button that does (#2971)."""
+        self.client.force_login(self.test_teacher)
+
+        content = self.client.get(reverse('quests:quest_create')).content.decode()
+
+        self.assertIn('id="submission-questions"', content)
+        # once in the top row of buttons and once in the section
+        self.assertEqual(content.count('name="add_questions"'), 2)
+
+    def test_quest_form__submission_questions_section_hidden_from_tas(self):
+        """TAs can't manage questions (staff-only), so their quest form has no Submission Questions section (#2971)."""
+        test_ta = self._make_TA('test_ta_question_section')
+        self.client.force_login(test_ta)
+        quest = Quest.objects.create(**self.minimal_valid_form_data, editor=test_ta, published=False)
+
+        for url in (reverse('quests:quest_create'), reverse('quests:quest_update', args=[quest.pk])):
+            content = self.client.get(url).content.decode()
+            self.assertNotIn('id="submission-questions"', content)
+            self.assertNotIn('add_questions', content)
+
+    def test_quest_create__create_and_add_questions_returns_to_the_form_at_its_questions(self):
+        """Create and Add Questions saves the quest and opens its edit form at Submission Questions (#2971)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:quest_create'), data={**self.minimal_valid_form_data, 'add_questions': ''})
+
+        quest = Quest.objects.get(name="Test Quest")
+        self.assertRedirects(
+            response, reverse('quests:quest_update', args=[quest.pk]) + '#submission-questions', fetch_redirect_response=False)
+
+    def test_quest_create__plain_create_goes_to_the_new_quest(self):
+        """The ordinary Create button still lands on the new quest's page."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+
+        quest = Quest.objects.get(name="Test Quest")
+        self.assertRedirects(response, quest.get_absolute_url(), fetch_redirect_response=False)
 
     def test_quest_form__manage_questions_button_hidden_from_tas(self):
         """TAs can edit their draft quests but can't manage questions (staff-only), so they don't see the button (#2347)."""
