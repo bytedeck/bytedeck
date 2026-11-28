@@ -132,10 +132,10 @@ class QuestCompetencyViewsTest(ByteDeckTenantTestCase):
 
     def test_quest_detail__lists_the_competencies_by_name(self):
         """ The Quest Info lists the quest's competencies by name, for staff and students alike (no
-        levels), each with its category in the title """
+        levels), each linked to its page with its category in the link's title """
         quest = baker.make(Quest, published=True)
         QuestCompetency.objects.create(quest=quest, competency=self.thinking, default_level=ProficiencyLevel.EXTENDING)
-        item = '<li title="Thinking: Critical Thinking">Critical Thinking</li>'
+        item = f'<li><a href="{self.thinking.get_absolute_url()}" title="Thinking: Critical Thinking">Critical Thinking</a></li>'
 
         self.assertContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), item, html=True)
 
@@ -144,14 +144,17 @@ class QuestCompetencyViewsTest(ByteDeckTenantTestCase):
             self.assertContains(self.client.get(reverse('quests:quest_detail', args=[quest.pk])), item, html=True)
 
     def test_quest_detail__long_competency_names_are_cut_short(self):
-        """ A long competency name is cut to 50 characters with an ellipsis, in full in its title """
+        """ A long competency name is cut to 50 characters with an ellipsis, in full in its link's title """
         long_name = "Critically analyze and prioritize competing factors to meet community needs"
         quest = baker.make(Quest)
-        QuestCompetency.objects.create(quest=quest, competency=baker.make(Competency, name=long_name, category="Ideating"))
+        ideating = baker.make(Competency, name=long_name, category="Ideating")
+        QuestCompetency.objects.create(quest=quest, competency=ideating)
 
         response = self.client.get(reverse('quests:quest_detail', args=[quest.pk]))
 
-        self.assertContains(response, f'<li title="Ideating: {long_name}">{long_name[:49]}\u2026</li>', html=True)
+        self.assertContains(
+            response, f'<li><a href="{ideating.get_absolute_url()}" title="Ideating: {long_name}">{long_name[:49]}\u2026</a></li>', html=True,
+        )
 
     def test_quest_detail__deactivated_competencies_are_left_out(self):
         """ A deactivated competency still linked to the quest isn't listed, since approving the quest
@@ -162,7 +165,9 @@ class QuestCompetencyViewsTest(ByteDeckTenantTestCase):
         QuestCompetency.objects.create(quest=quest, competency=deactivated)
 
         response = self.client.get(reverse('quests:quest_detail', args=[quest.pk]))
-        self.assertContains(response, '<li title="Thinking: Critical Thinking">Critical Thinking</li>', html=True)
+        self.assertContains(
+            response, f'<li><a href="{self.thinking.get_absolute_url()}" title="Thinking: Critical Thinking">Critical Thinking</a></li>', html=True,
+        )
         self.assertNotContains(response, "Old Standard")
 
         QuestCompetency.objects.filter(competency=self.thinking).delete()

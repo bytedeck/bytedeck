@@ -17,11 +17,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.postgres.aggregates import StringAgg
+from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
-    Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Q, Subquery, Sum, Value, When,
-    prefetch_related_objects,
+    Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Prefetch, Q, Subquery, Sum, Value,
+    When, prefetch_related_objects,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -49,6 +50,7 @@ from competencies.assessments import (
     record_self_assessments,
 )
 from competencies.forms import quest_competency_initial
+from competencies.models import QuestCompetency
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import (
@@ -216,7 +218,19 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         # queries per quest. This mirrors the quest list view (see quest_list()).
         quests = quests.select_related("campaign").prefetch_related("tags").with_is_expired()
 
+        # With competencies on, the list has a Competencies column beside the tags, naming each
+        # quest's active competencies as its own page does, fetched for every quest at once (#2993).
+        # The flag is set only here, so the Library's pages that share the list leave the column out.
+        show_competencies = SiteConfig.get().enable_competencies
+        if show_competencies:
+            quests = quests.prefetch_related(Prefetch(
+                'quest_competencies',
+                queryset=QuestCompetency.objects.filter(competency__active=True),
+                to_attr='active_competency_links',
+            ))
+
         kwargs['category_displayed_quests'] = quests
+        kwargs['show_competencies'] = show_competencies
 
         return super().get_context_data(**kwargs)
 
@@ -1489,6 +1503,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission_form": self.form,
             "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
+            "show_past_work": _shows_past_work(self.request.user, self.submission),
             # Carried through the correction, so the resubmission lands where the first
             # attempt was going to.
             "next": self.safe_next(),
@@ -2511,6 +2526,7 @@ def complete(request, submission_id):
             "question_formset": question_formset,
             "form_media": _submission_page_media(page_form, question_formset),
             "anchor": "submission-form-" + str(submission.quest.id),
+            "show_past_work": _shows_past_work(request.user, submission),
         }
         return render(request, "quest_manager/submission.html", context)
 
@@ -2580,7 +2596,8 @@ def complete(request, submission_id):
         # levels the student chose for their self-assessment, when the quest asks for one: listed
         # with the other choices, and recorded once the quest is handed in, below
         self_assessed = posted_self_assessments(submission, request.POST)
-        choices.extend(escape(text) for text in describe_self_assessments(self_assessed))
+        # each line is already safe HTML: the competency linked to its page, the rest escaped
+        choices.extend(describe_self_assessments(self_assessed))
         if isinstance(form, SubmissionFormCustomXP):
             xp_requested = form.cleaned_data.get("xp_requested")
             choices.append(f"XP requested: {xp_requested}")
@@ -3128,6 +3145,14 @@ def ajax_save_draft(request):
             except (TypeError, ValueError):
                 # absent, blank, or not a number: leave whatever is stored alone
                 xp_requested = None
+            # A number the column can't hold (past the database's integer range) is left alone
+            # too: the full_clean below would reject it with a server error, failing the whole
+            # draft save. Handing the quest in is where the form tells the student.
+            if xp_requested is not None:
+                try:
+                    QuestSubmission._meta.get_field("xp_requested").run_validators(xp_requested)
+                except ValidationError:
+                    xp_requested = None
             # Zero and below are left alone rather than stored. Zero is this app's sentinel
             # for "no custom XP requested" (`sub.xp_requested or sub.quest.xp` here and in
             # the approval path), so storing it says the same thing as storing nothing while
@@ -3408,8 +3433,29 @@ def submission(request, submission_id=None, quest_id=None):
         # QuestSubmission manager excludes them from this view entirely, so they 404, which matches
         # the "no longer viewable" fallback the issue accepts for the archived case.)
         "quest_no_longer_available": not sub.quest.published,
+        "show_past_work": _shows_past_work(request.user, sub),
     }
     return render(request, "quest_manager/submission.html", context)
+
+
+def _shows_past_work(user, sub):
+    """Whether the submission page shows its "Past Submissions and Replies" panel to ``user``.
+
+    A student sees it only once it has something in it, an earlier submission of a repeatable
+    quest or a reply they can see (they aren't shown flagged ones), so a student starting a quest
+    doesn't get an empty section above the form (#2970). Staff always see it: it also carries how
+    long the student took to complete the quest.
+
+    Args:
+        user: the user viewing the page.
+        sub (QuestSubmission): the submission shown.
+
+    Returns:
+        bool: True to show the panel.
+    """
+    if user.is_staff:
+        return True
+    return sub.get_previous() is not None or sub.get_comments().filter(flagged=False).exists()
 
 
 @xml_http_request_required

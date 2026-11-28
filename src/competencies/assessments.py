@@ -7,6 +7,10 @@ submission already has (a submission returned and approved again) or else the li
 quick approvals and quests that need no teacher approval record too. Commenting on an approved
 submission records the levels the teacher changed on the form.
 
+The form also offers N/A (not applicable) before the lowest level, for a competency the work didn't
+give evidence of: it records no level for that competency, and clears the one the submission had. On
+an approved submission, a competency it has no level in starts on N/A, since that is what it is.
+
 A level recorded for a submission replaces the one it had for that competency, so each quest
 counts only its latest rating; the comment that recorded each rating keeps the record of what was
 given, and when.
@@ -18,15 +22,27 @@ kept apart from the teacher's level, which it never replaces or counts toward.
 """
 
 from collections import defaultdict
+from typing import NamedTuple
 
 from django.contrib.contenttypes.models import ContentType
-from django.template.defaultfilters import truncatechars
 from django.utils.html import format_html, format_html_join
 
 from siteconfig.models import SiteConfig
 
 from .forms import competency_level_field_name, self_assessment_field_name
+from .links import competency_link
 from .models import CompetencyAssessment, ProficiencyLevel
+
+
+# The value the approval form posts for N/A (not applicable) in a competency's level control.
+NOT_APPLICABLE = 'na'
+
+
+class NotApplicable(NamedTuple):
+    """ A competency marked N/A on the approval form: no level recorded for it (and the one the
+    submission had cleared), shaped like the assessments recorded beside it so the comment can list it. """
+    competency: object
+    level: None = None
 
 
 def approval_links(quest):
@@ -118,18 +134,22 @@ def submission_self_levels(submission):
     return _levels_by_submission([submission], self_assessed=True).get(submission.pk, {})
 
 
-def starting_level(link, current):
+def starting_level(link, current, approved=False):
     """ The level the approval form starts a link's competency on: the submission's current level
-    in it, or the link's default when it has none.
+    in it, or else, on a submission already approved, N/A (it was approved with no level in it, or the
+    competency was added to the quest since), and otherwise the link's default.
 
     Args:
         link (QuestCompetency): the quest's link to the competency.
         current (dict[int, int]): the submission's current levels (submission_levels).
+        approved (bool): whether the submission was already approved before this form.
 
     Returns:
-        int: a ProficiencyLevel value.
+        int or None: a ProficiencyLevel value, or None for N/A.
     """
-    return current.get(link.competency_id, link.default_level)
+    if link.competency_id in current:
+        return current[link.competency_id]
+    return None if approved else link.default_level
 
 
 def posted_level(data, link, start):
@@ -138,13 +158,15 @@ def posted_level(data, link, start):
     Args:
         data (QueryDict or None): the approval form's POST data, or None when no form was posted.
         link (QuestCompetency): the quest's link to the competency.
-        start (int): the level the form started on (starting_level).
+        start (int or None): the level the form started on (starting_level).
 
     Returns:
-        int: a ProficiencyLevel value. Anything posted that isn't one (a hand-made request) falls
-        back to the starting level, as a missing value does.
+        int or None: a ProficiencyLevel value, or None for N/A. Anything posted that is neither (a
+        hand-made request) falls back to the starting level, as a missing value does.
     """
     raw = (data or {}).get(competency_level_field_name(link.competency_id))
+    if raw == NOT_APPLICABLE:
+        return None
     try:
         level = int(raw)
     except (TypeError, ValueError):
@@ -163,21 +185,24 @@ def competencies_enabled():
 
 
 def record_level(submission, link, level, assessed_by):
-    """ Record the submission's level in a link's competency, replacing the one it had.
+    """ Record the submission's level in a link's competency, replacing the one it had, or, for N/A,
+    just clear the one it had.
 
     Args:
         submission (QuestSubmission): the submission; its student is the one assessed.
         link (QuestCompetency): the quest's link to the competency.
-        level (int): the ProficiencyLevel value.
+        level (int or None): the ProficiencyLevel value, or None for N/A.
         assessed_by (User or None): the teacher, or None when no teacher assessed it.
 
     Returns:
-        CompetencyAssessment: the assessment created.
+        CompetencyAssessment or NotApplicable: the assessment created, or the N/A that stands for none.
     """
     source_content_type = ContentType.objects.get_for_model(submission)
     CompetencyAssessment.objects.teacher_evidence().filter(
         source_content_type=source_content_type, source_object_id=submission.pk, competency=link.competency,
     ).delete()
+    if level is None:
+        return NotApplicable(link.competency)
     assessment = CompetencyAssessment(
         user=submission.user,
         competency=link.competency,
@@ -194,7 +219,7 @@ def record_level(submission, link, level, assessed_by):
 def record_approval_assessments(submission, assessed_by=None, data=None):
     """ Record the competency evidence an approval of the submission gives, if the deck has
     competencies enabled: a level for each of the quest's competencies, the one posted or else the
-    one the form started on.
+    one the form started on, or none for a competency marked N/A (clearing the one it had).
 
     Args:
         submission (QuestSubmission): the submission just approved; its student is the one assessed.
@@ -203,12 +228,14 @@ def record_approval_assessments(submission, assessed_by=None, data=None):
         data (QueryDict or None): the approval form's POST data, for the levels the teacher chose.
 
     Returns:
-        list[CompetencyAssessment]: the assessments created, one per competency (empty when the
-        flag is off or the quest has no active competencies).
+        list[CompetencyAssessment or NotApplicable]: one per competency, the assessment created or
+        the N/A (empty when the flag is off or the quest has no active competencies).
     """
     if not competencies_enabled():
         return []
     current = submission_levels(submission)
+    # starting as a submission not yet approved: the view marks it approved before recording, and a
+    # quick approval (no form posted) records each competency's default
     return [
         record_level(submission, link, posted_level(data, link, starting_level(link, current)), assessed_by)
         for link in approval_links(submission.quest)
@@ -216,23 +243,24 @@ def record_approval_assessments(submission, assessed_by=None, data=None):
 
 
 def level_changes(submission, data):
-    """ The levels a teacher changed on the approval form: each competency whose posted level
-    differs from the one the form started on.
+    """ The levels a teacher changed on the approval form of an approved submission: each competency
+    whose posted level (or N/A) differs from the one the form started on. A competency the submission
+    has no level in starts on N/A, so leaving it there records nothing and choosing a level records it.
 
     Args:
-        submission (QuestSubmission): the submission the form acts on.
+        submission (QuestSubmission): the approved submission the form acts on.
         data (QueryDict): the form's POST data.
 
     Returns:
-        list[tuple[QuestCompetency, int]]: each changed link with its new level (empty when the
-        flag is off or nothing changed).
+        list[tuple[QuestCompetency, int or None]]: each changed link with its new level, or None for
+        N/A (empty when the flag is off or nothing changed).
     """
     if not competencies_enabled():
         return []
     current = submission_levels(submission)
     changes = []
     for link in approval_links(submission.quest):
-        start = starting_level(link, current)
+        start = starting_level(link, current, approved=True)
         level = posted_level(data, link, start)
         if level != start:
             changes.append((link, level))
@@ -240,7 +268,8 @@ def level_changes(submission, data):
 
 
 def record_level_changes(submission, assessed_by, data):
-    """ Record the levels a teacher changed when commenting on an approved submission.
+    """ Record the levels a teacher changed when commenting on an approved submission, clearing the
+    ones changed to N/A.
 
     Args:
         submission (QuestSubmission): the approved submission commented on.
@@ -248,7 +277,7 @@ def record_level_changes(submission, assessed_by, data):
         data (QueryDict): the form's POST data.
 
     Returns:
-        list[CompetencyAssessment]: the assessments created, one per changed competency.
+        list[CompetencyAssessment or NotApplicable]: one per changed competency.
     """
     return [record_level(submission, link, level, assessed_by) for link, level in level_changes(submission, data)]
 
@@ -344,15 +373,16 @@ def record_self_assessments(submission, chosen):
 
 def describe_self_assessments(chosen):
     """ The student's self-assessment, one line per competency, for the comment they hand the quest in
-    with, as the other choices they make on the form are listed there. A long name is cut short, and
-    the competency's course follows it, since courses can share a competency's wording.
+    with, as the other choices they make on the form are listed there. Each competency links to its
+    page (a long name cut short, in full in the link's title), and its course follows it, since courses
+    can share a competency's wording.
 
     Args:
         chosen (list[tuple[QuestCompetency, int or None]]): what posted_self_assessments returned; the
             competencies left on "Skip" aren't listed.
 
     Returns:
-        list[str]: plain text lines, e.g. "Self-assessment of Choose a design opportunity (ADST 9): Proficient".
+        list[SafeString]: HTML lines, e.g. "Self-assessment of <a ...>Choose a design opportunity</a> (ADST 9): Proficient".
     """
     labels = SiteConfig.get().get_competency_scale_labels()
     lines = []
@@ -360,28 +390,29 @@ def describe_self_assessments(chosen):
         if level is None:
             continue
         course = f" ({link.competency.course})" if link.competency.course else ""
-        lines.append(f"Self-assessment of {truncatechars(link.competency.name, 50)}{course}: {labels[level]}")
+        lines.append(format_html("Self-assessment of {}{}: {}", competency_link(link.competency, length=50), course, labels[level]))
     return lines
 
 
 def assessments_comment_html(assessments):
     """ The competency levels an approval or comment recorded, for the comment itself, so the student
     reads them in the conversation alongside the approval (as a granted badge is announced there),
-    and the conversation keeps each rating given. A long name is cut short, with the full name in
-    its title.
+    and the conversation keeps each rating given. Each competency links to its page; a long name is
+    cut short, with the full name in the link's title.
 
     Args:
-        assessments (list[CompetencyAssessment]): what record_approval_assessments or
-            record_level_changes returned.
+        assessments (list[CompetencyAssessment or NotApplicable]): what record_approval_assessments
+            or record_level_changes returned.
 
     Returns:
-        str: safe HTML listing each competency with the deck's label for its level, or '' for none.
+        str: safe HTML listing each competency with the deck's label for its level, or N/A for one
+        marked not applicable, or '' for none.
     """
     if not assessments:
         return ''
     labels = SiteConfig.get().get_competency_scale_labels()
-    items = format_html_join('', '<li><span title="{}">{}</span>: <b>{}</b></li>', (
-        (assessment.competency.qualified_name, truncatechars(assessment.competency.name, 50), labels[assessment.level])
+    items = format_html_join('', '<li>{}: <b>{}</b></li>', (
+        (competency_link(assessment.competency, length=50), labels.get(assessment.level, "N/A"))
         for assessment in assessments
     ))
     return format_html('<p>Competencies:</p><ul>{}</ul>', items)

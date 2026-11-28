@@ -1,4 +1,5 @@
 {% extends "competencies/base.html" %}
+{% load competency_tags %}
 {% load utility_tags %}
 
 {% block head_title %}Competency Matrix | {% endblock %}
@@ -57,7 +58,7 @@
           {% for category, span in categories %}<th colspan="{{ span }}" class="competency-matrix-category">{{ category }}</th>{% endfor %}
         </tr>
         <tr>
-          {% for column in columns %}<th class="competency-matrix-name" title="{{ column.qualified_name }}"><div>{{ column.name }}</div></th>{% endfor %}
+          {% for column in columns %}<th class="competency-matrix-name"><div>{% competency_link column %}</div></th>{% endfor %}
         </tr>
       </thead>
       <tbody>
